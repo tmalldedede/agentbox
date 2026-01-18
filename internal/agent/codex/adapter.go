@@ -12,7 +12,7 @@ const (
 	AgentName = "codex"
 
 	// DefaultImage 默认镜像
-	DefaultImage = "agentbox/codex:latest"
+	DefaultImage = "agentbox/agent:latest"
 )
 
 // Adapter Codex 适配器

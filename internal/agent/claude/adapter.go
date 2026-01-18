@@ -12,7 +12,7 @@ const (
 	AgentName = "claude-code"
 
 	// DefaultImage 默认镜像
-	DefaultImage = "agentbox/claude-code:latest"
+	DefaultImage = "agentbox/agent:latest"
 )
 
 // Adapter Claude Code 适配器
