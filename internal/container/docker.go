@@ -7,7 +7,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
@@ -118,7 +117,7 @@ func (m *DockerManager) Remove(ctx context.Context, containerID string) error {
 // Exec 在容器中执行命令
 func (m *DockerManager) Exec(ctx context.Context, containerID string, cmd []string) (*ExecResult, error) {
 	// 创建 exec 实例
-	execConfig := types.ExecConfig{
+	execConfig := container.ExecOptions{
 		Cmd:          cmd,
 		AttachStdout: true,
 		AttachStderr: true,
@@ -130,7 +129,7 @@ func (m *DockerManager) Exec(ctx context.Context, containerID string, cmd []stri
 	}
 
 	// 执行命令
-	attachResp, err := m.client.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{})
+	attachResp, err := m.client.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to attach exec: %w", err)
 	}

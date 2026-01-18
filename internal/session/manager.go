@@ -94,7 +94,7 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	ctr, err := m.containerMgr.Create(ctx, containerConfig)
 	if err != nil {
 		session.Status = StatusError
-		m.store.Update(session)
+		_ = m.store.Update(session)
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	// 启动容器
 	if err := m.containerMgr.Start(ctx, ctr.ID); err != nil {
 		session.Status = StatusError
-		m.store.Update(session)
+		_ = m.store.Update(session)
 		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
@@ -134,9 +134,8 @@ func (m *Manager) Delete(ctx context.Context, id string) error {
 
 	// 删除容器
 	if session.ContainerID != "" {
-		if err := m.containerMgr.Stop(ctx, session.ContainerID); err != nil {
-			// 忽略停止错误，继续删除
-		}
+		// 忽略停止错误，继续删除
+		_ = m.containerMgr.Stop(ctx, session.ContainerID)
 		if err := m.containerMgr.Remove(ctx, session.ContainerID); err != nil {
 			return fmt.Errorf("failed to remove container: %w", err)
 		}
@@ -220,7 +219,7 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 		execution.Error = err.Error()
 		now := time.Now()
 		execution.EndedAt = &now
-		m.store.UpdateExecution(execution)
+		_ = m.store.UpdateExecution(execution)
 		return nil, fmt.Errorf("failed to execute: %w", err)
 	}
 
@@ -235,7 +234,7 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 		execution.Status = ExecutionFailed
 		execution.Error = result.Stderr
 	}
-	m.store.UpdateExecution(execution)
+	_ = m.store.UpdateExecution(execution)
 
 	return &ExecResponse{
 		ExecutionID: execID,
