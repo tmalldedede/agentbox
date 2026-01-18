@@ -52,6 +52,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ./docker/agent/Dockerfile
           push: false
-          tags: agentbox:latest
+          tags: agentbox/agent:latest
