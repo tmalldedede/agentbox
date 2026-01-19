@@ -2,6 +2,7 @@ package agent
 
 import (
 	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/profile"
 )
 
 // Adapter Agent 适配器接口
@@ -22,11 +23,35 @@ type Adapter interface {
 	// PrepareContainer 准备容器配置
 	PrepareContainer(session *SessionInfo) *container.CreateConfig
 
+	// PrepareContainerWithProfile 使用 Profile 准备容器配置
+	PrepareContainerWithProfile(session *SessionInfo, p *profile.Profile) *container.CreateConfig
+
 	// PrepareExec 准备执行命令
-	PrepareExec(prompt string) []string
+	PrepareExec(req *ExecOptions) []string
+
+	// PrepareExecWithProfile 使用 Profile 准备执行命令
+	PrepareExecWithProfile(req *ExecOptions, p *profile.Profile) []string
 
 	// RequiredEnvVars 返回必需的环境变量
 	RequiredEnvVars() []string
+
+	// ValidateProfile 验证 Profile 是否与此适配器兼容
+	ValidateProfile(p *profile.Profile) error
+
+	// SupportedFeatures 返回此适配器支持的功能列表
+	SupportedFeatures() []string
+}
+
+// ExecOptions 执行选项
+type ExecOptions struct {
+	Prompt          string
+	MaxTurns        int
+	Timeout         int
+	AllowedTools    []string
+	DisallowedTools []string
+
+	// Profile-based options (override individual options if set)
+	Profile *profile.Profile
 }
 
 // SessionInfo 会话信息，传递给适配器

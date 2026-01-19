@@ -7,6 +7,7 @@ import (
 
 // Manager 容器管理器接口
 type Manager interface {
+	// Container operations
 	// Create 创建容器
 	Create(ctx context.Context, config *CreateConfig) (*Container, error)
 
@@ -22,11 +23,40 @@ type Manager interface {
 	// Exec 在容器中执行命令
 	Exec(ctx context.Context, containerID string, cmd []string) (*ExecResult, error)
 
+	// ExecStream 在容器中执行命令并流式返回输出
+	ExecStream(ctx context.Context, containerID string, cmd []string) (*ExecStream, error)
+
 	// Logs 获取容器日志
 	Logs(ctx context.Context, containerID string) (io.ReadCloser, error)
 
 	// Inspect 获取容器信息
 	Inspect(ctx context.Context, containerID string) (*Container, error)
+
+	// ListContainers 列出所有 AgentBox 管理的容器
+	ListContainers(ctx context.Context) ([]*Container, error)
+
+	// Image operations
+	// ListImages 列出所有镜像
+	ListImages(ctx context.Context) ([]*Image, error)
+
+	// PullImage 拉取镜像
+	PullImage(ctx context.Context, imageName string) error
+
+	// RemoveImage 删除镜像
+	RemoveImage(ctx context.Context, imageID string) error
+
+	// Ping 检查连接
+	Ping(ctx context.Context) error
+
+	// Close 关闭连接
+	Close() error
+}
+
+// ExecStream 流式执行结果
+type ExecStream struct {
+	ExecID string         // Exec ID
+	Reader io.ReadCloser  // 输出流
+	Done   chan struct{}  // 完成信号
 }
 
 // CreateConfig 创建容器配置
@@ -82,4 +112,14 @@ type ExecResult struct {
 	ExitCode int
 	Stdout   string
 	Stderr   string
+}
+
+// Image 镜像信息
+type Image struct {
+	ID        string   `json:"id"`
+	Tags      []string `json:"tags"`
+	Size      int64    `json:"size"`
+	Created   int64    `json:"created"`
+	InUse     bool     `json:"in_use"`
+	IsAgentImage bool  `json:"is_agent_image"`
 }

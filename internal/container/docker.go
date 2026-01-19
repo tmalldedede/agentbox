@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 )
@@ -155,6 +156,44 @@ func (m *DockerManager) Exec(ctx context.Context, containerID string, cmd []stri
 	}, nil
 }
 
+// ExecStream 在容器中执行命令并流式返回输出
+func (m *DockerManager) ExecStream(ctx context.Context, containerID string, cmd []string) (*ExecStream, error) {
+	// 创建 exec 实例
+	execConfig := container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          true,
+	}
+
+	execResp, err := m.client.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	// 执行命令
+	attachResp, err := m.client.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Tty: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach exec: %w", err)
+	}
+
+	// 启动执行
+	if err := m.client.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		attachResp.Close()
+		return nil, fmt.Errorf("failed to start exec: %w", err)
+	}
+
+	done := make(chan struct{})
+
+	return &ExecStream{
+		ExecID: execResp.ID,
+		Reader: attachResp.Conn,
+		Done:   done,
+	}, nil
+}
+
 // Logs 获取容器日志
 func (m *DockerManager) Logs(ctx context.Context, containerID string) (io.ReadCloser, error) {
 	options := container.LogsOptions{
@@ -249,4 +288,92 @@ func (m *DockerManager) ListContainers(ctx context.Context) ([]*Container, error
 	}
 
 	return result, nil
+}
+
+// ListImages 列出所有镜像
+func (m *DockerManager) ListImages(ctx context.Context) ([]*Image, error) {
+	images, err := m.client.ImageList(ctx, image.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list images: %w", err)
+	}
+
+	// 获取所有容器以检查镜像是否在使用中
+	containers, err := m.client.ContainerList(ctx, container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	// 构建镜像使用映射
+	imageInUse := make(map[string]bool)
+	for _, c := range containers {
+		imageInUse[c.ImageID] = true
+	}
+
+	// Agent 镜像前缀列表
+	agentImagePrefixes := []string{
+		"anthropic/claude-code",
+		"ghcr.io/openai/codex",
+		"agentbox/",
+	}
+
+	result := make([]*Image, 0, len(images))
+	for _, img := range images {
+		// 检查是否是 Agent 镜像
+		isAgentImage := false
+		for _, tag := range img.RepoTags {
+			for _, prefix := range agentImagePrefixes {
+				if strings.HasPrefix(tag, prefix) {
+					isAgentImage = true
+					break
+				}
+			}
+			if isAgentImage {
+				break
+			}
+		}
+
+		result = append(result, &Image{
+			ID:           img.ID,
+			Tags:         img.RepoTags,
+			Size:         img.Size,
+			Created:      img.Created,
+			InUse:        imageInUse[img.ID],
+			IsAgentImage: isAgentImage,
+		})
+	}
+
+	return result, nil
+}
+
+// PullImage 拉取镜像
+func (m *DockerManager) PullImage(ctx context.Context, imageName string) error {
+	reader, err := m.client.ImagePull(ctx, imageName, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer reader.Close()
+
+	// 消费输出直到完成
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("failed to complete image pull: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveImage 删除镜像
+func (m *DockerManager) RemoveImage(ctx context.Context, imageID string) error {
+	_, err := m.client.ImageRemove(ctx, imageID, image.RemoveOptions{
+		Force:         false,
+		PruneChildren: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to remove image: %w", err)
+	}
+	return nil
 }

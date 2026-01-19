@@ -8,6 +8,7 @@ import (
 type Session struct {
 	ID          string            `json:"id"`
 	Agent       string            `json:"agent"`
+	ProfileID   string            `json:"profile_id,omitempty"`
 	Status      Status            `json:"status"`
 	Workspace   string            `json:"workspace"`
 	ContainerID string            `json:"container_id,omitempty"`
@@ -36,6 +37,7 @@ type Config struct {
 // CreateRequest 创建会话请求
 type CreateRequest struct {
 	Agent     string            `json:"agent" binding:"required"`
+	ProfileID string            `json:"profile_id,omitempty"`
 	Workspace string            `json:"workspace" binding:"required"`
 	Env       map[string]string `json:"env"`
 	Config    *Config           `json:"config"`
@@ -66,7 +68,11 @@ const (
 
 // ExecRequest 执行请求
 type ExecRequest struct {
-	Prompt string `json:"prompt" binding:"required"`
+	Prompt          string   `json:"prompt" binding:"required"`
+	MaxTurns        int      `json:"max_turns,omitempty"`        // 最大对话轮数 (1-100, 默认 10)
+	Timeout         int      `json:"timeout,omitempty"`          // 超时秒数 (10-3600, 默认 300)
+	AllowedTools    []string `json:"allowed_tools,omitempty"`    // 允许的工具列表
+	DisallowedTools []string `json:"disallowed_tools,omitempty"` // 禁用的工具列表
 }
 
 // ExecResponse 执行响应

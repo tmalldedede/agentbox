@@ -53,3 +53,37 @@ func NotFound(c *gin.Context, message string) {
 func InternalError(c *gin.Context, message string) {
 	Error(c, http.StatusInternalServerError, message)
 }
+
+// Pagination 分页信息
+type Pagination struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
+// PaginatedResponse 分页响应
+type PaginatedResponse struct {
+	Code       int         `json:"code"`
+	Message    string      `json:"message"`
+	Data       interface{} `json:"data"`
+	Pagination *Pagination `json:"pagination,omitempty"`
+}
+
+// SuccessWithPagination 带分页的成功响应
+func SuccessWithPagination(c *gin.Context, data interface{}, total, limit, offset int) {
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Code:    0,
+		Message: "success",
+		Data:    data,
+		Pagination: &Pagination{
+			Total:  total,
+			Limit:  limit,
+			Offset: offset,
+		},
+	})
+}
+
+// ErrorResponse 错误响应结构
+type ErrorResponse struct {
+	Error string `json:"error"`
+}

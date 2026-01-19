@@ -11,6 +11,7 @@ type Store interface {
 	Create(session *Session) error
 	Get(id string) (*Session, error)
 	List(filter *ListFilter) ([]*Session, error)
+	Count(filter *ListFilter) (int, error)
 	Update(session *Session) error
 	Delete(id string) error
 
@@ -96,6 +97,26 @@ func (s *MemoryStore) List(filter *ListFilter) ([]*Session, error) {
 	}
 
 	return result, nil
+}
+
+// Count 统计会话数量
+func (s *MemoryStore) Count(filter *ListFilter) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	count := 0
+	for _, session := range s.sessions {
+		if filter != nil {
+			if filter.Agent != "" && session.Agent != filter.Agent {
+				continue
+			}
+			if filter.Status != "" && session.Status != filter.Status {
+				continue
+			}
+		}
+		count++
+	}
+	return count, nil
 }
 
 // Update 更新会话

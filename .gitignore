@@ -51,3 +51,6 @@ web/.cache/
 # Temporary
 tmp/
 temp/
+
+# Binary in root
+agentbox

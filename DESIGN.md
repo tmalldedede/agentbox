@@ -157,40 +157,88 @@ const (
 - 统一接口定义
 - 各 Agent 的具体实现
 - 可扩展架构
+- **Profile 支持** - 使用预配置模板生成命令
 
 ```go
 type AgentAdapter interface {
     Name() string
     Image() string
-    PrepareCommand(prompt string) []string
-    PrepareEnv(session *Session) []string
-    ParseOutput(output []byte) (*AgentOutput, error)
+    PrepareContainer(session *SessionInfo) *CreateConfig
+    PrepareContainerWithProfile(session *SessionInfo, p *Profile) *CreateConfig
+    PrepareExec(req *ExecOptions) []string
+    PrepareExecWithProfile(req *ExecOptions, p *Profile) []string
+    ValidateProfile(p *Profile) error
+    SupportedFeatures() []string
 }
-
-// Claude Code 适配器
-type ClaudeCodeAdapter struct {
-    apiKey string
-}
-
-func (a *ClaudeCodeAdapter) Name() string { return "claude-code" }
-func (a *ClaudeCodeAdapter) Image() string { return "agentbox/claude-code:latest" }
-
-// Codex 适配器
-type CodexAdapter struct {
-    apiKey string
-}
-
-func (a *CodexAdapter) Name() string { return "codex" }
-func (a *CodexAdapter) Image() string { return "agentbox/codex:latest" }
 ```
 
-### 4. HTTP API
+### 4. Profile 系统 (核心差异化特性)
+
+**Profile** 是 AgentBox 的核心差异化特性，在 Adapter 之上提供用户可配置、可保存、可复用的抽象层。
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Profile Layer                       │
+│  (用户可配置: 模型 + MCP + Skills + 权限 + 资源限制)      │
+├─────────────────────────────────────────────────────────┤
+│                      Adapter Layer                       │
+│  (Claude Code Adapter / Codex Adapter / ...)            │
+├─────────────────────────────────────────────────────────┤
+│                    Container Runtime                     │
+│  (Docker 容器隔离执行)                                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+职责：
+- 预配置 Agent 运行参数
+- 支持继承和组合
+- MCP 服务器配置
+- 权限和资源限制
+- 系统提示词定制
+
+```go
+type Profile struct {
+    ID          string            `json:"id"`
+    Name        string            `json:"name"`
+    Adapter     string            `json:"adapter"`  // "claude-code" | "codex"
+    Extends     string            `json:"extends"`  // 继承自哪个 Profile
+    Model       ModelConfig       `json:"model"`
+    MCPServers  []MCPServerConfig `json:"mcp_servers"`
+    Permissions PermissionConfig  `json:"permissions"`
+    Resources   ResourceConfig    `json:"resources"`
+    // ...
+}
+```
+
+**内置 Profiles:**
+| Profile ID | 名称 | 说明 |
+|------------|------|------|
+| claude-code-dev | Claude Code 开发 | 通用开发配置 |
+| claude-code-auto | Claude Code 全自动 | 无需确认的自动模式 |
+| codex-full-auto | Codex 全自动 | Codex 全自动模式 |
+| codex-readonly | Codex 只读 | 安全分析代码 |
+| security-research | 安全研究 | 安全研究配置，带 cybersec MCP |
+| data-analysis | 数据分析 | 数据分析与可视化 |
+
+**Profile 继承:**
+```yaml
+# 子 Profile 继承父 Profile
+id: malware-analysis
+name: 恶意软件分析
+extends: security-research
+permissions:
+  sandbox_mode: read-only  # 覆盖父配置
+```
+
+详细设计见 [docs/PROFILE_DESIGN.md](docs/PROFILE_DESIGN.md)
+
+### 5. HTTP API
 
 RESTful API 设计：
 
 ```
 # 会话管理
-POST   /api/sessions              # 创建会话
+POST   /api/sessions              # 创建会话 (可指定 profile_id)
 GET    /api/sessions              # 列出会话
 GET    /api/sessions/:id          # 获取会话详情
 DELETE /api/sessions/:id          # 删除会话
@@ -202,6 +250,15 @@ POST   /api/sessions/:id/exec     # 执行 Agent 任务
 
 # 日志
 GET    /api/sessions/:id/logs     # 获取日志 (WebSocket 支持)
+
+# Profile 管理
+GET    /api/profiles              # 列出所有 Profiles
+POST   /api/profiles              # 创建 Profile
+GET    /api/profiles/:id          # 获取 Profile 详情
+PUT    /api/profiles/:id          # 更新 Profile
+DELETE /api/profiles/:id          # 删除 Profile
+POST   /api/profiles/:id/clone    # 克隆 Profile
+GET    /api/profiles/:id/resolved # 获取解析继承后的 Profile
 
 # 系统
 GET    /api/health                # 健康检查
@@ -340,18 +397,29 @@ agentbox/
 │   │   │   └── adapter.go
 │   │   └── codex/             # Codex
 │   │       └── adapter.go
+│   ├── profile/               # Profile 系统 (核心差异化)
+│   │   ├── profile.go         # 数据模型
+│   │   ├── manager.go         # 管理器 (CRUD + 继承)
+│   │   └── errors.go          # 错误定义
 │   ├── api/                   # HTTP API
 │   │   ├── router.go
 │   │   ├── handlers.go
+│   │   ├── profile_handler.go # Profile API
 │   │   └── middleware.go
 │   └── config/                # 配置
 │       └── config.go
-├── web/                       # 前端
+├── web/                       # 前端 (React + Vite + TailwindCSS)
+│   ├── src/
+│   │   ├── components/        # UI 组件
+│   │   ├── contexts/          # Context (语言、主题)
+│   │   └── services/          # API 服务
+│   └── package.json
 ├── docker/                    # Dockerfile
 │   ├── Dockerfile             # AgentBox 服务
 │   ├── claude-code/           # Claude Code 镜像
 │   └── codex/                 # Codex 镜像
 ├── docs/                      # 文档
+│   └── PROFILE_DESIGN.md      # Profile 详细设计
 ├── README.md
 ├── DESIGN.md
 ├── LICENSE
@@ -368,16 +436,33 @@ agentbox/
 - [x] 目录结构
 - [x] 文档
 
-### Phase 2: 核心实现
-- [ ] 容器管理模块
-- [ ] 会话管理模块
-- [ ] Agent 适配器接口
-- [ ] Claude Code 适配器
-- [ ] HTTP API
+### Phase 2: 核心实现 ✅
+- [x] 容器管理模块
+- [x] 会话管理模块
+- [x] Agent 适配器接口
+- [x] Claude Code 适配器
+- [x] Codex 适配器
+- [x] HTTP API
 
-### Phase 3: 完善
-- [ ] Codex 适配器
-- [ ] Web 管理后台
+### Phase 3: Profile 系统 ✅
+- [x] Profile 数据模型
+- [x] Profile 管理器 (CRUD + 继承解析)
+- [x] Adapter Profile 支持 (PrepareExecWithProfile)
+- [x] Profile API 处理器
+- [x] 内置 Profiles (claude-code-dev, codex-full-auto, security-research 等)
+- [x] CLI 参数完整映射 (Claude Code + Codex)
+
+### Phase 4: 前端 & 完善
+- [x] Web 管理后台 (React + Vite + TailwindCSS)
+- [x] 主题切换 (Light/Dark)
+- [ ] Profile 编辑器 UI
 - [ ] Docker 镜像构建
 - [ ] 测试用例
 - [ ] CI/CD
+
+### Phase 5: 高级特性 (计划中)
+- [ ] Profile 导入/导出
+- [ ] Profile 市场/分享
+- [ ] MCP 服务器可视化配置
+- [ ] 执行历史回放
+- [ ] 多用户 RBAC

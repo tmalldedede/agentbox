@@ -1,0 +1,1931 @@
+basePath: /api/v1
+definitions:
+  github_com_tmalldedede_agentbox_internal_agent.Info:
+    properties:
+      description:
+        type: string
+      display_name:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      required_env:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.DebugConfig:
+    properties:
+      verbose:
+        type: boolean
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.FeatureConfig:
+    properties:
+      web_search:
+        type: boolean
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.MCPServerConfig:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      description:
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.ModelConfig:
+    properties:
+      base_url:
+        description: Custom API endpoint (proxy/compatible API)
+        type: string
+      disable_traffic:
+        description: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+        type: boolean
+      haiku_model:
+        description: Model tier configuration (Claude Code)
+        type: string
+      max_output_tokens:
+        description: CLAUDE_CODE_MAX_OUTPUT_TOKENS
+        type: integer
+      name:
+        description: Basic configuration
+        type: string
+      opus_model:
+        description: ANTHROPIC_DEFAULT_OPUS_MODEL
+        type: string
+      provider:
+        description: e.g., "anthropic", "openai"
+        type: string
+      reasoning_effort:
+        description: low/medium/high (Codex)
+        type: string
+      sonnet_model:
+        description: ANTHROPIC_DEFAULT_SONNET_MODEL
+        type: string
+      timeout_ms:
+        description: Advanced configuration
+        type: integer
+      wire_api:
+        description: Codex specific
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.PermissionConfig:
+    properties:
+      additional_dirs:
+        description: Common
+        items:
+          type: string
+        type: array
+      allowed_tools:
+        description: --allowedTools
+        items:
+          type: string
+        type: array
+      approval_policy:
+        description: untrusted/on-failure/on-request/never
+        type: string
+      disallowed_tools:
+        description: --disallowedTools
+        items:
+          type: string
+        type: array
+      full_auto:
+        description: --full-auto
+        type: boolean
+      mode:
+        description: Claude Code specific
+        type: string
+      sandbox_mode:
+        description: Codex specific
+        type: string
+      skip_all:
+        description: --dangerously-skip-permissions
+        type: boolean
+      tools:
+        description: --tools
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.Profile:
+    properties:
+      adapter:
+        description: 'Adapter selection: "claude-code" | "codex"'
+        type: string
+      append_system_prompt:
+        type: string
+      base_instructions:
+        type: string
+      config_overrides:
+        additionalProperties:
+          type: string
+        description: Config overrides (Codex specific)
+        type: object
+      created_at:
+        description: Metadata
+        type: string
+      created_by:
+        type: string
+      custom_agents:
+        description: Custom agents (Claude Code specific)
+        items:
+          type: integer
+        type: array
+      debug:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.DebugConfig'
+        description: Debug settings
+      description:
+        type: string
+      developer_instructions:
+        type: string
+      extends:
+        description: 'Inheritance: extends another Profile'
+        type: string
+      features:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.FeatureConfig'
+        description: Feature flags
+      icon:
+        type: string
+      id:
+        description: Basic info
+        type: string
+      is_built_in:
+        type: boolean
+      is_public:
+        type: boolean
+      mcp_servers:
+        description: MCP servers
+        items:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.MCPServerConfig'
+        type: array
+      model:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.ModelConfig'
+        description: Model configuration
+      name:
+        type: string
+      output_format:
+        description: Output configuration
+        type: string
+      output_schema:
+        description: JSON Schema file path
+        type: string
+      permissions:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.PermissionConfig'
+        description: Permission configuration
+      resources:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.ResourceConfig'
+        description: Resource limits
+      system_prompt:
+        description: System prompts
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      updated_at:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_profile.ResourceConfig:
+    properties:
+      cpus:
+        description: Container resources
+        type: number
+      disk_gb:
+        type: integer
+      max_budget_usd:
+        type: number
+      max_tokens:
+        type: integer
+      max_turns:
+        type: integer
+      memory_mb:
+        type: integer
+      timeout:
+        $ref: '#/definitions/time.Duration'
+    type: object
+  github_com_tmalldedede_agentbox_internal_provider.Provider:
+    properties:
+      agent:
+        description: Agent compatibility
+        type: string
+      api_key_url:
+        description: Where to get API key
+        type: string
+      base_url:
+        description: API Configuration
+        type: string
+      category:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_provider.ProviderCategory'
+        description: Category
+      default_model:
+        description: Model defaults
+        type: string
+      default_models:
+        description: Available models
+        items:
+          type: string
+        type: array
+      description:
+        description: Provider description
+        type: string
+      docs_url:
+        description: Documentation URL
+        type: string
+      env_config:
+        additionalProperties:
+          type: string
+        description: Environment variables template
+        type: object
+      icon:
+        description: UI
+        type: string
+      icon_color:
+        description: Icon color (hex)
+        type: string
+      id:
+        description: Basic info
+        type: string
+      is_built_in:
+        description: Flags
+        type: boolean
+      is_enabled:
+        description: Is enabled
+        type: boolean
+      is_partner:
+        description: Partner provider (featured)
+        type: boolean
+      name:
+        description: e.g., "DeepSeek"
+        type: string
+      requires_ak:
+        description: Requires API key
+        type: boolean
+      website_url:
+        description: URLs
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_provider.ProviderCategory:
+    enum:
+    - official
+    - cn_official
+    - aggregator
+    - third_party
+    type: string
+    x-enum-varnames:
+    - CategoryOfficial
+    - CategoryCNOfficial
+    - CategoryAggregator
+    - CategoryThirdParty
+  github_com_tmalldedede_agentbox_internal_session.Config:
+    properties:
+      cpu_limit:
+        type: number
+      memory_limit:
+        type: integer
+    type: object
+  github_com_tmalldedede_agentbox_internal_session.CreateRequest:
+    properties:
+      agent:
+        type: string
+      config:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Config'
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      profile_id:
+        type: string
+      workspace:
+        type: string
+    required:
+    - agent
+    - workspace
+    type: object
+  github_com_tmalldedede_agentbox_internal_session.ExecRequest:
+    properties:
+      allowed_tools:
+        description: 允许的工具列表
+        items:
+          type: string
+        type: array
+      disallowed_tools:
+        description: 禁用的工具列表
+        items:
+          type: string
+        type: array
+      max_turns:
+        description: 最大对话轮数 (1-100, 默认 10)
+        type: integer
+      prompt:
+        type: string
+      timeout:
+        description: 超时秒数 (10-3600, 默认 300)
+        type: integer
+    required:
+    - prompt
+    type: object
+  github_com_tmalldedede_agentbox_internal_session.ExecResponse:
+    properties:
+      error:
+        type: string
+      execution_id:
+        type: string
+      exit_code:
+        type: integer
+      output:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_session.Execution:
+    properties:
+      ended_at:
+        type: string
+      error:
+        type: string
+      exit_code:
+        type: integer
+      id:
+        type: string
+      output:
+        type: string
+      prompt:
+        type: string
+      session_id:
+        type: string
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecutionStatus'
+    type: object
+  github_com_tmalldedede_agentbox_internal_session.ExecutionStatus:
+    enum:
+    - pending
+    - running
+    - success
+    - failed
+    type: string
+    x-enum-varnames:
+    - ExecutionPending
+    - ExecutionRunning
+    - ExecutionSuccess
+    - ExecutionFailed
+  github_com_tmalldedede_agentbox_internal_session.Session:
+    properties:
+      agent:
+        type: string
+      config:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Config'
+      container_id:
+        type: string
+      created_at:
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      id:
+        type: string
+      profile_id:
+        type: string
+      status:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Status'
+      updated_at:
+        type: string
+      workspace:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_session.Status:
+    enum:
+    - creating
+    - running
+    - stopped
+    - error
+    type: string
+    x-enum-varnames:
+    - StatusCreating
+    - StatusRunning
+    - StatusStopped
+    - StatusError
+  github_com_tmalldedede_agentbox_internal_task.Input:
+    properties:
+      branch:
+        type: string
+      path:
+        type: string
+      text:
+        type: string
+      type:
+        description: git / files / text
+        type: string
+      url:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_task.OutputConfig:
+    properties:
+      files:
+        description: 指定输出的文件
+        items:
+          type: string
+        type: array
+      format:
+        description: 输出格式
+        type: string
+      type:
+        description: files / text / json
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_task.OutputFile:
+    properties:
+      mime_type:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      size:
+        type: integer
+      url:
+        description: 下载地址
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_task.Result:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.OutputFile'
+        type: array
+      logs:
+        type: string
+      summary:
+        type: string
+      text:
+        type: string
+      usage:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Usage'
+    type: object
+  github_com_tmalldedede_agentbox_internal_task.Status:
+    enum:
+    - pending
+    - queued
+    - running
+    - completed
+    - failed
+    - cancelled
+    type: string
+    x-enum-comments:
+      StatusCancelled: 用户取消
+      StatusCompleted: 执行成功
+      StatusFailed: 执行失败
+      StatusPending: 刚创建，等待入队
+      StatusQueued: 已入队，等待调度
+      StatusRunning: 容器启动，Agent 执行中
+    x-enum-descriptions:
+    - 刚创建，等待入队
+    - 已入队，等待调度
+    - 容器启动，Agent 执行中
+    - 执行成功
+    - 执行失败
+    - 用户取消
+    x-enum-varnames:
+    - StatusPending
+    - StatusQueued
+    - StatusRunning
+    - StatusCompleted
+    - StatusFailed
+    - StatusCancelled
+  github_com_tmalldedede_agentbox_internal_task.Task:
+    properties:
+      agent_type:
+        description: claude-code / codex
+        type: string
+      completed_at:
+        type: string
+      created_at:
+        description: 时间戳
+        type: string
+      error_message:
+        description: 失败原因
+        type: string
+      id:
+        description: 基本信息
+        type: string
+      input:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Input'
+      metadata:
+        additionalProperties:
+          type: string
+        description: 元数据
+        type: object
+      output:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.OutputConfig'
+        description: 输出配置
+      profile_id:
+        type: string
+      profile_name:
+        description: 冗余，方便展示
+        type: string
+      prompt:
+        description: 任务内容
+        type: string
+      queued_at:
+        type: string
+      result:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Result'
+        description: 执行结果
+      session_id:
+        description: 关联的 Session
+        type: string
+      started_at:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Status'
+        description: 运行时状态
+      timeout:
+        description: 执行配置
+        type: integer
+      webhook_url:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_task.Usage:
+    properties:
+      duration_seconds:
+        type: integer
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      total_tokens:
+        type: integer
+    type: object
+  github_com_tmalldedede_agentbox_internal_webhook.CreateWebhookRequest:
+    properties:
+      events:
+        description: 为空则订阅所有事件
+        items:
+          type: string
+        type: array
+      secret:
+        type: string
+      url:
+        type: string
+    required:
+    - url
+    type: object
+  github_com_tmalldedede_agentbox_internal_webhook.UpdateWebhookRequest:
+    properties:
+      events:
+        items:
+          type: string
+        type: array
+      is_active:
+        type: boolean
+      secret:
+        type: string
+      url:
+        type: string
+    type: object
+  github_com_tmalldedede_agentbox_internal_webhook.Webhook:
+    properties:
+      created_at:
+        type: string
+      events:
+        description: 订阅的事件类型
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      is_active:
+        type: boolean
+      secret:
+        description: 用于签名验证
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  internal_api.CloneRequest:
+    properties:
+      new_id:
+        type: string
+      new_name:
+        type: string
+    required:
+    - new_id
+    - new_name
+    type: object
+  internal_api.CreateProfileRequest:
+    properties:
+      adapter:
+        type: string
+      append_system_prompt:
+        type: string
+      base_instructions:
+        type: string
+      config_overrides:
+        additionalProperties:
+          type: string
+        type: object
+      debug:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.DebugConfig'
+      description:
+        type: string
+      developer_instructions:
+        type: string
+      extends:
+        type: string
+      features:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.FeatureConfig'
+      icon:
+        type: string
+      id:
+        type: string
+      mcp_servers:
+        items:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.MCPServerConfig'
+        type: array
+      model:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.ModelConfig'
+      name:
+        type: string
+      output_format:
+        type: string
+      output_schema:
+        type: string
+      permissions:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.PermissionConfig'
+      resources:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.ResourceConfig'
+      system_prompt:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    required:
+    - adapter
+    - id
+    - name
+    type: object
+  internal_api.CreateProviderRequest:
+    description: Request body for creating a new provider
+    properties:
+      agent:
+        type: string
+      api_key_url:
+        type: string
+      base_url:
+        type: string
+      category:
+        type: string
+      default_model:
+        type: string
+      default_models:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      docs_url:
+        type: string
+      env_config:
+        additionalProperties:
+          type: string
+        type: object
+      icon:
+        type: string
+      icon_color:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      website_url:
+        type: string
+    required:
+    - agent
+    - id
+    - name
+    type: object
+  internal_api.CreateTaskRequest:
+    properties:
+      input:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Input'
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      output:
+        $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.OutputConfig'
+      profile_id:
+        type: string
+      prompt:
+        type: string
+      timeout:
+        type: integer
+      webhook_url:
+        type: string
+    required:
+    - profile_id
+    - prompt
+    type: object
+  internal_api.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_api.ListTasksResponse:
+    properties:
+      tasks:
+        items:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Task'
+        type: array
+      total:
+        type: integer
+    type: object
+  internal_api.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+  internal_api.UpdateProviderRequest:
+    description: Request body for updating an existing provider
+    properties:
+      base_url:
+        type: string
+      default_model:
+        type: string
+      default_models:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      env_config:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+    type: object
+  time.Duration:
+    enum:
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    format: int64
+    type: integer
+    x-enum-varnames:
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+host: localhost:18080
+info:
+  contact:
+    email: support@agentbox.dev
+    name: AgentBox Team
+    url: https://github.com/user/agentbox
+  description: |-
+    AgentBox - Open-source AI Agent containerized runtime platform
+
+    ## Overview
+    AgentBox provides a unified API for managing AI coding agents (Claude Code, Codex, OpenCode) in containerized environments.
+
+    ## Authentication
+    Currently no authentication required. API keys are managed via Credentials API.
+
+    ## API Structure
+    - **Public API** (`/api/v1/*`): Core functionality for external integrations
+    - **Admin API** (`/api/v1/admin/*`): Platform management operations
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: AgentBox API
+  version: "1.0"
+paths:
+  /agents:
+    get:
+      description: Get a list of all supported agent types (Claude Code, Codex, OpenCode)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_agent.Info'
+                  type: array
+              type: object
+      summary: List agents
+      tags:
+      - Agents
+  /health:
+    get:
+      description: Check if the API server is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  properties:
+                    status:
+                      type: string
+                    version:
+                      type: string
+                  type: object
+              type: object
+      summary: Health check
+      tags:
+      - Health
+  /profiles:
+    get:
+      description: Get a list of all available runtime configuration profiles
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.Profile'
+                  type: array
+              type: object
+      summary: List all profiles
+      tags:
+      - Profiles
+    post:
+      consumes:
+      - application/json
+      description: Create a new runtime configuration profile for agents
+      parameters:
+      - description: Profile configuration
+        in: body
+        name: profile
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CreateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.Profile'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Create a profile
+      tags:
+      - Profiles
+  /profiles/{id}:
+    delete:
+      description: Delete an existing profile (built-in profiles cannot be deleted)
+      parameters:
+      - description: Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Delete a profile
+      tags:
+      - Profiles
+    get:
+      description: Get detailed information about a specific profile
+      parameters:
+      - description: Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.Profile'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get a profile
+      tags:
+      - Profiles
+    put:
+      consumes:
+      - application/json
+      description: Update an existing profile configuration
+      parameters:
+      - description: Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Profile configuration
+        in: body
+        name: profile
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CreateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.Profile'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Update a profile
+      tags:
+      - Profiles
+  /profiles/{id}/clone:
+    post:
+      consumes:
+      - application/json
+      description: Create a copy of an existing profile with a new ID and name
+      parameters:
+      - description: Source Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Clone configuration
+        in: body
+        name: clone
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CloneRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.Profile'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Clone a profile
+      tags:
+      - Profiles
+  /profiles/{id}/resolved:
+    get:
+      description: Get a profile with inheritance chain resolved (merges parent profile
+        settings)
+      parameters:
+      - description: Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.Profile'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get resolved profile
+      tags:
+      - Profiles
+  /providers:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of API providers with optional filtering by agent type
+        or category
+      parameters:
+      - description: Filter by agent type
+        enum:
+        - claude-code
+        - codex
+        - opencode
+        - all
+        in: query
+        name: agent
+        type: string
+      - description: Filter by category
+        enum:
+        - official
+        - cn_official
+        - aggregator
+        - third_party
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_provider.Provider'
+                  type: array
+              type: object
+      summary: List all providers
+      tags:
+      - Providers
+    post:
+      consumes:
+      - application/json
+      description: Create a new custom API provider configuration
+      parameters:
+      - description: Provider configuration
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CreateProviderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_provider.Provider'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Create a provider
+      tags:
+      - Providers
+  /providers/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a custom provider (built-in providers cannot be deleted)
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Delete a provider
+      tags:
+      - Providers
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific provider
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_provider.Provider'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get a provider
+      tags:
+      - Providers
+    put:
+      consumes:
+      - application/json
+      description: Update an existing provider configuration (custom providers only)
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.UpdateProviderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_provider.Provider'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Update a provider
+      tags:
+      - Providers
+  /sessions:
+    get:
+      description: Get a list of all container sessions with optional filtering
+      parameters:
+      - description: Filter by status
+        enum:
+        - creating
+        - running
+        - stopped
+        - error
+        in: query
+        name: status
+        type: string
+      - description: Filter by agent type
+        in: query
+        name: agent
+        type: string
+      - description: Number of results to return
+        in: query
+        name: limit
+        type: integer
+      - description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Session'
+                  type: array
+              type: object
+      summary: List sessions
+      tags:
+      - Sessions
+    post:
+      consumes:
+      - application/json
+      description: Create a new container session for running an agent
+      parameters:
+      - description: Session configuration
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Session'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Create a session
+      tags:
+      - Sessions
+  /sessions/{id}:
+    delete:
+      description: Stop and delete a session, removing its container
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Delete a session
+      tags:
+      - Sessions
+    get:
+      description: Get detailed information about a specific session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Session'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get a session
+      tags:
+      - Sessions
+  /sessions/{id}/exec:
+    post:
+      consumes:
+      - application/json
+      description: Send a prompt to the agent running in the session and get the response
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Prompt to execute
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Execute prompt in session
+      tags:
+      - Sessions
+  /sessions/{id}/executions:
+    get:
+      description: Get the execution history for a session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Execution'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: List executions
+      tags:
+      - Sessions
+  /sessions/{id}/executions/{execId}:
+    get:
+      description: Get details of a specific execution
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Execution ID
+        in: path
+        name: execId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Execution'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get an execution
+      tags:
+      - Sessions
+  /sessions/{id}/logs:
+    get:
+      description: Get container logs for a session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  properties:
+                    logs:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get session logs
+      tags:
+      - Sessions
+  /sessions/{id}/reconnect:
+    post:
+      description: Attempt to reconnect to an existing container session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Session'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Reconnect to a session
+      tags:
+      - Sessions
+  /sessions/{id}/start:
+    post:
+      description: Start a stopped session's container
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Session'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Start a session
+      tags:
+      - Sessions
+  /sessions/{id}/stop:
+    post:
+      description: Stop a running session's container
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.Session'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Stop a session
+      tags:
+      - Sessions
+  /tasks:
+    get:
+      description: Get a list of all tasks with optional filtering and pagination
+      parameters:
+      - description: Filter by status
+        enum:
+        - pending
+        - queued
+        - running
+        - completed
+        - failed
+        - cancelled
+        in: query
+        name: status
+        type: string
+      - description: Filter by Profile ID
+        in: query
+        name: profile_id
+        type: string
+      - default: 20
+        description: Number of results to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_api.ListTasksResponse'
+              type: object
+      summary: List tasks
+      tags:
+      - Tasks
+    post:
+      consumes:
+      - application/json
+      description: Create a new async task for batch processing with a specified profile
+      parameters:
+      - description: Task configuration
+        in: body
+        name: task
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Task'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Create a task
+      tags:
+      - Tasks
+  /tasks/{id}:
+    delete:
+      description: Cancel a pending or running task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Task'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Cancel a task
+      tags:
+      - Tasks
+    get:
+      description: Get detailed information about a specific task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Task'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get a task
+      tags:
+      - Tasks
+  /tasks/{id}/logs:
+    get:
+      description: Get execution logs for a task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  properties:
+                    logs:
+                      type: string
+                    status:
+                      type: string
+                    task_id:
+                      type: string
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get task logs
+      tags:
+      - Tasks
+  /tasks/{id}/output:
+    get:
+      description: Get the result/output of a completed task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_api.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_task.Result'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Get task output
+      tags:
+      - Tasks
+  /webhooks:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_webhook.Webhook'
+            type: array
+      summary: 列出所有 Webhook
+      tags:
+      - webhooks
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Webhook 配置
+        in: body
+        name: webhook
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_webhook.CreateWebhookRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_webhook.Webhook'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.ErrorResponse'
+      summary: 创建 Webhook
+      tags:
+      - webhooks
+  /webhooks/{id}:
+    delete:
+      parameters:
+      - description: Webhook ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.ErrorResponse'
+      summary: 删除 Webhook
+      tags:
+      - webhooks
+    get:
+      parameters:
+      - description: Webhook ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_webhook.Webhook'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.ErrorResponse'
+      summary: 获取 Webhook 详情
+      tags:
+      - webhooks
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Webhook ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Webhook 配置
+        in: body
+        name: webhook
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_webhook.UpdateWebhookRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_webhook.Webhook'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.ErrorResponse'
+      summary: 更新 Webhook
+      tags:
+      - webhooks
+swagger: "2.0"
+tags:
+- description: Health check endpoints
+  name: Health
+- description: Agent types (Claude Code, Codex, OpenCode)
+  name: Agents
+- description: Runtime configuration templates for agents
+  name: Profiles
+- description: API provider presets (Anthropic, OpenAI, DeepSeek, etc.)
+  name: Providers
+- description: Container sessions for running agents
+  name: Sessions
+- description: Async task queue for batch processing
+  name: Tasks
+- description: Webhook notifications for task events
+  name: Webhooks
+- description: Model Context Protocol server management (Admin)
+  name: MCP Servers
+- description: Reusable prompt templates (Admin)
+  name: Skills
+- description: API key and token management (Admin)
+  name: Credentials
+- description: System health and resource management (Admin)
+  name: System

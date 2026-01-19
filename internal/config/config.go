@@ -40,7 +40,7 @@ func Default() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Host: "0.0.0.0",
-			Port: 8080,
+			Port: 18080,
 		},
 		Container: ContainerConfig{
 			CPULimit:      2.0,
