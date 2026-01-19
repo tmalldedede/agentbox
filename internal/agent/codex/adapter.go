@@ -171,18 +171,19 @@ func (a *Adapter) GenerateAuthJSON(apiKey string) string {
 
 // GetConfigFiles 返回需要挂载到容器的配置文件
 // 返回: map[容器内路径]文件内容
+// 注意: Codex 容器以 agent 用户运行，配置文件在 /home/agent/.codex/
 func (a *Adapter) GetConfigFiles(p *profile.Profile, apiKey string) map[string]string {
 	files := make(map[string]string)
 
-	// ~/.codex/config.toml
+	// ~/.codex/config.toml (agent 用户)
 	configTOML := a.GenerateConfigTOML(p)
 	if configTOML != "" {
-		files["/root/.codex/config.toml"] = configTOML
+		files["/home/agent/.codex/config.toml"] = configTOML
 	}
 
-	// ~/.codex/auth.json
+	// ~/.codex/auth.json (agent 用户)
 	if apiKey != "" {
-		files["/root/.codex/auth.json"] = a.GenerateAuthJSON(apiKey)
+		files["/home/agent/.codex/auth.json"] = a.GenerateAuthJSON(apiKey)
 	}
 
 	return files
