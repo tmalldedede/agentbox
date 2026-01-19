@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/profile"
 )
 
 // Manager 会话管理器
@@ -17,6 +19,7 @@ type Manager struct {
 	store         Store
 	containerMgr  container.Manager
 	agentRegistry *agent.Registry
+	profileMgr    *profile.Manager
 	workspaceBase string
 }
 
@@ -28,6 +31,11 @@ func NewManager(store Store, containerMgr container.Manager, registry *agent.Reg
 		agentRegistry: registry,
 		workspaceBase: workspaceBase,
 	}
+}
+
+// SetProfileManager 设置 Profile 管理器（可选依赖）
+func (m *Manager) SetProfileManager(mgr *profile.Manager) {
+	m.profileMgr = mgr
 }
 
 // Create 创建会话
@@ -108,12 +116,76 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
+	// 写入配置文件（如果适配器需要）
+	if err := m.writeConfigFiles(ctx, adapter, ctr.ID, req); err != nil {
+		// 配置文件写入失败不中断创建，但记录警告
+		fmt.Printf("Warning: failed to write config files: %v\n", err)
+	}
+
 	session.Status = StatusRunning
 	if err := m.store.Update(session); err != nil {
 		return nil, fmt.Errorf("failed to update session: %w", err)
 	}
 
 	return session, nil
+}
+
+// writeConfigFiles 写入配置文件到容器
+func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, containerID string, req *CreateRequest) error {
+	// 检查适配器是否实现 ConfigFilesProvider 接口
+	provider, ok := adapter.(agent.ConfigFilesProvider)
+	if !ok {
+		return nil // 适配器不需要配置文件
+	}
+
+	// 获取 Profile
+	var p *profile.Profile
+	if req.ProfileID != "" && m.profileMgr != nil {
+		var err error
+		p, err = m.profileMgr.Get(req.ProfileID)
+		if err != nil {
+			return fmt.Errorf("failed to get profile: %w", err)
+		}
+	} else {
+		// 创建空 Profile
+		p = &profile.Profile{}
+	}
+
+	// 从环境变量提取 API Key
+	// 常见的 API Key 环境变量名
+	apiKey := ""
+	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
+		if v, ok := req.Env[key]; ok && v != "" {
+			apiKey = v
+			break
+		}
+	}
+
+	// 获取配置文件
+	configFiles := provider.GetConfigFiles(p, apiKey)
+	if len(configFiles) == 0 {
+		return nil
+	}
+
+	// 通过 exec 命令写入每个配置文件
+	for path, content := range configFiles {
+		// 创建目录
+		dir := filepath.Dir(path)
+		mkdirCmd := []string{"mkdir", "-p", dir}
+		if _, err := m.containerMgr.Exec(ctx, containerID, mkdirCmd); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+
+		// 使用 cat 和 heredoc 写入文件内容
+		// 转义内容中的特殊字符
+		escapedContent := strings.ReplaceAll(content, "'", "'\"'\"'")
+		writeCmd := []string{"sh", "-c", fmt.Sprintf("cat > '%s' << 'AGENTBOX_EOF'\n%s\nAGENTBOX_EOF", path, escapedContent)}
+		if _, err := m.containerMgr.Exec(ctx, containerID, writeCmd); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
 
 // Get 获取会话

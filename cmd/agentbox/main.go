@@ -136,6 +136,9 @@ func main() {
 	}
 	log.Printf("Loaded %d profiles", len(profileMgr.List()))
 
+	// 设置 Profile Manager 到 Session Manager（用于 Codex 配置文件生成）
+	sessionMgr.SetProfileManager(profileMgr)
+
 	// 初始化 Provider 管理器
 	providerDataDir := filepath.Join(cfg.Container.WorkspaceBase, "providers")
 	providerMgr := provider.NewManager(providerDataDir)

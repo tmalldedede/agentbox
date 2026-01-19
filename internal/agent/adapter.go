@@ -5,6 +5,15 @@ import (
 	"github.com/tmalldedede/agentbox/internal/profile"
 )
 
+// ConfigFilesProvider 配置文件提供者接口
+// 某些 Agent (如 Codex) 需要在容器中写入配置文件
+type ConfigFilesProvider interface {
+	// GetConfigFiles 返回需要写入容器的配置文件
+	// 返回: map[容器内路径]文件内容
+	// apiKey: 用于认证的 API Key
+	GetConfigFiles(p *profile.Profile, apiKey string) map[string]string
+}
+
 // Adapter Agent 适配器接口
 // 每种 Agent (Claude Code, Codex 等) 需要实现此接口
 type Adapter interface {
