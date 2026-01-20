@@ -296,6 +296,54 @@ export interface CloneSkillRequest {
   new_name: string
 }
 
+// Skill Store Types
+export type SkillSourceType = 'official' | 'community' | 'custom'
+
+export interface SkillSource {
+  id: string
+  name: string
+  owner: string
+  repo: string
+  branch: string
+  path: string
+  type: SkillSourceType
+  description?: string
+  stars?: number
+  updated_at?: string
+  is_enabled: boolean
+}
+
+export interface RemoteSkill {
+  id: string
+  name: string
+  description?: string
+  command: string
+  category: string
+  author?: string
+  version?: string
+  source_id: string
+  source_name: string
+  path: string
+  stars?: number
+  is_installed: boolean
+}
+
+export interface InstallSkillRequest {
+  source_id: string
+  skill_id: string
+}
+
+export interface AddSourceRequest {
+  id: string
+  name: string
+  owner: string
+  repo: string
+  branch?: string
+  path?: string
+  type?: SkillSourceType
+  description?: string
+}
+
 // Credential Types
 export type CredentialType = 'api_key' | 'token' | 'oauth'
 export type CredentialProvider = 'anthropic' | 'openai' | 'github' | 'custom'

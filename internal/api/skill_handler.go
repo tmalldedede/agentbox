@@ -10,11 +10,15 @@ import (
 // SkillHandler Skill API 处理器
 type SkillHandler struct {
 	manager *skill.Manager
+	store   *skill.SkillStore
 }
 
 // NewSkillHandler 创建 SkillHandler
 func NewSkillHandler(manager *skill.Manager) *SkillHandler {
-	return &SkillHandler{manager: manager}
+	return &SkillHandler{
+		manager: manager,
+		store:   skill.NewSkillStore(manager),
+	}
 }
 
 // RegisterRoutes 注册路由
@@ -28,6 +32,19 @@ func (h *SkillHandler) RegisterRoutes(r *gin.RouterGroup) {
 		skills.DELETE("/:id", h.Delete)
 		skills.POST("/:id/clone", h.Clone)
 		skills.GET("/:id/export", h.Export)
+	}
+
+	// Skill Store API
+	store := r.Group("/skill-store")
+	{
+		store.GET("/sources", h.ListSources)
+		store.POST("/sources", h.AddSource)
+		store.DELETE("/sources/:id", h.RemoveSource)
+		store.GET("/skills", h.ListRemoteSkills)
+		store.GET("/skills/:sourceId", h.ListSourceSkills)
+		store.POST("/install", h.InstallSkill)
+		store.DELETE("/uninstall/:id", h.UninstallSkill)
+		store.POST("/refresh/:sourceId", h.RefreshSource)
 	}
 }
 
@@ -186,4 +203,131 @@ func (h *SkillHandler) Export(c *gin.Context) {
 	c.Header("Content-Type", "text/markdown")
 	c.Header("Content-Disposition", "attachment; filename=SKILL.md")
 	c.String(http.StatusOK, s.ToSkillMD())
+}
+
+// ============== Skill Store API ==============
+
+// ListSources 列出所有 Skill 源
+// GET /api/v1/skill-store/sources
+func (h *SkillHandler) ListSources(c *gin.Context) {
+	sources := h.store.ListSources()
+	Success(c, sources)
+}
+
+// AddSource 添加 Skill 源
+// POST /api/v1/skill-store/sources
+func (h *SkillHandler) AddSource(c *gin.Context) {
+	var req skill.SkillSource
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// 验证必填字段
+	if req.ID == "" || req.Owner == "" || req.Repo == "" {
+		Error(c, http.StatusBadRequest, "id, owner, repo are required")
+		return
+	}
+
+	h.store.AddSource(&req)
+	Created(c, req)
+}
+
+// RemoveSource 移除 Skill 源
+// DELETE /api/v1/skill-store/sources/:id
+func (h *SkillHandler) RemoveSource(c *gin.Context) {
+	id := c.Param("id")
+
+	// 不允许删除官方源
+	source, ok := h.store.GetSource(id)
+	if !ok {
+		Error(c, http.StatusNotFound, "source not found")
+		return
+	}
+	if source.Type == "official" {
+		Error(c, http.StatusForbidden, "cannot remove official source")
+		return
+	}
+
+	h.store.RemoveSource(id)
+	Success(c, gin.H{"deleted": id})
+}
+
+// ListRemoteSkills 列出所有远程 Skills
+// GET /api/v1/skill-store/skills
+func (h *SkillHandler) ListRemoteSkills(c *gin.Context) {
+	skills, err := h.store.FetchAllSkills(c.Request.Context())
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	Success(c, skills)
+}
+
+// ListSourceSkills 列出指定源的 Skills
+// GET /api/v1/skill-store/skills/:sourceId
+func (h *SkillHandler) ListSourceSkills(c *gin.Context) {
+	sourceID := c.Param("sourceId")
+
+	skills, err := h.store.FetchSkills(c.Request.Context(), sourceID)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	Success(c, skills)
+}
+
+// InstallSkill 安装远程 Skill
+// POST /api/v1/skill-store/install
+func (h *SkillHandler) InstallSkill(c *gin.Context) {
+	var req struct {
+		SourceID string `json:"source_id" binding:"required"`
+		SkillID  string `json:"skill_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	installed, err := h.store.InstallSkill(c.Request.Context(), req.SourceID, req.SkillID)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Created(c, installed)
+}
+
+// UninstallSkill 卸载 Skill
+// DELETE /api/v1/skill-store/uninstall/:id
+func (h *SkillHandler) UninstallSkill(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.store.UninstallSkill(id); err != nil {
+		if err == skill.ErrSkillNotFound {
+			Error(c, http.StatusNotFound, err.Error())
+			return
+		}
+		if err == skill.ErrSkillIsBuiltIn {
+			Error(c, http.StatusForbidden, err.Error())
+			return
+		}
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(c, gin.H{"uninstalled": id})
+}
+
+// RefreshSource 刷新源缓存
+// POST /api/v1/skill-store/refresh/:sourceId
+func (h *SkillHandler) RefreshSource(c *gin.Context) {
+	sourceID := c.Param("sourceId")
+
+	if err := h.store.RefreshCache(c.Request.Context(), sourceID); err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(c, gin.H{"refreshed": sourceID})
 }

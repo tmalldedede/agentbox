@@ -20,6 +20,10 @@ import type {
   CreateSkillRequest,
   UpdateSkillRequest,
   CloneSkillRequest,
+  SkillSource,
+  RemoteSkill,
+  InstallSkillRequest,
+  AddSourceRequest,
   Credential,
   CreateCredentialRequest,
   UpdateCredentialRequest,
@@ -296,6 +300,41 @@ export const api = {
 
   exportSkill: (id: string) =>
     fetch(`${ADMIN_BASE}/skills/${id}/export`).then(res => res.text()),
+
+  // Skill Store API
+  listSkillSources: () => request<SkillSource[]>(`${ADMIN_BASE}/skill-store/sources`),
+
+  addSkillSource: (req: AddSourceRequest) =>
+    request<SkillSource>(`${ADMIN_BASE}/skill-store/sources`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  removeSkillSource: (id: string) =>
+    request<{ deleted: string }>(`${ADMIN_BASE}/skill-store/sources/${id}`, {
+      method: 'DELETE',
+    }),
+
+  listRemoteSkills: () => request<RemoteSkill[]>(`${ADMIN_BASE}/skill-store/skills`),
+
+  listSourceSkills: (sourceId: string) =>
+    request<RemoteSkill[]>(`${ADMIN_BASE}/skill-store/skills/${sourceId}`),
+
+  installSkill: (req: InstallSkillRequest) =>
+    request<Skill>(`${ADMIN_BASE}/skill-store/install`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  uninstallSkill: (id: string) =>
+    request<{ uninstalled: string }>(`${ADMIN_BASE}/skill-store/uninstall/${id}`, {
+      method: 'DELETE',
+    }),
+
+  refreshSkillSource: (sourceId: string) =>
+    request<{ refreshed: string }>(`${ADMIN_BASE}/skill-store/refresh/${sourceId}`, {
+      method: 'POST',
+    }),
 
   // Credentials (管理接口)
   listCredentials: (options?: { scope?: string; provider?: string }) => {

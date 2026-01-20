@@ -112,3 +112,135 @@ export function useExportSkill() {
     },
   })
 }
+
+// ==================== Skill Store Hooks ====================
+
+/**
+ * 查询 Skill 源列表
+ */
+export function useSkillSources() {
+  return useQuery({
+    queryKey: ['skill-sources'],
+    queryFn: () => api.listSkillSources(),
+    staleTime: 1000 * 60 * 5, // 5 分钟
+  })
+}
+
+/**
+ * 查询远程 Skills
+ */
+export function useRemoteSkills() {
+  return useQuery({
+    queryKey: ['remote-skills'],
+    queryFn: () => api.listRemoteSkills(),
+    staleTime: 1000 * 60 * 5, // 5 分钟
+  })
+}
+
+/**
+ * 查询指定源的 Skills
+ */
+export function useSourceSkills(sourceId: string | undefined) {
+  return useQuery({
+    queryKey: ['remote-skills', sourceId],
+    queryFn: () => api.listSourceSkills(sourceId!),
+    enabled: !!sourceId,
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+/**
+ * 添加 Skill 源
+ */
+export function useAddSkillSource() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.addSkillSource>[0]) => api.addSkillSource(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skill-sources'] })
+      queryClient.invalidateQueries({ queryKey: ['remote-skills'] })
+      toast.success('Skill 源添加成功')
+    },
+    onError: error => {
+      toast.error(`添加 Skill 源失败: ${getErrorMessage(error)}`)
+    },
+  })
+}
+
+/**
+ * 移除 Skill 源
+ */
+export function useRemoveSkillSource() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (sourceId: string) => api.removeSkillSource(sourceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skill-sources'] })
+      queryClient.invalidateQueries({ queryKey: ['remote-skills'] })
+      toast.success('Skill 源已移除')
+    },
+    onError: error => {
+      toast.error(`移除 Skill 源失败: ${getErrorMessage(error)}`)
+    },
+  })
+}
+
+/**
+ * 安装 Skill
+ */
+export function useInstallSkill() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { sourceId: string; skillId: string }) =>
+      api.installSkill({ source_id: data.sourceId, skill_id: data.skillId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skills'] })
+      queryClient.invalidateQueries({ queryKey: ['remote-skills'] })
+      toast.success('Skill 安装成功')
+    },
+    onError: error => {
+      toast.error(`安装 Skill 失败: ${getErrorMessage(error)}`)
+    },
+  })
+}
+
+/**
+ * 卸载 Skill
+ */
+export function useUninstallSkill() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (skillId: string) => api.uninstallSkill(skillId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skills'] })
+      queryClient.invalidateQueries({ queryKey: ['remote-skills'] })
+      toast.success('Skill 已卸载')
+    },
+    onError: error => {
+      toast.error(`卸载 Skill 失败: ${getErrorMessage(error)}`)
+    },
+  })
+}
+
+/**
+ * 刷新 Skill 源
+ */
+export function useRefreshSkillSource() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (sourceId: string) => api.refreshSkillSource(sourceId),
+    onSuccess: (_data, sourceId) => {
+      queryClient.invalidateQueries({ queryKey: ['remote-skills', sourceId] })
+      queryClient.invalidateQueries({ queryKey: ['remote-skills'] })
+      toast.success('Skill 源已刷新')
+    },
+    onError: error => {
+      toast.error(`刷新 Skill 源失败: ${getErrorMessage(error)}`)
+    },
+  })
+}
