@@ -5,6 +5,8 @@ import (
 	"github.com/tmalldedede/agentbox/internal/profile"
 )
 
+// 注意：profile 包仍需导入，用于 profile.Profile 等类型
+
 // ProfileHandler Profile API 处理器
 type ProfileHandler struct {
 	manager *profile.Manager
@@ -55,7 +57,7 @@ func (h *ProfileHandler) Get(c *gin.Context) {
 
 	p, err := h.manager.Get(id)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -76,7 +78,7 @@ func (h *ProfileHandler) GetResolved(c *gin.Context) {
 
 	p, err := h.manager.GetResolved(id)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -152,7 +154,7 @@ func (h *ProfileHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.manager.Create(p); err != nil {
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -206,11 +208,7 @@ func (h *ProfileHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.manager.Update(p); err != nil {
-		if err == profile.ErrProfileNotFound {
-			NotFound(c, err.Error())
-			return
-		}
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -230,11 +228,7 @@ func (h *ProfileHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Delete(id); err != nil {
-		if err == profile.ErrProfileNotFound {
-			NotFound(c, err.Error())
-			return
-		}
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -270,11 +264,7 @@ func (h *ProfileHandler) Clone(c *gin.Context) {
 
 	p, err := h.manager.Clone(id, req.NewID, req.NewName)
 	if err != nil {
-		if err == profile.ErrProfileNotFound {
-			NotFound(c, err.Error())
-			return
-		}
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 

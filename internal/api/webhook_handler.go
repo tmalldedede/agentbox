@@ -5,6 +5,8 @@ import (
 	"github.com/tmalldedede/agentbox/internal/webhook"
 )
 
+// 注意：webhook 包仍需导入，用于 webhook.Webhook 等类型
+
 // WebhookHandler Webhook API 处理器
 type WebhookHandler struct {
 	manager *webhook.Manager
@@ -45,7 +47,7 @@ func (h *WebhookHandler) Create(c *gin.Context) {
 
 	w, err := h.manager.Create(&req)
 	if err != nil {
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -61,7 +63,7 @@ func (h *WebhookHandler) Create(c *gin.Context) {
 func (h *WebhookHandler) List(c *gin.Context) {
 	webhooks, err := h.manager.List()
 	if err != nil {
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -81,11 +83,7 @@ func (h *WebhookHandler) Get(c *gin.Context) {
 
 	w, err := h.manager.Get(id)
 	if err != nil {
-		if err == webhook.ErrWebhookNotFound {
-			NotFound(c, "webhook not found")
-			return
-		}
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -114,11 +112,7 @@ func (h *WebhookHandler) Update(c *gin.Context) {
 
 	w, err := h.manager.Update(id, &req)
 	if err != nil {
-		if err == webhook.ErrWebhookNotFound {
-			NotFound(c, "webhook not found")
-			return
-		}
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -136,11 +130,7 @@ func (h *WebhookHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Delete(id); err != nil {
-		if err == webhook.ErrWebhookNotFound {
-			NotFound(c, "webhook not found")
-			return
-		}
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 

@@ -1,11 +1,18 @@
 package api
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/logger"
 )
+
+var log *slog.Logger
+
+func init() {
+	log = logger.Module("api")
+}
 
 // corsMiddleware CORS 中间件
 func corsMiddleware() gin.HandlerFunc {
@@ -35,6 +42,11 @@ func loggerMiddleware() gin.HandlerFunc {
 		status := c.Writer.Status()
 		method := c.Request.Method
 
-		log.Printf("[API] %s %s %d %v", method, path, status, latency)
+		log.Debug("request",
+			"method", method,
+			"path", path,
+			"status", status,
+			"latency", latency,
+		)
 	}
 }

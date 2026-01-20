@@ -1,9 +1,8 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/mcp"
 )
 
@@ -57,11 +56,7 @@ func (h *MCPHandler) Get(c *gin.Context) {
 
 	server, err := h.manager.Get(id)
 	if err != nil {
-		if err == mcp.ErrServerNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -73,17 +68,13 @@ func (h *MCPHandler) Get(c *gin.Context) {
 func (h *MCPHandler) Create(c *gin.Context) {
 	var req mcp.CreateServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	server, err := h.manager.Create(&req)
 	if err != nil {
-		if err == mcp.ErrServerAlreadyExists {
-			Error(c, http.StatusConflict, err.Error())
-			return
-		}
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -97,20 +88,13 @@ func (h *MCPHandler) Update(c *gin.Context) {
 
 	var req mcp.UpdateServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	server, err := h.manager.Update(id, &req)
 	if err != nil {
-		switch err {
-		case mcp.ErrServerNotFound:
-			Error(c, http.StatusNotFound, err.Error())
-		case mcp.ErrServerIsBuiltIn:
-			Error(c, http.StatusForbidden, err.Error())
-		default:
-			Error(c, http.StatusBadRequest, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -123,14 +107,7 @@ func (h *MCPHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Delete(id); err != nil {
-		switch err {
-		case mcp.ErrServerNotFound:
-			Error(c, http.StatusNotFound, err.Error())
-		case mcp.ErrServerIsBuiltIn:
-			Error(c, http.StatusForbidden, err.Error())
-		default:
-			Error(c, http.StatusInternalServerError, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -147,20 +124,13 @@ func (h *MCPHandler) Clone(c *gin.Context) {
 		NewName string `json:"new_name" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	server, err := h.manager.Clone(id, req.NewID, req.NewName)
 	if err != nil {
-		switch err {
-		case mcp.ErrServerNotFound:
-			Error(c, http.StatusNotFound, err.Error())
-		case mcp.ErrServerAlreadyExists:
-			Error(c, http.StatusConflict, err.Error())
-		default:
-			Error(c, http.StatusBadRequest, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -173,11 +143,7 @@ func (h *MCPHandler) Test(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Test(id); err != nil {
-		if err == mcp.ErrServerNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, err)
 		return
 	}
 

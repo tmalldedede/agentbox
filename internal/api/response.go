@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // Response 通用响应
@@ -11,6 +12,7 @@ type Response struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+	Type    string      `json:"type,omitempty"` // 错误类型
 }
 
 // Success 成功响应
@@ -36,6 +38,31 @@ func Error(c *gin.Context, code int, message string) {
 	c.JSON(code, Response{
 		Code:    code,
 		Message: message,
+	})
+}
+
+// HandleError 处理 AppError 或普通 error
+// 这是推荐的错误处理方式
+func HandleError(c *gin.Context, err error) {
+	if err == nil {
+		return
+	}
+
+	// 检查是否为 AppError
+	if appErr, ok := err.(*apperr.AppError); ok {
+		c.JSON(appErr.Code, Response{
+			Code:    appErr.Code,
+			Message: appErr.Message,
+			Type:    string(appErr.Type),
+		})
+		return
+	}
+
+	// 普通错误，返回 500
+	c.JSON(http.StatusInternalServerError, Response{
+		Code:    http.StatusInternalServerError,
+		Message: err.Error(),
+		Type:    string(apperr.TypeInternal),
 	})
 }
 

@@ -1,9 +1,8 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/provider"
 )
 
@@ -55,11 +54,7 @@ func (h *ProviderHandler) List(c *gin.Context) {
 		providers = h.manager.List()
 	}
 
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "success",
-		Data:    providers,
-	})
+	Success(c, providers)
 }
 
 // Get godoc
@@ -77,18 +72,11 @@ func (h *ProviderHandler) Get(c *gin.Context) {
 
 	p, err := h.manager.Get(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, Response{
-			Code:    404,
-			Message: err.Error(),
-		})
+		HandleError(c, apperr.NotFound("provider"))
 		return
 	}
 
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "success",
-		Data:    p,
-	})
+	Success(c, p)
 }
 
 // CreateProviderRequest represents the request body for creating a provider
@@ -123,10 +111,7 @@ type CreateProviderRequest struct {
 func (h *ProviderHandler) Create(c *gin.Context) {
 	var req CreateProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
@@ -151,18 +136,11 @@ func (h *ProviderHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.manager.Create(p); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		HandleError(c, apperr.Wrap(err, "failed to create provider"))
 		return
 	}
 
-	c.JSON(http.StatusCreated, Response{
-		Code:    0,
-		Message: "created",
-		Data:    p,
-	})
+	Created(c, p)
 }
 
 // UpdateProviderRequest represents the request body for updating a provider
@@ -192,10 +170,7 @@ func (h *ProviderHandler) Update(c *gin.Context) {
 
 	var req UpdateProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
@@ -209,21 +184,14 @@ func (h *ProviderHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.manager.Update(id, updates); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		HandleError(c, apperr.Wrap(err, "failed to update provider"))
 		return
 	}
 
 	// 获取更新后的 Provider
 	p, _ := h.manager.Get(id)
 
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "updated",
-		Data:    p,
-	})
+	Success(c, p)
 }
 
 // Delete godoc
@@ -240,15 +208,9 @@ func (h *ProviderHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Delete(id); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		HandleError(c, apperr.Wrap(err, "failed to delete provider"))
 		return
 	}
 
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "deleted",
-	})
+	Success(c, gin.H{"deleted": id})
 }

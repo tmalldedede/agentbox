@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -20,6 +23,7 @@ import (
 
 // Server HTTP 服务器
 type Server struct {
+	httpServer        *http.Server
 	engine            *gin.Engine
 	handler           *Handler
 	fileHandler       *FileHandler
@@ -36,27 +40,41 @@ type Server struct {
 	webhookHandler    *WebhookHandler
 }
 
+// Deps 服务器依赖（从 App 容器注入）
+type Deps struct {
+	Session    *session.Manager
+	Registry   *agent.Registry
+	Container  container.Manager
+	Profile    *profile.Manager
+	Provider   *provider.Manager
+	MCP        *mcp.Manager
+	Skill      *skill.Manager
+	Credential *credential.Manager
+	Task       *task.Manager
+	Webhook    *webhook.Manager
+}
+
 // NewServer 创建服务器
-func NewServer(sessionMgr *session.Manager, registry *agent.Registry, containerMgr container.Manager, profileMgr *profile.Manager, providerMgr *provider.Manager, mcpMgr *mcp.Manager, skillMgr *skill.Manager, credentialMgr *credential.Manager, taskMgr *task.Manager, webhookMgr *webhook.Manager) *Server {
+func NewServer(deps *Deps) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 	engine.Use(corsMiddleware())
 	engine.Use(loggerMiddleware())
 
-	handler := NewHandler(sessionMgr, registry)
-	fileHandler := NewFileHandler(sessionMgr)
+	handler := NewHandler(deps.Session, deps.Registry)
+	fileHandler := NewFileHandler(deps.Session)
 	publicFileHandler := NewPublicFileHandler()
-	wsHandler := NewWSHandler(sessionMgr, registry, containerMgr)
-	profileHandler := NewProfileHandler(profileMgr)
-	providerHandler := NewProviderHandler(providerMgr)
-	mcpHandler := NewMCPHandler(mcpMgr)
-	skillHandler := NewSkillHandler(skillMgr)
-	credentialHandler := NewCredentialHandler(credentialMgr)
-	imageHandler := NewImageHandler(containerMgr)
-	systemHandler := NewSystemHandler(containerMgr, sessionMgr)
-	taskHandler := NewTaskHandler(taskMgr)
-	webhookHandler := NewWebhookHandler(webhookMgr)
+	wsHandler := NewWSHandler(deps.Session, deps.Registry, deps.Container)
+	profileHandler := NewProfileHandler(deps.Profile)
+	providerHandler := NewProviderHandler(deps.Provider)
+	mcpHandler := NewMCPHandler(deps.MCP)
+	skillHandler := NewSkillHandler(deps.Skill)
+	credentialHandler := NewCredentialHandler(deps.Credential)
+	imageHandler := NewImageHandler(deps.Container)
+	systemHandler := NewSystemHandler(deps.Container, deps.Session)
+	taskHandler := NewTaskHandler(deps.Task)
+	webhookHandler := NewWebhookHandler(deps.Webhook)
 
 	s := &Server{
 		engine:            engine,
@@ -111,9 +129,11 @@ func (s *Server) setupRoutes() {
 			sessions.POST("/:id/start", s.handler.StartSession)
 			sessions.POST("/:id/stop", s.handler.StopSession)
 			sessions.POST("/:id/exec", s.handler.ExecSession)
+			sessions.POST("/:id/exec/stream", s.handler.ExecSessionStream) // SSE 流式执行 (Codex)
 			sessions.GET("/:id/executions", s.handler.GetExecutions)
 			sessions.GET("/:id/executions/:execId", s.handler.GetExecution)
 			sessions.GET("/:id/logs", s.handler.GetSessionLogs)
+			sessions.GET("/:id/logs/stream", s.handler.StreamSessionLogs) // SSE 实时日志流
 
 			// Session 文件管理
 			sessions.GET("/:id/files", s.fileHandler.ListFiles)
@@ -159,7 +179,19 @@ func (s *Server) setupRoutes() {
 
 // Run 启动服务器
 func (s *Server) Run(addr string) error {
-	return s.engine.Run(addr)
+	s.httpServer = &http.Server{
+		Addr:    addr,
+		Handler: s.engine,
+	}
+	return s.httpServer.ListenAndServe()
+}
+
+// Shutdown 优雅关闭服务器
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer != nil {
+		return s.httpServer.Shutdown(ctx)
+	}
+	return nil
 }
 
 // Engine 获取 Gin 引擎 (用于测试)

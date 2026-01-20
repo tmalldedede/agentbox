@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -13,8 +14,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tmalldedede/agentbox/internal/logger"
 	"gopkg.in/yaml.v3"
 )
+
+// 模块日志器
+var log *slog.Logger
+
+func init() {
+	log = logger.Module("skill")
+}
 
 // SkillSource GitHub 仓库源
 type SkillSource struct {
@@ -123,6 +132,8 @@ func (s *SkillStore) AddSource(source *SkillSource) {
 	if source.Path == "" {
 		source.Path = "skills"
 	}
+	// 新添加的源默认启用
+	source.IsEnabled = true
 	s.sources[source.ID] = source
 }
 
@@ -204,7 +215,7 @@ func (s *SkillStore) FetchAllSkills(ctx context.Context) ([]RemoteSkill, error) 
 		skills, err := s.FetchSkills(ctx, source.ID)
 		if err != nil {
 			// 记录错误但继续
-			fmt.Printf("Failed to fetch from %s: %v\n", source.ID, err)
+			log.Warn("failed to fetch skills from source", "source_id", source.ID, "error", err)
 			continue
 		}
 

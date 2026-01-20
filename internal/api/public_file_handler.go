@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 const (
@@ -65,7 +66,7 @@ func (h *PublicFileHandler) List(c *gin.Context) {
 			Success(c, []UploadedFile{})
 			return
 		}
-		InternalError(c, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to read upload directory"))
 		return
 	}
 
@@ -115,7 +116,7 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 	// 创建文件目录
 	fileDir := filepath.Join(h.uploadDir, fileID)
 	if err := os.MkdirAll(fileDir, 0755); err != nil {
-		InternalError(c, "failed to create upload directory")
+		HandleError(c, apperr.Wrap(err, "failed to create upload directory"))
 		return
 	}
 
@@ -124,7 +125,7 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 	dst, err := os.Create(filePath)
 	if err != nil {
 		os.RemoveAll(fileDir)
-		InternalError(c, "failed to create file")
+		HandleError(c, apperr.Wrap(err, "failed to create file"))
 		return
 	}
 	defer dst.Close()
@@ -132,7 +133,7 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 	written, err := io.Copy(dst, file)
 	if err != nil {
 		os.RemoveAll(fileDir)
-		InternalError(c, "failed to write file")
+		HandleError(c, apperr.Wrap(err, "failed to write file"))
 		return
 	}
 
@@ -161,7 +162,7 @@ func (h *PublicFileHandler) Get(c *gin.Context) {
 
 	uploadedFile, err := h.getFileInfo(fileID)
 	if err != nil {
-		NotFound(c, "file not found")
+		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
@@ -175,12 +176,12 @@ func (h *PublicFileHandler) Delete(c *gin.Context) {
 
 	fileDir := filepath.Join(h.uploadDir, fileID)
 	if _, err := os.Stat(fileDir); os.IsNotExist(err) {
-		NotFound(c, "file not found")
+		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
 	if err := os.RemoveAll(fileDir); err != nil {
-		InternalError(c, "failed to delete file")
+		HandleError(c, apperr.Wrap(err, "failed to delete file"))
 		return
 	}
 
@@ -194,14 +195,14 @@ func (h *PublicFileHandler) Download(c *gin.Context) {
 
 	fileDir := filepath.Join(h.uploadDir, fileID)
 	if _, err := os.Stat(fileDir); os.IsNotExist(err) {
-		NotFound(c, "file not found")
+		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
 	// 找到目录中的文件
 	entries, err := os.ReadDir(fileDir)
 	if err != nil || len(entries) == 0 {
-		NotFound(c, "file not found")
+		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
@@ -215,7 +216,7 @@ func (h *PublicFileHandler) Download(c *gin.Context) {
 	}
 
 	if fileName == "" {
-		NotFound(c, "file not found")
+		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 

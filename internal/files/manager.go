@@ -2,12 +2,13 @@ package files
 
 import (
 	"encoding/base64"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 const (
@@ -37,13 +38,13 @@ func (m *Manager) List(workspacePath, relativePath string, recursive bool) (*Fil
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("path not found: %s", relativePath)
+			return nil, apperr.NotFound("path")
 		}
-		return nil, fmt.Errorf("failed to stat path: %w", err)
+		return nil, apperr.Wrap(err, "failed to stat path")
 	}
 
 	if !info.IsDir() {
-		return nil, fmt.Errorf("path is not a directory: %s", relativePath)
+		return nil, apperr.BadRequest("path is not a directory: " + relativePath)
 	}
 
 	var files []FileInfo
@@ -65,7 +66,7 @@ func (m *Manager) List(workspacePath, relativePath string, recursive bool) (*Fil
 func (m *Manager) listDir(workspacePath, dirPath string) ([]FileInfo, error) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
+		return nil, apperr.Wrap(err, "failed to read directory")
 	}
 
 	files := make([]FileInfo, 0, len(entries))
@@ -143,18 +144,18 @@ func (m *Manager) Read(workspacePath, relativePath string) (io.ReadCloser, os.Fi
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil, fmt.Errorf("file not found: %s", relativePath)
+			return nil, nil, apperr.NotFound("file")
 		}
-		return nil, nil, fmt.Errorf("failed to stat file: %w", err)
+		return nil, nil, apperr.Wrap(err, "failed to stat file")
 	}
 
 	if info.IsDir() {
-		return nil, nil, fmt.Errorf("path is a directory: %s", relativePath)
+		return nil, nil, apperr.BadRequest("path is a directory: " + relativePath)
 	}
 
 	file, err := os.Open(fullPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open file: %w", err)
+		return nil, nil, apperr.Wrap(err, "failed to open file")
 	}
 
 	return file, info, nil
@@ -183,7 +184,7 @@ func (m *Manager) ReadContent(workspacePath, relativePath string, maxSize int64)
 	data := make([]byte, readSize)
 	n, err := io.ReadFull(reader, data)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, apperr.Wrap(err, "failed to read file")
 	}
 	data = data[:n]
 
@@ -207,7 +208,7 @@ func (m *Manager) ReadContent(workspacePath, relativePath string, maxSize int64)
 // Write 写入文件
 func (m *Manager) Write(workspacePath, relativePath string, content io.Reader, size int64) (*FileUploadResult, error) {
 	if size > MaxUploadSize {
-		return nil, fmt.Errorf("file too large: %d bytes (max %d)", size, MaxUploadSize)
+		return nil, apperr.Validation("file too large")
 	}
 
 	fullPath, err := m.safePath(workspacePath, relativePath)
@@ -218,20 +219,20 @@ func (m *Manager) Write(workspacePath, relativePath string, content io.Reader, s
 	// 确保父目录存在
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
+		return nil, apperr.Wrap(err, "failed to create directory")
 	}
 
 	// 创建文件
 	file, err := os.Create(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file: %w", err)
+		return nil, apperr.Wrap(err, "failed to create file")
 	}
 	defer file.Close()
 
 	// 写入内容
 	written, err := io.Copy(file, content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write file: %w", err)
+		return nil, apperr.Wrap(err, "failed to write file")
 	}
 
 	return &FileUploadResult{
@@ -250,12 +251,12 @@ func (m *Manager) Delete(workspacePath, relativePath string) error {
 
 	// 检查是否存在
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return fmt.Errorf("path not found: %s", relativePath)
+		return apperr.NotFound("path")
 	}
 
 	// 删除
 	if err := os.RemoveAll(fullPath); err != nil {
-		return fmt.Errorf("failed to delete: %w", err)
+		return apperr.Wrap(err, "failed to delete")
 	}
 
 	return nil
@@ -271,14 +272,14 @@ func (m *Manager) CreateDirectory(workspacePath, relativePath string) (*FileInfo
 	// 检查是否已存在
 	if info, err := os.Stat(fullPath); err == nil {
 		if info.IsDir() {
-			return nil, fmt.Errorf("directory already exists: %s", relativePath)
+			return nil, apperr.AlreadyExists("directory")
 		}
-		return nil, fmt.Errorf("path exists but is not a directory: %s", relativePath)
+		return nil, apperr.BadRequest("path exists but is not a directory: " + relativePath)
 	}
 
 	// 创建目录
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
+		return nil, apperr.Wrap(err, "failed to create directory")
 	}
 
 	info, _ := os.Stat(fullPath)
@@ -307,17 +308,17 @@ func (m *Manager) safePath(workspacePath, relativePath string) (string, error) {
 	// 确保路径在工作空间内
 	absWorkspace, err := filepath.Abs(workspacePath)
 	if err != nil {
-		return "", fmt.Errorf("invalid workspace path: %w", err)
+		return "", apperr.Wrap(err, "invalid workspace path")
 	}
 
 	absPath, err := filepath.Abs(fullPath)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
+		return "", apperr.Wrap(err, "invalid path")
 	}
 
 	// 检查是否在工作空间内
 	if !strings.HasPrefix(absPath, absWorkspace) {
-		return "", fmt.Errorf("path traversal detected: %s", relativePath)
+		return "", apperr.BadRequest("path traversal detected: " + relativePath)
 	}
 
 	return absPath, nil

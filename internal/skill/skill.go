@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // Category Skill 类别
@@ -165,9 +167,9 @@ type UpdateSkillRequest struct {
 	IsEnabled    *bool       `json:"is_enabled,omitempty"`
 }
 
-// 错误定义
+// 错误定义 - 使用 apperr 提供正确的 HTTP 状态码
 var (
-	ErrSkillNotFound      = errors.New("skill not found")
-	ErrSkillAlreadyExists = errors.New("skill already exists")
-	ErrSkillIsBuiltIn     = errors.New("cannot modify built-in skill")
+	ErrSkillNotFound      = apperr.NotFound("skill")
+	ErrSkillAlreadyExists = apperr.AlreadyExists("skill")
+	ErrSkillIsBuiltIn     = apperr.Forbidden("cannot modify built-in skill")
 )

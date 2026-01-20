@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/files"
 )
 
@@ -46,13 +47,13 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 
 	workspace, err := h.sessionMgr.GetWorkspace(sessionID)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
 	fileList, err := h.fileManager.List(workspace, req.Path, req.Recursive)
 	if err != nil {
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -72,17 +73,13 @@ func (h *FileHandler) DownloadFile(c *gin.Context) {
 
 	workspace, err := h.sessionMgr.GetWorkspace(sessionID)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
 	reader, info, err := h.fileManager.Read(workspace, filePath)
 	if err != nil {
-		if isNotFoundError(err) {
-			NotFound(c, err.Error())
-		} else {
-			InternalError(c, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 	defer reader.Close()
@@ -122,17 +119,13 @@ func (h *FileHandler) ReadFileContent(c *gin.Context) {
 
 	workspace, err := h.sessionMgr.GetWorkspace(sessionID)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
 	content, err := h.fileManager.ReadContent(workspace, filePath, req.MaxSize)
 	if err != nil {
-		if isNotFoundError(err) {
-			NotFound(c, err.Error())
-		} else {
-			InternalError(c, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -146,7 +139,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 
 	workspace, err := h.sessionMgr.GetWorkspace(sessionID)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -175,7 +168,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 	// 写入文件
 	result, err := h.fileManager.Write(workspace, targetPath, file, header.Size)
 	if err != nil {
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -195,16 +188,12 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 
 	workspace, err := h.sessionMgr.GetWorkspace(sessionID)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
 	if err := h.fileManager.Delete(workspace, filePath); err != nil {
-		if isNotFoundError(err) {
-			NotFound(c, err.Error())
-		} else {
-			InternalError(c, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -224,16 +213,17 @@ func (h *FileHandler) CreateDirectory(c *gin.Context) {
 
 	workspace, err := h.sessionMgr.GetWorkspace(sessionID)
 	if err != nil {
-		NotFound(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
 	dirInfo, err := h.fileManager.CreateDirectory(workspace, req.Path)
 	if err != nil {
-		if isConflictError(err) {
+		// 检查是否是冲突错误
+		if apperr.IsAlreadyExists(err) {
 			Error(c, http.StatusConflict, err.Error())
 		} else {
-			InternalError(c, err.Error())
+			HandleError(c, err)
 		}
 		return
 	}
@@ -241,34 +231,4 @@ func (h *FileHandler) CreateDirectory(c *gin.Context) {
 	Created(c, dirInfo)
 }
 
-// isNotFoundError 检查是否为 not found 错误
-func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return contains(errStr, "not found") || contains(errStr, "does not exist")
-}
-
-// isConflictError 检查是否为冲突错误
-func isConflictError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return contains(errStr, "already exists")
-}
-
-// contains 检查字符串是否包含子串
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsImpl(s, substr))
-}
-
-func containsImpl(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
+// 注意：字符串匹配错误检查函数已移除，现使用 apperr.IsNotFound / apperr.IsAlreadyExists

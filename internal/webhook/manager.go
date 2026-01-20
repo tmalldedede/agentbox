@@ -6,12 +6,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tmalldedede/agentbox/internal/logger"
 )
+
+var log *slog.Logger
+
+func init() {
+	log = logger.Module("webhook")
+}
 
 // Manager Webhook 管理器
 type Manager struct {
@@ -96,7 +103,7 @@ func (m *Manager) List() ([]*Webhook, error) {
 func (m *Manager) Send(event string, data interface{}) {
 	webhooks, err := m.store.ListByEvent(event)
 	if err != nil {
-		log.Printf("[Webhook] Failed to list webhooks for event %s: %v", event, err)
+		log.Error("failed to list webhooks", "event", event, "error", err)
 		return
 	}
 
@@ -113,7 +120,7 @@ func (m *Manager) Send(event string, data interface{}) {
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("[Webhook] Failed to marshal payload: %v", err)
+		log.Error("failed to marshal payload", "error", err)
 		return
 	}
 
@@ -126,7 +133,7 @@ func (m *Manager) Send(event string, data interface{}) {
 func (m *Manager) sendToWebhook(w *Webhook, payload []byte) {
 	req, err := http.NewRequest("POST", w.URL, bytes.NewReader(payload))
 	if err != nil {
-		log.Printf("[Webhook] Failed to create request for %s: %v", w.ID, err)
+		log.Error("failed to create request", "webhook_id", w.ID, "error", err)
 		return
 	}
 
@@ -141,15 +148,15 @@ func (m *Manager) sendToWebhook(w *Webhook, payload []byte) {
 
 	resp, err := m.client.Do(req)
 	if err != nil {
-		log.Printf("[Webhook] Failed to send to %s (%s): %v", w.ID, w.URL, err)
+		log.Error("failed to send webhook", "webhook_id", w.ID, "url", w.URL, "error", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		log.Printf("[Webhook] Sent to %s successfully", w.ID)
+		log.Debug("webhook sent", "webhook_id", w.ID)
 	} else {
-		log.Printf("[Webhook] Failed to send to %s, status: %d", w.ID, resp.StatusCode)
+		log.Warn("webhook returned non-2xx status", "webhook_id", w.ID, "status", resp.StatusCode)
 	}
 }
 

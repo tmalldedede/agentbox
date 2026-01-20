@@ -960,6 +960,59 @@
                 }
             }
         },
+        "/sessions/{id}/exec/stream": {
+            "post": {
+                "description": "Send a prompt to the agent and receive real-time events via SSE",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Execute prompt in session with SSE streaming (Codex only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Prompt to execute",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/sessions/{id}/executions": {
             "get": {
                 "description": "Get the execution history for a session",
@@ -1105,6 +1158,41 @@
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/logs/stream": {
+            "get": {
+                "description": "Get real-time container logs via Server-Sent Events",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Stream session logs (SSE)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "500": {
@@ -1831,9 +1919,17 @@
                     "description": "Custom API endpoint (proxy/compatible API)",
                     "type": "string"
                 },
+                "bearer_token": {
+                    "description": "experimental_bearer_token for Codex",
+                    "type": "string"
+                },
                 "disable_traffic": {
                     "description": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
                     "type": "boolean"
+                },
+                "env_key": {
+                    "description": "Environment variable name for API key (e.g., \"ZHIPU_API_KEY\")",
+                    "type": "string"
                 },
                 "haiku_model": {
                     "description": "Model tier configuration (Claude Code)",
@@ -1852,7 +1948,7 @@
                     "type": "string"
                 },
                 "provider": {
-                    "description": "e.g., \"anthropic\", \"openai\"",
+                    "description": "e.g., \"anthropic\", \"openai\", \"glm\"",
                     "type": "string"
                 },
                 "reasoning_effort": {
@@ -1868,7 +1964,7 @@
                     "type": "integer"
                 },
                 "wire_api": {
-                    "description": "Codex specific",
+                    "description": "Codex specific - third-party provider support",
                     "type": "string"
                 }
             }
@@ -1951,6 +2047,10 @@
                     "type": "string"
                 },
                 "created_by": {
+                    "type": "string"
+                },
+                "credential_id": {
+                    "description": "Credential ID for API authentication",
                     "type": "string"
                 },
                 "custom_agents": {
@@ -2223,6 +2323,20 @@
                 }
             }
         },
+        "github_com_tmalldedede_agentbox_internal_session.ExecEvent": {
+            "type": "object",
+            "properties": {
+                "raw": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_tmalldedede_agentbox_internal_session.ExecRequest": {
             "type": "object",
             "required": [
@@ -2243,6 +2357,10 @@
                         "type": "string"
                     }
                 },
+                "include_events": {
+                    "description": "是否返回完整事件列表",
+                    "type": "boolean"
+                },
                 "max_turns": {
                     "description": "最大对话轮数 (1-100, 默认 10)",
                     "type": "integer"
@@ -2262,14 +2380,34 @@
                 "error": {
                     "type": "string"
                 },
+                "events": {
+                    "description": "完整事件列表 (当 include_events=true)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecEvent"
+                    }
+                },
                 "execution_id": {
                     "type": "string"
                 },
                 "exit_code": {
                     "type": "integer"
                 },
-                "output": {
+                "message": {
+                    "description": "Agent 最终回复 (新增)",
                     "type": "string"
+                },
+                "output": {
+                    "description": "原始输出 (兼容旧版)",
+                    "type": "string"
+                },
+                "usage": {
+                    "description": "Token 使用统计",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_tmalldedede_agentbox_internal_session.TokenUsage"
+                        }
+                    ]
                 }
             }
         },
@@ -2372,6 +2510,20 @@
                 "StatusStopped",
                 "StatusError"
             ]
+        },
+        "github_com_tmalldedede_agentbox_internal_session.TokenUsage": {
+            "type": "object",
+            "properties": {
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                }
+            }
         },
         "github_com_tmalldedede_agentbox_internal_task.Input": {
             "type": "object",
@@ -2706,6 +2858,9 @@
                         "type": "string"
                     }
                 },
+                "credential_id": {
+                    "type": "string"
+                },
                 "debug": {
                     "$ref": "#/definitions/github_com_tmalldedede_agentbox_internal_profile.DebugConfig"
                 },
@@ -2726,6 +2881,9 @@
                 },
                 "id": {
                     "type": "string"
+                },
+                "is_public": {
+                    "type": "boolean"
                 },
                 "mcp_servers": {
                     "type": "array",
@@ -2846,6 +3004,10 @@
                 "prompt": {
                     "type": "string"
                 },
+                "session_id": {
+                    "description": "可选：使用已存在的 Session",
+                    "type": "string"
+                },
                 "timeout": {
                     "type": "integer"
                 },
@@ -2884,6 +3046,10 @@
                 },
                 "data": {},
                 "message": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "错误类型",
                     "type": "string"
                 }
             }
@@ -2929,11 +3095,31 @@
                 1000000,
                 1000000000,
                 60000000000,
+                3600000000000,
+                1,
+                1000,
+                1000000,
+                1000000000,
+                1,
+                1000,
+                1000000,
+                1000000000,
+                60000000000,
                 3600000000000
             ],
             "x-enum-varnames": [
                 "minDuration",
                 "maxDuration",
+                "Nanosecond",
+                "Microsecond",
+                "Millisecond",
+                "Second",
+                "Minute",
+                "Hour",
+                "Nanosecond",
+                "Microsecond",
+                "Millisecond",
+                "Second",
                 "Nanosecond",
                 "Microsecond",
                 "Millisecond",

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/skill"
 )
 
@@ -74,11 +75,7 @@ func (h *SkillHandler) Get(c *gin.Context) {
 
 	s, err := h.manager.Get(id)
 	if err != nil {
-		if err == skill.ErrSkillNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -90,17 +87,13 @@ func (h *SkillHandler) Get(c *gin.Context) {
 func (h *SkillHandler) Create(c *gin.Context) {
 	var req skill.CreateSkillRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	s, err := h.manager.Create(&req)
 	if err != nil {
-		if err == skill.ErrSkillAlreadyExists {
-			Error(c, http.StatusConflict, err.Error())
-			return
-		}
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -114,20 +107,13 @@ func (h *SkillHandler) Update(c *gin.Context) {
 
 	var req skill.UpdateSkillRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	s, err := h.manager.Update(id, &req)
 	if err != nil {
-		switch err {
-		case skill.ErrSkillNotFound:
-			Error(c, http.StatusNotFound, err.Error())
-		case skill.ErrSkillIsBuiltIn:
-			Error(c, http.StatusForbidden, err.Error())
-		default:
-			Error(c, http.StatusBadRequest, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -140,14 +126,7 @@ func (h *SkillHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Delete(id); err != nil {
-		switch err {
-		case skill.ErrSkillNotFound:
-			Error(c, http.StatusNotFound, err.Error())
-		case skill.ErrSkillIsBuiltIn:
-			Error(c, http.StatusForbidden, err.Error())
-		default:
-			Error(c, http.StatusInternalServerError, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -164,20 +143,13 @@ func (h *SkillHandler) Clone(c *gin.Context) {
 		NewName string `json:"new_name" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	s, err := h.manager.Clone(id, req.NewID, req.NewName)
 	if err != nil {
-		switch err {
-		case skill.ErrSkillNotFound:
-			Error(c, http.StatusNotFound, err.Error())
-		case skill.ErrSkillAlreadyExists:
-			Error(c, http.StatusConflict, err.Error())
-		default:
-			Error(c, http.StatusBadRequest, err.Error())
-		}
+		HandleError(c, err)
 		return
 	}
 
@@ -191,11 +163,7 @@ func (h *SkillHandler) Export(c *gin.Context) {
 
 	s, err := h.manager.Get(id)
 	if err != nil {
-		if err == skill.ErrSkillNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -219,13 +187,13 @@ func (h *SkillHandler) ListSources(c *gin.Context) {
 func (h *SkillHandler) AddSource(c *gin.Context) {
 	var req skill.SkillSource
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	// 验证必填字段
 	if req.ID == "" || req.Owner == "" || req.Repo == "" {
-		Error(c, http.StatusBadRequest, "id, owner, repo are required")
+		HandleError(c, apperr.Validation("id, owner, repo are required"))
 		return
 	}
 
@@ -241,11 +209,11 @@ func (h *SkillHandler) RemoveSource(c *gin.Context) {
 	// 不允许删除官方源
 	source, ok := h.store.GetSource(id)
 	if !ok {
-		Error(c, http.StatusNotFound, "source not found")
+		HandleError(c, apperr.NotFound("source"))
 		return
 	}
 	if source.Type == "official" {
-		Error(c, http.StatusForbidden, "cannot remove official source")
+		HandleError(c, apperr.Forbidden("cannot remove official source"))
 		return
 	}
 
@@ -258,7 +226,7 @@ func (h *SkillHandler) RemoveSource(c *gin.Context) {
 func (h *SkillHandler) ListRemoteSkills(c *gin.Context) {
 	skills, err := h.store.FetchAllSkills(c.Request.Context())
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to fetch remote skills"))
 		return
 	}
 	Success(c, skills)
@@ -271,7 +239,7 @@ func (h *SkillHandler) ListSourceSkills(c *gin.Context) {
 
 	skills, err := h.store.FetchSkills(c.Request.Context(), sourceID)
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to fetch skills from source"))
 		return
 	}
 	Success(c, skills)
@@ -285,13 +253,13 @@ func (h *SkillHandler) InstallSkill(c *gin.Context) {
 		SkillID  string `json:"skill_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	installed, err := h.store.InstallSkill(c.Request.Context(), req.SourceID, req.SkillID)
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to install skill"))
 		return
 	}
 
@@ -304,15 +272,7 @@ func (h *SkillHandler) UninstallSkill(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.store.UninstallSkill(id); err != nil {
-		if err == skill.ErrSkillNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		if err == skill.ErrSkillIsBuiltIn {
-			Error(c, http.StatusForbidden, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -325,7 +285,7 @@ func (h *SkillHandler) RefreshSource(c *gin.Context) {
 	sourceID := c.Param("sourceId")
 
 	if err := h.store.RefreshCache(c.Request.Context(), sourceID); err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to refresh source cache"))
 		return
 	}
 

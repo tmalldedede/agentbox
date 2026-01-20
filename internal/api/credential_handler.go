@@ -1,9 +1,8 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/credential"
 )
 
@@ -56,11 +55,7 @@ func (h *CredentialHandler) Get(c *gin.Context) {
 
 	cred, err := h.manager.Get(id)
 	if err != nil {
-		if err == credential.ErrCredentialNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -72,17 +67,13 @@ func (h *CredentialHandler) Get(c *gin.Context) {
 func (h *CredentialHandler) Create(c *gin.Context) {
 	var req credential.CreateCredentialRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	cred, err := h.manager.Create(&req)
 	if err != nil {
-		if err == credential.ErrCredentialAlreadyExists {
-			Error(c, http.StatusConflict, err.Error())
-			return
-		}
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -96,17 +87,13 @@ func (h *CredentialHandler) Update(c *gin.Context) {
 
 	var req credential.UpdateCredentialRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	cred, err := h.manager.Update(id, &req)
 	if err != nil {
-		if err == credential.ErrCredentialNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -119,11 +106,7 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.Delete(id); err != nil {
-		if err == credential.ErrCredentialNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -137,11 +120,7 @@ func (h *CredentialHandler) Verify(c *gin.Context) {
 
 	valid, err := h.manager.Verify(id)
 	if err != nil {
-		if err == credential.ErrCredentialNotFound {
-			Error(c, http.StatusNotFound, err.Error())
-			return
-		}
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, err)
 		return
 	}
 

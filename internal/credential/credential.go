@@ -9,6 +9,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // CredentialType 凭证类型
@@ -136,12 +138,12 @@ type UpdateCredentialRequest struct {
 	EnvVar    *string         `json:"env_var,omitempty"`
 }
 
-// 错误定义
+// 错误定义 - 使用 apperr 提供正确的 HTTP 状态码
 var (
-	ErrCredentialNotFound      = errors.New("credential not found")
-	ErrCredentialAlreadyExists = errors.New("credential already exists")
-	ErrEncryptionFailed        = errors.New("encryption failed")
-	ErrDecryptionFailed        = errors.New("decryption failed")
+	ErrCredentialNotFound      = apperr.NotFound("credential")
+	ErrCredentialAlreadyExists = apperr.AlreadyExists("credential")
+	ErrEncryptionFailed        = apperr.Internal("encryption failed")
+	ErrDecryptionFailed        = apperr.Internal("decryption failed")
 )
 
 // Crypto 加密工具

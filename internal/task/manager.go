@@ -3,14 +3,22 @@ package task
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tmalldedede/agentbox/internal/logger"
 	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/session"
 )
+
+// 模块日志器
+var log *slog.Logger
+
+func init() {
+	log = logger.Module("task")
+}
 
 // Manager 任务管理器
 type Manager struct {
@@ -68,14 +76,14 @@ func NewManager(store Store, profileMgr *profile.Manager, sessionMgr *session.Ma
 func (m *Manager) Start() {
 	m.wg.Add(1)
 	go m.scheduler()
-	log.Printf("[TaskManager] Started with max_concurrent=%d, poll_interval=%v", m.maxConcurrent, m.pollInterval)
+	log.Info("task manager started", "max_concurrent", m.maxConcurrent, "poll_interval", m.pollInterval)
 }
 
 // Stop 停止调度器
 func (m *Manager) Stop() {
 	m.cancel()
 	m.wg.Wait()
-	log.Println("[TaskManager] Stopped")
+	log.Info("task manager stopped")
 }
 
 // scheduler 调度循环
@@ -113,7 +121,7 @@ func (m *Manager) scheduleNext() {
 		OrderDesc: false, // FIFO
 	})
 	if err != nil {
-		log.Printf("[TaskManager] Failed to list queued tasks: %v", err)
+		log.Error("failed to list queued tasks", "error", err)
 		return
 	}
 
@@ -150,6 +158,7 @@ func (m *Manager) CreateTask(req *CreateTaskRequest) (*Task, error) {
 		ProfileID:   req.ProfileID,
 		ProfileName: p.Name,
 		AgentType:   p.Adapter,
+		SessionID:   req.SessionID, // 使用指定的 Session（如果提供）
 		Prompt:      req.Prompt,
 		Input:       req.Input,
 		Output:      req.Output,
@@ -170,10 +179,10 @@ func (m *Manager) CreateTask(req *CreateTaskRequest) (*Task, error) {
 	queuedAt := time.Now()
 	task.QueuedAt = &queuedAt
 	if err := m.store.Update(task); err != nil {
-		log.Printf("[TaskManager] Failed to queue task %s: %v", task.ID, err)
+		log.Error("failed to queue task", "task_id", task.ID, "error", err)
 	}
 
-	log.Printf("[TaskManager] Created task %s (profile=%s)", task.ID, task.ProfileID)
+	log.Info("task created", "task_id", task.ID, "profile_id", task.ProfileID)
 	return task, nil
 }
 
@@ -237,11 +246,11 @@ func (m *Manager) executeTask(task *Task) {
 	now := time.Now()
 	task.StartedAt = &now
 	if err := m.store.Update(task); err != nil {
-		log.Printf("[TaskManager] Failed to update task %s to running: %v", task.ID, err)
+		log.Error("failed to update task to running", "task_id", task.ID, "error", err)
 		return
 	}
 
-	log.Printf("[TaskManager] Executing task %s (profile=%s)", task.ID, task.ProfileID)
+	log.Info("executing task", "task_id", task.ID, "profile_id", task.ProfileID)
 
 	// 执行任务
 	err := m.doExecute(ctx, task)
@@ -253,14 +262,14 @@ func (m *Manager) executeTask(task *Task) {
 	if err != nil {
 		task.Status = StatusFailed
 		task.ErrorMessage = err.Error()
-		log.Printf("[TaskManager] Task %s failed: %v", task.ID, err)
+		log.Error("task failed", "task_id", task.ID, "error", err)
 	} else {
 		task.Status = StatusCompleted
-		log.Printf("[TaskManager] Task %s completed", task.ID)
+		log.Info("task completed", "task_id", task.ID)
 	}
 
 	if err := m.store.Update(task); err != nil {
-		log.Printf("[TaskManager] Failed to update task %s result: %v", task.ID, err)
+		log.Error("failed to update task result", "task_id", task.ID, "error", err)
 	}
 
 	// 发送 Webhook（如果配置了）
@@ -277,21 +286,42 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 		return fmt.Errorf("failed to resolve profile: %w", err)
 	}
 
-	// 创建 Session
-	sess, err := m.sessionMgr.Create(ctx, &session.CreateRequest{
-		Agent:     p.Adapter,
-		ProfileID: task.ProfileID,
-		Workspace: "", // 使用默认，由 session manager 分配
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create session: %w", err)
+	var sess *session.Session
+	var needStopSession bool // 是否需要在任务完成后停止 session
+
+	// 如果任务已指定 SessionID，使用现有 Session
+	if task.SessionID != "" {
+		sess, err = m.sessionMgr.Get(ctx, task.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to get session %s: %w", task.SessionID, err)
+		}
+		// 使用外部创建的 session，任务完成后不停止它
+		needStopSession = false
+		log.Info("using existing session", "session_id", sess.ID, "task_id", task.ID)
+	} else {
+		// 创建新 Session
+		sess, err = m.sessionMgr.Create(ctx, &session.CreateRequest{
+			Agent:     p.Adapter,
+			ProfileID: task.ProfileID,
+			Workspace: "", // 使用默认，由 session manager 分配
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create session: %w", err)
+		}
+		task.SessionID = sess.ID
+		needStopSession = true // 内部创建的 session，任务完成后需要停止
+
+		// 启动新创建的 Session
+		if err := m.sessionMgr.Start(ctx, sess.ID); err != nil {
+			return fmt.Errorf("failed to start session: %w", err)
+		}
 	}
 
-	task.SessionID = sess.ID
-
-	// 启动 Session
-	if err := m.sessionMgr.Start(ctx, sess.ID); err != nil {
-		return fmt.Errorf("failed to start session: %w", err)
+	// 用于条件停止 session 的辅助函数
+	stopSessionIfNeeded := func() {
+		if needStopSession {
+			m.sessionMgr.Stop(ctx, task.SessionID)
+		}
 	}
 
 	// 执行任务 prompt
@@ -305,7 +335,7 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 		Timeout: timeout,
 	})
 	if err != nil {
-		m.sessionMgr.Stop(ctx, task.SessionID)
+		stopSessionIfNeeded()
 		return fmt.Errorf("failed to execute: %w", err)
 	}
 
@@ -322,7 +352,7 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 		select {
 		case <-timeoutCtx.Done():
 			// 超时或取消
-			m.sessionMgr.Stop(ctx, task.SessionID)
+			stopSessionIfNeeded()
 			if ctx.Err() != nil {
 				return fmt.Errorf("task cancelled")
 			}
@@ -339,11 +369,11 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 			case session.ExecutionSuccess:
 				// 收集结果
 				task.Result = m.collectResult(exec)
-				// 停止 Session
-				m.sessionMgr.Stop(ctx, task.SessionID)
+				// 停止 Session（如果是内部创建的）
+				stopSessionIfNeeded()
 				return nil
 			case session.ExecutionFailed:
-				m.sessionMgr.Stop(ctx, task.SessionID)
+				stopSessionIfNeeded()
 				return fmt.Errorf("execution failed: %s", exec.Error)
 			}
 			// ExecutionPending 或 ExecutionRunning 继续等待
@@ -373,12 +403,13 @@ func (m *Manager) collectResult(exec *session.Execution) *Result {
 // sendWebhook 发送 Webhook 通知
 func (m *Manager) sendWebhook(task *Task) {
 	// TODO: 实现 Webhook 发送
-	log.Printf("[TaskManager] Webhook for task %s: %s", task.ID, task.WebhookURL)
+	log.Debug("sending webhook", "task_id", task.ID, "webhook_url", task.WebhookURL)
 }
 
 // CreateTaskRequest 创建任务请求
 type CreateTaskRequest struct {
 	ProfileID  string            `json:"profile_id" binding:"required"`
+	SessionID  string            `json:"session_id,omitempty"` // 可选：使用已存在的 Session
 	Prompt     string            `json:"prompt" binding:"required"`
 	Input      *Input            `json:"input,omitempty"`
 	Output     *OutputConfig     `json:"output,omitempty"`

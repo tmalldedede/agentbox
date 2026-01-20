@@ -1,11 +1,11 @@
 package api
 
 import (
-	"net/http"
 	"runtime"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/session"
 )
@@ -241,7 +241,7 @@ func (h *SystemHandler) CleanupContainers(c *gin.Context) {
 	// 获取所有会话的容器 ID
 	sessions, err := h.sessionMgr.List(ctx, nil)
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to list sessions"))
 		return
 	}
 
@@ -255,7 +255,7 @@ func (h *SystemHandler) CleanupContainers(c *gin.Context) {
 	// 获取所有 AgentBox 管理的容器
 	containers, err := h.containerMgr.ListContainers(ctx)
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to list containers"))
 		return
 	}
 
@@ -305,7 +305,7 @@ func (h *SystemHandler) CleanupImages(c *gin.Context) {
 
 	images, err := h.containerMgr.ListImages(ctx)
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to list images"))
 		return
 	}
 

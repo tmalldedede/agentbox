@@ -33,6 +33,7 @@ func (h *TaskHandler) RegisterRoutes(r *gin.RouterGroup) {
 // CreateTaskRequest 创建任务请求
 type CreateTaskRequest struct {
 	ProfileID  string            `json:"profile_id" binding:"required"`
+	SessionID  string            `json:"session_id,omitempty"` // 可选：使用已存在的 Session
 	Prompt     string            `json:"prompt" binding:"required"`
 	Input      *task.Input       `json:"input,omitempty"`
 	Output     *task.OutputConfig `json:"output,omitempty"`
@@ -60,6 +61,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 
 	t, err := h.manager.CreateTask(&task.CreateTaskRequest{
 		ProfileID:  req.ProfileID,
+		SessionID:  req.SessionID,
 		Prompt:     req.Prompt,
 		Input:      req.Input,
 		Output:     req.Output,
@@ -68,7 +70,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		Metadata:   req.Metadata,
 	})
 	if err != nil {
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -124,7 +126,7 @@ func (h *TaskHandler) List(c *gin.Context) {
 
 	tasks, err := h.manager.ListTasks(filter)
 	if err != nil {
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -155,11 +157,7 @@ func (h *TaskHandler) Get(c *gin.Context) {
 
 	t, err := h.manager.GetTask(id)
 	if err != nil {
-		if err == task.ErrTaskNotFound {
-			NotFound(c, "task not found")
-			return
-		}
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -180,11 +178,7 @@ func (h *TaskHandler) Cancel(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.manager.CancelTask(id); err != nil {
-		if err == task.ErrTaskNotFound {
-			NotFound(c, "task not found")
-			return
-		}
-		BadRequest(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -207,11 +201,7 @@ func (h *TaskHandler) GetOutput(c *gin.Context) {
 
 	t, err := h.manager.GetTask(id)
 	if err != nil {
-		if err == task.ErrTaskNotFound {
-			NotFound(c, "task not found")
-			return
-		}
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 
@@ -240,11 +230,7 @@ func (h *TaskHandler) GetLogs(c *gin.Context) {
 
 	t, err := h.manager.GetTask(id)
 	if err != nil {
-		if err == task.ErrTaskNotFound {
-			NotFound(c, "task not found")
-			return
-		}
-		InternalError(c, err.Error())
+		HandleError(c, err)
 		return
 	}
 

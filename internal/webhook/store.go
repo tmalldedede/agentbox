@@ -2,18 +2,19 @@ package webhook
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
+// Webhook errors - 使用 apperr 提供正确的 HTTP 状态码
 var (
-	ErrWebhookNotFound = errors.New("webhook not found")
-	ErrWebhookExists   = errors.New("webhook already exists")
+	ErrWebhookNotFound = apperr.NotFound("webhook")
+	ErrWebhookExists   = apperr.AlreadyExists("webhook")
 )
 
 // Store Webhook 存储接口

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // ServerType MCP Server 通信类型
@@ -156,9 +158,9 @@ type UpdateServerRequest struct {
 	IsEnabled   *bool              `json:"is_enabled,omitempty"`
 }
 
-// 错误定义
+// 错误定义 - 使用 apperr 提供正确的 HTTP 状态码
 var (
-	ErrServerNotFound      = errors.New("mcp server not found")
-	ErrServerAlreadyExists = errors.New("mcp server already exists")
-	ErrServerIsBuiltIn     = errors.New("cannot modify built-in mcp server")
+	ErrServerNotFound      = apperr.NotFound("mcp server")
+	ErrServerAlreadyExists = apperr.AlreadyExists("mcp server")
+	ErrServerIsBuiltIn     = apperr.Forbidden("cannot modify built-in mcp server")
 )

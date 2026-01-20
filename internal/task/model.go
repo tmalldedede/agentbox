@@ -1,8 +1,9 @@
 package task
 
 import (
-	"errors"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // 任务状态
@@ -17,11 +18,11 @@ const (
 	StatusCancelled Status = "cancelled" // 用户取消
 )
 
-// 常见错误
+// 常见错误 - 使用 apperr 提供正确的 HTTP 状态码
 var (
-	ErrTaskNotFound = errors.New("task not found")
-	ErrTaskExists   = errors.New("task already exists")
-	ErrInvalidInput = errors.New("invalid input")
+	ErrTaskNotFound = apperr.NotFound("task")
+	ErrTaskExists   = apperr.AlreadyExists("task")
+	ErrInvalidInput = apperr.Validation("invalid input")
 )
 
 // Task 任务定义

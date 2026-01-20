@@ -1,9 +1,8 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/container"
 )
 
@@ -34,7 +33,7 @@ func (h *ImageHandler) List(c *gin.Context) {
 
 	images, err := h.containerMgr.ListImages(c.Request.Context())
 	if err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to list images"))
 		return
 	}
 
@@ -62,12 +61,12 @@ type PullRequest struct {
 func (h *ImageHandler) Pull(c *gin.Context) {
 	var req PullRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, http.StatusBadRequest, err.Error())
+		HandleError(c, apperr.Validation(err.Error()))
 		return
 	}
 
 	if err := h.containerMgr.PullImage(c.Request.Context(), req.Image); err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to pull image"))
 		return
 	}
 
@@ -80,7 +79,7 @@ func (h *ImageHandler) Remove(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.containerMgr.RemoveImage(c.Request.Context(), id); err != nil {
-		Error(c, http.StatusInternalServerError, err.Error())
+		HandleError(c, apperr.Wrap(err, "failed to remove image"))
 		return
 	}
 

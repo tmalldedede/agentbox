@@ -47,9 +47,15 @@ definitions:
       base_url:
         description: Custom API endpoint (proxy/compatible API)
         type: string
+      bearer_token:
+        description: experimental_bearer_token for Codex
+        type: string
       disable_traffic:
         description: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
         type: boolean
+      env_key:
+        description: Environment variable name for API key (e.g., "ZHIPU_API_KEY")
+        type: string
       haiku_model:
         description: Model tier configuration (Claude Code)
         type: string
@@ -63,7 +69,7 @@ definitions:
         description: ANTHROPIC_DEFAULT_OPUS_MODEL
         type: string
       provider:
-        description: e.g., "anthropic", "openai"
+        description: e.g., "anthropic", "openai", "glm"
         type: string
       reasoning_effort:
         description: low/medium/high (Codex)
@@ -75,7 +81,7 @@ definitions:
         description: Advanced configuration
         type: integer
       wire_api:
-        description: Codex specific
+        description: Codex specific - third-party provider support
         type: string
     type: object
   github_com_tmalldedede_agentbox_internal_profile.PermissionConfig:
@@ -134,6 +140,9 @@ definitions:
         description: Metadata
         type: string
       created_by:
+        type: string
+      credential_id:
+        description: Credential ID for API authentication
         type: string
       custom_agents:
         description: Custom agents (Claude Code specific)
@@ -316,6 +325,15 @@ definitions:
     - agent
     - workspace
     type: object
+  github_com_tmalldedede_agentbox_internal_session.ExecEvent:
+    properties:
+      raw:
+        items:
+          type: integer
+        type: array
+      type:
+        type: string
+    type: object
   github_com_tmalldedede_agentbox_internal_session.ExecRequest:
     properties:
       allowed_tools:
@@ -328,6 +346,9 @@ definitions:
         items:
           type: string
         type: array
+      include_events:
+        description: 是否返回完整事件列表
+        type: boolean
       max_turns:
         description: 最大对话轮数 (1-100, 默认 10)
         type: integer
@@ -343,12 +364,25 @@ definitions:
     properties:
       error:
         type: string
+      events:
+        description: 完整事件列表 (当 include_events=true)
+        items:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecEvent'
+        type: array
       execution_id:
         type: string
       exit_code:
         type: integer
-      output:
+      message:
+        description: Agent 最终回复 (新增)
         type: string
+      output:
+        description: 原始输出 (兼容旧版)
+        type: string
+      usage:
+        allOf:
+        - $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.TokenUsage'
+        description: Token 使用统计
     type: object
   github_com_tmalldedede_agentbox_internal_session.Execution:
     properties:
@@ -420,6 +454,15 @@ definitions:
     - StatusRunning
     - StatusStopped
     - StatusError
+  github_com_tmalldedede_agentbox_internal_session.TokenUsage:
+    properties:
+      cached_input_tokens:
+        type: integer
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+    type: object
   github_com_tmalldedede_agentbox_internal_task.Input:
     properties:
       branch:
@@ -644,6 +687,8 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      credential_id:
+        type: string
       debug:
         $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.DebugConfig'
       description:
@@ -658,6 +703,8 @@ definitions:
         type: string
       id:
         type: string
+      is_public:
+        type: boolean
       mcp_servers:
         items:
           $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_profile.MCPServerConfig'
@@ -739,6 +786,9 @@ definitions:
         type: string
       prompt:
         type: string
+      session_id:
+        description: 可选：使用已存在的 Session
+        type: string
       timeout:
         type: integer
       webhook_url:
@@ -767,6 +817,9 @@ definitions:
         type: integer
       data: {}
       message:
+        type: string
+      type:
+        description: 错误类型
         type: string
     type: object
   internal_api.UpdateProviderRequest:
@@ -799,11 +852,31 @@ definitions:
     - 1000000000
     - 60000000000
     - 3600000000000
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
     format: int64
     type: integer
     x-enum-varnames:
     - minDuration
     - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
     - Nanosecond
     - Microsecond
     - Millisecond
@@ -1414,6 +1487,41 @@ paths:
       summary: Execute prompt in session
       tags:
       - Sessions
+  /sessions/{id}/exec/stream:
+    post:
+      consumes:
+      - application/json
+      description: Send a prompt to the agent and receive real-time events via SSE
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Prompt to execute
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tmalldedede_agentbox_internal_session.ExecRequest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Execute prompt in session with SSE streaming (Codex only)
+      tags:
+      - Sessions
   /sessions/{id}/executions:
     get:
       description: Get the execution history for a session
@@ -1506,6 +1614,29 @@ paths:
           schema:
             $ref: '#/definitions/internal_api.Response'
       summary: Get session logs
+      tags:
+      - Sessions
+  /sessions/{id}/logs/stream:
+    get:
+      description: Get real-time container logs via Server-Sent Events
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.Response'
+      summary: Stream session logs (SSE)
       tags:
       - Sessions
   /sessions/{id}/reconnect:
