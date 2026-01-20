@@ -10,10 +10,15 @@ import ProfileDetail from './components/ProfileDetail'
 import TaskList from './components/TaskList'
 import WebhookList from './components/WebhookList'
 import MCPServerList from './components/MCPServerList'
+import MCPServerDetail from './components/MCPServerDetail'
+import MCPServerForm from './components/MCPServerForm'
 import SkillList from './components/SkillList'
+import SkillDetail from './components/SkillDetail'
+import SkillForm from './components/SkillForm'
 import CredentialList from './components/CredentialList'
 import ImageList from './components/ImageList'
 import SystemMaintenance from './components/SystemMaintenance'
+import Documentation from './components/Documentation'
 
 function App() {
   return (
@@ -31,11 +36,16 @@ function App() {
             <Route path="/webhooks" element={<WebhookList />} />
             {/* Admin */}
             <Route path="/mcp-servers" element={<MCPServerList />} />
+            <Route path="/mcp-servers/new" element={<MCPServerForm />} />
+            <Route path="/mcp-servers/:serverId" element={<MCPServerDetail />} />
             <Route path="/skills" element={<SkillList />} />
+            <Route path="/skills/new" element={<SkillForm />} />
+            <Route path="/skills/:skillId" element={<SkillDetail />} />
             <Route path="/credentials" element={<CredentialList />} />
             <Route path="/images" element={<ImageList />} />
             <Route path="/system" element={<SystemMaintenance />} />
-            {/* Settings */}
+            {/* Documentation & Settings */}
+            <Route path="/documentation" element={<Documentation />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

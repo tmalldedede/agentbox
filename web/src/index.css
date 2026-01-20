@@ -429,6 +429,9 @@
     @apply h-14 px-6 flex items-center justify-between border-b;
     border-color: var(--border-color);
     background-color: var(--bg-card);
+    position: sticky;
+    top: 0;
+    z-index: 40;
   }
 
   .light .app-header {

@@ -8,6 +8,7 @@ import {
   Box,
   Activity,
   Settings,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   ListTodo,
@@ -82,6 +83,7 @@ export default function Sidebar() {
   ]
 
   const bottomItems: NavItem[] = [
+    { path: '/documentation', icon: <BookOpen className="w-5 h-5" />, label: 'Documentation' },
     { path: '/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' },
   ]
 
