@@ -51,13 +51,32 @@ export interface CreateSessionRequest {
 
 export interface ExecRequest {
   prompt: string
+  max_turns?: number
+  timeout?: number
+  allowed_tools?: string[]
+  disallowed_tools?: string[]
+  include_events?: boolean // 是否返回完整事件列表
 }
 
 export interface ExecResponse {
   execution_id: string
-  output: string
+  message: string // Agent 最终回复
+  output: string // 原始输出 (兼容旧版)
+  events?: ExecEvent[] // 完整事件列表 (当 include_events=true)
+  usage?: TokenUsage // Token 使用统计
   exit_code: number
   error?: string
+}
+
+export interface TokenUsage {
+  input_tokens: number
+  cached_input_tokens?: number
+  output_tokens: number
+}
+
+export interface ExecEvent {
+  type: string
+  raw?: unknown
 }
 
 // Profile Types

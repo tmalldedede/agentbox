@@ -1,10 +1,18 @@
-node_modules
-dist
-build
-coverage
-.vite
-*.min.js
-*.min.css
-pnpm-lock.yaml
-package-lock.json
-yarn.lock
+# Ignore everything
+/*
+
+# Except these files & folders
+!/src
+!index.html
+!package.json
+!tailwind.config.js
+!tsconfig.json
+!tsconfig.node.json
+!vite.config.ts
+!.prettierrc
+!README.md
+!eslint.config.js
+!postcss.config.js
+
+# Ignore auto generated routeTree.gen.ts
+/src/routeTree.gen.ts
