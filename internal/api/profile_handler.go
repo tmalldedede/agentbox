@@ -90,6 +90,7 @@ type CreateProfileRequest struct {
 	Description           string                    `json:"description"`
 	Icon                  string                    `json:"icon"`
 	Tags                  []string                  `json:"tags"`
+	IsPublic              bool                      `json:"is_public"`
 	Adapter               string                    `json:"adapter" binding:"required"`
 	Extends               string                    `json:"extends"`
 	CredentialID          string                    `json:"credential_id"`
@@ -131,6 +132,7 @@ func (h *ProfileHandler) Create(c *gin.Context) {
 		Description:           req.Description,
 		Icon:                  req.Icon,
 		Tags:                  req.Tags,
+		IsPublic:              req.IsPublic,
 		Adapter:               req.Adapter,
 		Extends:               req.Extends,
 		CredentialID:          req.CredentialID,
@@ -184,6 +186,7 @@ func (h *ProfileHandler) Update(c *gin.Context) {
 		Description:           req.Description,
 		Icon:                  req.Icon,
 		Tags:                  req.Tags,
+		IsPublic:              req.IsPublic,
 		Adapter:               req.Adapter,
 		Extends:               req.Extends,
 		CredentialID:          req.CredentialID,

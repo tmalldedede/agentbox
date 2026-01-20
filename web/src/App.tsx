@@ -14,6 +14,7 @@ import SkillList from './components/SkillList'
 import CredentialList from './components/CredentialList'
 import ImageList from './components/ImageList'
 import SystemMaintenance from './components/SystemMaintenance'
+import ApiPlayground from './components/ApiPlayground'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route element={<Layout />}>
             {/* Workspace */}
             <Route path="/quick-start" element={<QuickStart />} />
+            <Route path="/playground" element={<ApiPlayground />} />
             <Route path="/" element={<Dashboard />} />
             <Route path="/sessions/:sessionId" element={<SessionDetail />} />
             <Route path="/profiles" element={<ProfileList />} />

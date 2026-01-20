@@ -14,6 +14,7 @@ import {
   Webhook,
   Wrench,
   Rocket,
+  Play,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { api } from '../services/api'
@@ -63,6 +64,7 @@ export default function Sidebar() {
       title: 'Workspace',
       items: [
         { path: '/quick-start', icon: <Rocket className="w-5 h-5" />, label: 'Quick Start' },
+        { path: '/playground', icon: <Play className="w-5 h-5" />, label: 'API Playground' },
         { path: '/', icon: <Terminal className="w-5 h-5" />, label: 'Sessions', badge: sessionCount },
         { path: '/profiles', icon: <Layers className="w-5 h-5" />, label: 'Profiles' },
         { path: '/tasks', icon: <ListTodo className="w-5 h-5" />, label: 'Tasks', badge: taskCount },
