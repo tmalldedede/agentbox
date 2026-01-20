@@ -27,8 +27,9 @@ RUN useradd -m -s /bin/bash agent
 # Install Claude Code CLI (if available) - global, accessible to all users
 RUN npm install -g @anthropic-ai/claude-code 2>/dev/null || echo "Claude Code CLI not available"
 
-# Install Codex CLI (if available) - global, accessible to all users
-RUN npm install -g @openai/codex 2>/dev/null || echo "Codex CLI not available"
+# Install Codex CLI (pinned to 0.77.0 for compatibility with third-party APIs)
+# Note: 0.87.0+ uses new message format that some API gateways don't support
+RUN npm install -g @openai/codex@0.77.0 2>/dev/null || echo "Codex CLI not available"
 
 # Install OpenCode CLI (package name is opencode-ai on npm)
 # Note: Alpine uses musl libc, so we need to link the musl version

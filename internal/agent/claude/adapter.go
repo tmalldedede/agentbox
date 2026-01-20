@@ -120,6 +120,12 @@ func (a *Adapter) applyModelEnvVars(env map[string]string, model *profile.ModelC
 		env["ANTHROPIC_BASE_URL"] = model.BaseURL
 	}
 
+	// ANTHROPIC_AUTH_TOKEN - 第三方提供商的认证 Token（如智谱 GLM）
+	// 优先使用 BearerToken，它在 Claude Code 中对应 ANTHROPIC_AUTH_TOKEN
+	if model.BearerToken != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = model.BearerToken
+	}
+
 	// ANTHROPIC_MODEL - 默认模型
 	if model.Name != "" {
 		env["ANTHROPIC_MODEL"] = model.Name
@@ -316,8 +322,10 @@ func removeArg(args []string, argName string) []string {
 }
 
 // RequiredEnvVars 返回必需的环境变量
+// 注意：可以使用 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN
+// 第三方提供商（如智谱 GLM）通常使用 ANTHROPIC_AUTH_TOKEN
 func (a *Adapter) RequiredEnvVars() []string {
-	return []string{"ANTHROPIC_API_KEY"}
+	return []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}
 }
 
 // ValidateProfile 验证 Profile 是否与此适配器兼容
@@ -371,6 +379,10 @@ func (a *Adapter) SupportedFeatures() []string {
 		"custom_agents",
 		"output_format",
 		"verbose",
+		// 第三方提供商支持
+		"custom_provider",
+		"base_url",
+		"auth_token",
 	}
 }
 

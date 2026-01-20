@@ -69,7 +69,7 @@ type Profile struct {
 type ModelConfig struct {
 	// Basic configuration
 	Name            string `json:"name"`                       // e.g., "sonnet", "opus", "o3"
-	Provider        string `json:"provider,omitempty"`         // e.g., "anthropic", "openai"
+	Provider        string `json:"provider,omitempty"`         // e.g., "anthropic", "openai", "glm"
 	BaseURL         string `json:"base_url,omitempty"`         // Custom API endpoint (proxy/compatible API)
 	ReasoningEffort string `json:"reasoning_effort,omitempty"` // low/medium/high (Codex)
 
@@ -83,8 +83,10 @@ type ModelConfig struct {
 	MaxOutputTokens int  `json:"max_output_tokens,omitempty"` // CLAUDE_CODE_MAX_OUTPUT_TOKENS
 	DisableTraffic  bool `json:"disable_traffic,omitempty"`   // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
 
-	// Codex specific
-	WireAPI string `json:"wire_api,omitempty"` // chat/responses (Codex config.toml)
+	// Codex specific - third-party provider support
+	WireAPI     string `json:"wire_api,omitempty"`     // chat/responses (Codex config.toml)
+	EnvKey      string `json:"env_key,omitempty"`      // Environment variable name for API key (e.g., "ZHIPU_API_KEY")
+	BearerToken string `json:"bearer_token,omitempty"` // experimental_bearer_token for Codex
 }
 
 // MCPServerConfig defines an MCP server
@@ -263,6 +265,12 @@ func (p *Profile) Merge(parent *Profile) {
 	}
 	if p.Model.WireAPI == "" {
 		p.Model.WireAPI = parent.Model.WireAPI
+	}
+	if p.Model.EnvKey == "" {
+		p.Model.EnvKey = parent.Model.EnvKey
+	}
+	if p.Model.BearerToken == "" {
+		p.Model.BearerToken = parent.Model.BearerToken
 	}
 	if p.SystemPrompt == "" {
 		p.SystemPrompt = parent.SystemPrompt
