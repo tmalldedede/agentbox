@@ -1,32 +1,57 @@
 # AgentBox Universal Agent Image
-# Contains both Claude Code and Codex CLI
+# Contains Claude Code, Codex, and OpenCode CLI
 
-FROM node:20-slim
+FROM node:18-alpine
+
+# 代理配置
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY}
+ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY}
 
 LABEL maintainer="AgentBox"
 LABEL org.opencontainers.image.title="AgentBox Agent"
-LABEL org.opencontainers.image.description="Universal agent image with Claude Code and Codex"
+LABEL org.opencontainers.image.description="Universal agent image with Claude Code, Codex, and OpenCode"
 
-# Install system dependencies (minimal)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies
+RUN apk add --no-cache \
     git \
     curl \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    bash \
+    shadow
 
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code || echo "Claude Code not available yet"
-
-# Install Codex CLI
-RUN npm install -g @openai/codex || echo "Codex not available yet"
-
-# Create non-root user
+# Create non-root user (compatible with Codex which expects /home/agent/)
 RUN useradd -m -s /bin/bash agent
+
+# Install Claude Code CLI (if available) - global, accessible to all users
+RUN npm install -g @anthropic-ai/claude-code 2>/dev/null || echo "Claude Code CLI not available"
+
+# Install Codex CLI (pinned to 0.77.0 for compatibility with third-party APIs)
+# Note: 0.87.0+ uses new message format that some API gateways don't support
+RUN npm install -g @openai/codex@0.77.0 2>/dev/null || echo "Codex CLI not available"
+
+# Install OpenCode CLI (package name is opencode-ai on npm)
+# Note: Alpine uses musl libc, so we need to link the musl version
+RUN npm install -g opencode-ai 2>/dev/null && \
+    cd /usr/local/lib/node_modules/opencode-ai/node_modules && \
+    rm -rf opencode-linux-x64 && \
+    ln -sf opencode-linux-x64-musl opencode-linux-x64 || \
+    echo "OpenCode CLI not available via npm"
+
+# Install Bun for agent user (required for OpenCode)
+USER agent
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/home/agent/.bun/bin:${PATH}"
 
 # Set working directory
 WORKDIR /workspace
 
-# Switch to non-root user
+# Switch back to root for container startup, then drop to agent
+USER root
+RUN chown -R agent:agent /workspace
+
+# Run as agent user
 USER agent
 
 # Default command (keep container running)

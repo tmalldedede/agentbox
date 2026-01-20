@@ -146,17 +146,41 @@ func (a *Adapter) GenerateConfigTOML(p *profile.Profile) string {
 		// wire_api - API 协议类型 (chat/responses)
 		wireAPI := p.Model.WireAPI
 		if wireAPI == "" {
-			wireAPI = "responses" // Codex 默认使用 responses API
+			// 第三方提供商（非 OpenAI）默认使用 chat API
+			if strings.ToLower(p.Model.Provider) != "openai" {
+				wireAPI = "chat"
+			} else {
+				wireAPI = "responses"
+			}
 		}
 		sb.WriteString(fmt.Sprintf("wire_api = \"%s\"\n", wireAPI))
 
-		// requires_openai_auth - 是否需要 OpenAI 认证
-		sb.WriteString("requires_openai_auth = true\n")
+		// 认证配置 - 支持三种方式:
+		// 1. env_key: 使用指定的环境变量名获取 API Key
+		// 2. bearer_token: 直接使用 token（experimental_bearer_token）
+		// 3. requires_openai_auth: 使用 OPENAI_API_KEY（默认）
+		if p.Model.EnvKey != "" {
+			sb.WriteString(fmt.Sprintf("env_key = \"%s\"\n", p.Model.EnvKey))
+			sb.WriteString("requires_openai_auth = false\n")
+		} else if p.Model.BearerToken != "" {
+			sb.WriteString(fmt.Sprintf("experimental_bearer_token = \"%s\"\n", p.Model.BearerToken))
+			sb.WriteString("requires_openai_auth = false\n")
+		} else {
+			sb.WriteString("requires_openai_auth = true\n")
+		}
 
 		// 重试配置
 		sb.WriteString("request_max_retries = 4\n")
 		sb.WriteString("stream_max_retries = 10\n")
 		sb.WriteString("stream_idle_timeout_ms = 300000\n")
+
+		sb.WriteString("\n")
+
+		// ===== Profile 配置 =====
+		// 生成 [profiles.xxx] 配置块，方便使用 codex -p xxx 切换
+		sb.WriteString(fmt.Sprintf("[profiles.%s]\n", providerName))
+		sb.WriteString(fmt.Sprintf("model = \"%s\"\n", p.Model.Name))
+		sb.WriteString(fmt.Sprintf("model_provider = \"%s\"\n", providerName))
 	}
 
 	return sb.String()
@@ -357,6 +381,10 @@ func (a *Adapter) SupportedFeatures() []string {
 		"timeout",
 		"config_overrides",
 		"output_schema",
+		"custom_provider",
+		"env_key",
+		"bearer_token",
+		"wire_api",
 	}
 }
 
