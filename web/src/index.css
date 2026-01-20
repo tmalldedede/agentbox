@@ -23,6 +23,7 @@
   --skeleton-from: #1e1e2a;
   --skeleton-via: #2a2a3a;
   --terminal-bg: #0d0d12;
+  --sidebar-width: 220px;
 }
 
 /* Light theme */
@@ -66,6 +67,7 @@
            focus:outline-none focus:ring-2 focus:ring-offset-2
            disabled:opacity-50 disabled:cursor-not-allowed
            active:scale-[0.98];
+    white-space: nowrap;
   }
 
   .dark .btn {
@@ -468,6 +470,11 @@
     @apply h-screen flex flex-col border-r transition-all duration-300;
     background-color: var(--bg-card);
     border-color: var(--border-color);
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 30;
   }
 
   .sidebar-header {
@@ -539,11 +546,13 @@
 
   /* App Layout */
   .app-layout {
-    @apply flex min-h-screen;
+    @apply min-h-screen;
   }
 
   .app-main {
     @apply flex-1 flex flex-col overflow-hidden;
+    margin-left: var(--sidebar-width);
+    transition: margin-left 300ms;
   }
 }
 

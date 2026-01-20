@@ -25,6 +25,7 @@ import {
   useSkills,
   useCredentials,
 } from '../../hooks'
+import { useLanguage } from '../../contexts/LanguageContext'
 import { Section } from './Section'
 import { BasicInfoSection } from './BasicInfoSection'
 import { AdvancedModelSection } from './AdvancedModelSection'
@@ -36,6 +37,7 @@ import { CredentialSelector } from './CredentialSelector'
 
 export default function ProfileDetail() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const { profileId } = useParams<{ profileId: string }>()
   const isNewProfile = profileId === 'new'
 
@@ -332,14 +334,14 @@ export default function ProfileDetail() {
           )}
 
           {/* System Prompt */}
-          <Section title="System Prompt" icon={<FileText className="w-5 h-5" />} defaultOpen={false}>
+          <Section title={t('systemPrompt')} icon={<FileText className="w-5 h-5" />} defaultOpen={false}>
             <div className="mt-4">
               <textarea
                 value={systemPrompt}
                 onChange={e => setSystemPrompt(e.target.value)}
                 className="input w-full font-mono text-sm"
                 rows={10}
-                placeholder="Enter system prompt for the agent..."
+                placeholder={t('systemPromptPlaceholder')}
                 disabled={!canEdit}
               />
             </div>
@@ -349,10 +351,9 @@ export default function ProfileDetail() {
           <PermissionsSection profile={currentProfile} />
 
           {/* MCP Servers */}
-          <Section title="MCP Servers" icon={<Server className="w-5 h-5" />}>
+          <Section title={t('mcpServers')} icon={<Server className="w-5 h-5" />}>
             <p className="text-sm text-muted mt-3">
-              Select MCP servers to enable for this profile. These servers will be started
-              automatically when a session using this profile is created.
+              {t('mcpServersDescription')}
             </p>
             <MCPServerSelector
               selectedIds={selectedMCPIds}
@@ -363,10 +364,9 @@ export default function ProfileDetail() {
           </Section>
 
           {/* Skills */}
-          <Section title="Skills" icon={<Zap className="w-5 h-5" />} defaultOpen={false}>
+          <Section title={t('skills')} icon={<Zap className="w-5 h-5" />} defaultOpen={false}>
             <p className="text-sm text-muted mt-3">
-              Select skills available for this profile. Skills provide reusable task templates that
-              can be invoked with commands like <code>/commit</code>.
+              {t('skillsDescription')}
             </p>
             <SkillSelector
               selectedIds={selectedSkillIds}
@@ -377,10 +377,9 @@ export default function ProfileDetail() {
           </Section>
 
           {/* Credentials */}
-          <Section title="Credentials" icon={<Key className="w-5 h-5" />} defaultOpen={false}>
+          <Section title={t('credentials')} icon={<Key className="w-5 h-5" />} defaultOpen={false}>
             <p className="text-sm text-muted mt-3">
-              Select credentials to inject into sessions using this profile. Credentials are
-              securely stored and will be available as environment variables.
+              {t('credentialsDescription')}
             </p>
             <CredentialSelector
               selectedIds={selectedCredentialIds}

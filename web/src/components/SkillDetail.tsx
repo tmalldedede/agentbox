@@ -21,6 +21,7 @@ import {
 import type { Skill, SkillCategory, SkillFile } from '../types'
 import { useSkills, useUpdateSkill, useDeleteSkill } from '../hooks'
 import { toast } from 'sonner'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const categoryIcons: Record<SkillCategory, React.ReactNode> = {
   coding: <Code className="w-4 h-4" />,
@@ -35,6 +36,7 @@ const categories: SkillCategory[] = ['coding', 'review', 'docs', 'security', 'te
 
 export default function SkillDetail() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const { skillId } = useParams<{ skillId: string }>()
   const { data: skills = [], isLoading } = useSkills()
   const updateSkill = useUpdateSkill()
@@ -231,25 +233,25 @@ export default function SkillDetail() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Name *</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('name')} *</label>
               <input
                 type="text"
                 value={formData.name || ''}
                 onChange={e => updateField('name', e.target.value)}
                 disabled={isReadOnly}
                 className="input"
-                placeholder="My Custom Skill"
+                placeholder={t('enterName')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Description</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('description')}</label>
               <textarea
                 value={formData.description || ''}
                 onChange={e => updateField('description', e.target.value)}
                 disabled={isReadOnly}
                 className="input min-h-[80px]"
-                placeholder="A brief description of what this skill does"
+                placeholder={t('enterDescription')}
               />
             </div>
 
@@ -298,7 +300,7 @@ export default function SkillDetail() {
             onChange={e => updateField('prompt', e.target.value)}
             disabled={isReadOnly}
             className="input font-mono text-sm min-h-[300px]"
-            placeholder="You are a helpful assistant that..."
+            placeholder={t('enterPrompt')}
           />
         </div>
 
@@ -329,7 +331,7 @@ export default function SkillDetail() {
                   onChange={e => setNewTag(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addTag()}
                   className="input flex-1"
-                  placeholder="Add a tag..."
+                  placeholder={t('addTag')}
                 />
                 <button onClick={addTag} className="btn btn-secondary">
                   <Plus className="w-4 h-4" />
@@ -439,7 +441,7 @@ export default function SkillDetail() {
                     value={newFile.content}
                     onChange={e => setNewFile(prev => ({ ...prev, content: e.target.value }))}
                     className="input font-mono text-sm min-h-[150px]"
-                    placeholder="File content..."
+                    placeholder={t('fileContent')}
                   />
                 </div>
                 <div className="flex gap-2">

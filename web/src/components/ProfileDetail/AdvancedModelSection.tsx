@@ -1,4 +1,5 @@
 import { Cpu } from 'lucide-react'
+import { useLanguage } from '../../contexts/LanguageContext'
 import { Section } from './Section'
 
 interface AdvancedModelSectionProps {
@@ -32,9 +33,11 @@ export function AdvancedModelSection({
   setDisableTraffic,
   disabled,
 }: AdvancedModelSectionProps) {
+  const { t } = useLanguage()
+
   return (
     <Section
-      title="Advanced Model Configuration"
+      title={t('advancedConfig')}
       icon={<Cpu className="w-5 h-5" />}
       defaultOpen={false}
     >

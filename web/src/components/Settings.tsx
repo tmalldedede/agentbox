@@ -102,12 +102,12 @@ export default function Settings() {
           {saved ? (
             <>
               <CheckCircle className="w-4 h-4" />
-              Saved
+              {t('saved')}
             </>
           ) : (
             <>
               <Save className="w-4 h-4" />
-              Save
+              {t('save')}
             </>
           )}
         </button>
@@ -119,7 +119,7 @@ export default function Settings() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Server className="w-5 h-5 text-blue-400" />
-              <h3 className="font-semibold">Server Status</h3>
+              <h3 className="font-semibold">{t('serverStatus')}</h3>
             </div>
             <button onClick={checkHealth} className="btn btn-ghost btn-icon">
               <RefreshCw className={`w-4 h-4 ${healthStatus === 'loading' ? 'animate-spin' : ''}`} />
@@ -132,9 +132,9 @@ export default function Settings() {
               'bg-amber-400 animate-pulse'
             }`} />
             <span className="text-secondary">
-              {healthStatus === 'ok' && `Connected (v${version})`}
-              {healthStatus === 'error' && 'Connection failed'}
-              {healthStatus === 'loading' && 'Checking...'}
+              {healthStatus === 'ok' && `${t('connected')} (v${version})`}
+              {healthStatus === 'error' && t('connectionFailed')}
+              {healthStatus === 'loading' && t('checking')}
             </span>
           </div>
         </div>
@@ -155,8 +155,8 @@ export default function Settings() {
               }`}
               style={{ borderColor: language !== 'en' ? 'var(--border-color)' : undefined }}
             >
-              <p className="font-medium">English</p>
-              <p className="text-sm text-muted">Default language</p>
+              <p className="font-medium">{t('english')}</p>
+              <p className="text-sm text-muted">{t('defaultLanguage')}</p>
             </button>
             <button
               onClick={() => setLanguage('zh')}
@@ -167,8 +167,8 @@ export default function Settings() {
               }`}
               style={{ borderColor: language !== 'zh' ? 'var(--border-color)' : undefined }}
             >
-              <p className="font-medium">中文</p>
-              <p className="text-sm text-muted">Chinese</p>
+              <p className="font-medium">{t('chinese')}</p>
+              <p className="text-sm text-muted">{t('chineseLanguage')}</p>
             </button>
           </div>
         </div>
@@ -191,9 +191,9 @@ export default function Settings() {
             >
               <div className="flex items-center gap-2 mb-1">
                 <Moon className="w-4 h-4" />
-                <p className="font-medium">Dark</p>
+                <p className="font-medium">{t('dark')}</p>
               </div>
-              <p className="text-sm text-muted">深色主题</p>
+              <p className="text-sm text-muted">{t('darkTheme')}</p>
             </button>
             <button
               onClick={() => setTheme('light')}
@@ -206,9 +206,9 @@ export default function Settings() {
             >
               <div className="flex items-center gap-2 mb-1">
                 <Sun className="w-4 h-4" />
-                <p className="font-medium">Light</p>
+                <p className="font-medium">{t('light')}</p>
               </div>
-              <p className="text-sm text-muted">浅色主题</p>
+              <p className="text-sm text-muted">{t('lightTheme')}</p>
             </button>
           </div>
         </div>
@@ -217,16 +217,16 @@ export default function Settings() {
         <div className="card p-6">
           <div className="flex items-center gap-3 mb-4">
             <Key className="w-5 h-5 text-amber-400" />
-            <h3 className="font-semibold">API Keys</h3>
+            <h3 className="font-semibold">{t('apiKeys')}</h3>
           </div>
           <p className="text-sm text-muted mb-4">
-            Configure default API keys for agents. These will be used when creating new sessions.
+            {t('apiKeysDesc')}
           </p>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-secondary mb-2">
-                ANTHROPIC_API_KEY
+                {t('anthropicApiKey')}
               </label>
               <input
                 type="password"
@@ -235,12 +235,12 @@ export default function Settings() {
                 placeholder="sk-ant-..."
                 className="input"
               />
-              <p className="text-xs text-muted mt-1">Used for Claude Code agent</p>
+              <p className="text-xs text-muted mt-1">{t('anthropicApiKeyDesc')}</p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-secondary mb-2">
-                OPENAI_API_KEY
+                {t('openaiApiKey')}
               </label>
               <input
                 type="password"
@@ -249,7 +249,7 @@ export default function Settings() {
                 placeholder="sk-..."
                 className="input"
               />
-              <p className="text-xs text-muted mt-1">Used for Codex agent</p>
+              <p className="text-xs text-muted mt-1">{t('openaiApiKeyDesc')}</p>
             </div>
           </div>
         </div>
@@ -258,7 +258,7 @@ export default function Settings() {
         <div className="card p-6">
           <div className="flex items-center gap-3 mb-4">
             <Server className="w-5 h-5 text-cyan-400" />
-            <h3 className="font-semibold">Default Workspace</h3>
+            <h3 className="font-semibold">{t('defaultWorkspace')}</h3>
           </div>
           <input
             type="text"
@@ -268,16 +268,16 @@ export default function Settings() {
             className="input"
           />
           <p className="text-xs text-muted mt-1">
-            Default path to mount in container when creating new sessions
+            {t('defaultWorkspaceDesc')}
           </p>
         </div>
 
         {/* About */}
         <div className="card p-6">
-          <h3 className="font-semibold mb-4">About</h3>
+          <h3 className="font-semibold mb-4">{t('about')}</h3>
           <div className="space-y-2 text-sm text-secondary">
-            <p><strong className="text-primary">AgentBox</strong> - AI Agent Container Platform</p>
-            <p>Open-source solution for running AI agents in isolated containers.</p>
+            <p><strong className="text-primary">AgentBox</strong> - {t('agentBoxTagline')}</p>
+            <p>{t('agentBoxDescription')}</p>
             <p className="pt-2">
               <a
                 href="https://github.com/tmalldedede/agentbox"
@@ -285,7 +285,7 @@ export default function Settings() {
                 rel="noopener noreferrer"
                 className="text-emerald-400 hover:underline"
               >
-                GitHub Repository
+                {t('githubRepository')}
               </a>
             </p>
           </div>

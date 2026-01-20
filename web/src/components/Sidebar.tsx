@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { api } from '../services/api'
+import { useLanguage } from '../contexts/LanguageContext'
 
 interface NavItem {
   path: string
@@ -34,6 +35,7 @@ interface NavSection {
 export default function Sidebar() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [collapsed, setCollapsed] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
   const [taskCount, setTaskCount] = useState(0)
@@ -59,32 +61,40 @@ export default function Sidebar() {
     return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    // Update CSS variable for sidebar width
+    document.documentElement.style.setProperty(
+      '--sidebar-width',
+      collapsed ? '64px' : '220px'
+    )
+  }, [collapsed])
+
   const sections: NavSection[] = [
     {
       title: 'Workspace',
       items: [
-        { path: '/quick-start', icon: <Rocket className="w-5 h-5" />, label: 'Quick Start' },
-        { path: '/', icon: <Terminal className="w-5 h-5" />, label: 'Sessions', badge: sessionCount },
-        { path: '/profiles', icon: <Layers className="w-5 h-5" />, label: 'Profiles' },
-        { path: '/tasks', icon: <ListTodo className="w-5 h-5" />, label: 'Tasks', badge: taskCount },
-        { path: '/webhooks', icon: <Webhook className="w-5 h-5" />, label: 'Webhooks' },
+        { path: '/quick-start', icon: <Rocket className="w-5 h-5" />, label: t('quickStart') },
+        { path: '/', icon: <Terminal className="w-5 h-5" />, label: t('sessions'), badge: sessionCount },
+        { path: '/profiles', icon: <Layers className="w-5 h-5" />, label: t('profiles') },
+        { path: '/tasks', icon: <ListTodo className="w-5 h-5" />, label: t('tasks'), badge: taskCount },
+        { path: '/webhooks', icon: <Webhook className="w-5 h-5" />, label: t('webhooks') },
       ],
     },
     {
       title: 'Admin',
       items: [
-        { path: '/mcp-servers', icon: <Server className="w-5 h-5" />, label: 'MCP Servers' },
-        { path: '/skills', icon: <Zap className="w-5 h-5" />, label: 'Skills' },
-        { path: '/credentials', icon: <Key className="w-5 h-5" />, label: 'Credentials' },
-        { path: '/images', icon: <Box className="w-5 h-5" />, label: 'Images' },
-        { path: '/system', icon: <Activity className="w-5 h-5" />, label: 'System' },
+        { path: '/mcp-servers', icon: <Server className="w-5 h-5" />, label: t('mcpServers') },
+        { path: '/skills', icon: <Zap className="w-5 h-5" />, label: t('skills') },
+        { path: '/credentials', icon: <Key className="w-5 h-5" />, label: t('credentials') },
+        { path: '/images', icon: <Box className="w-5 h-5" />, label: t('images') },
+        { path: '/system', icon: <Activity className="w-5 h-5" />, label: t('system') },
       ],
     },
   ]
 
   const bottomItems: NavItem[] = [
-    { path: '/documentation', icon: <BookOpen className="w-5 h-5" />, label: 'Documentation' },
-    { path: '/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' },
+    { path: '/documentation', icon: <BookOpen className="w-5 h-5" />, label: t('documentation') },
+    { path: '/settings', icon: <Settings className="w-5 h-5" />, label: t('settings') },
   ]
 
   const isActive = (path: string) => {

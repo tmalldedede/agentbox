@@ -27,6 +27,7 @@ import type { MCPServer, MCPCategory } from '../types'
 import { useMCPServers, useUpdateMCPServer, useDeleteMCPServer } from '../hooks'
 import { api } from '../services/api'
 import { toast } from 'sonner'
+import { useLanguage } from '../contexts/LanguageContext'
 
 // Category icon mapping
 const categoryIcons: Record<MCPCategory, React.ReactNode> = {
@@ -66,6 +67,7 @@ function MCPServerCard({
   onTest: () => Promise<void>
   onClick: () => void
 }) {
+  const { t } = useLanguage()
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
 
@@ -107,12 +109,12 @@ function MCPServerCard({
             {server.is_built_in && (
               <span className="badge badge-scaling text-xs">
                 <Lock className="w-3 h-3" />
-                Built-in
+                {t('builtIn')}
               </span>
             )}
             {!server.is_enabled && (
               <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
-                Disabled
+                {t('disabled')}
               </span>
             )}
           </div>
@@ -202,6 +204,7 @@ function MCPServerCard({
 
 export default function MCPServerList() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
 
   // React Query hooks
@@ -260,7 +263,7 @@ export default function MCPServerList() {
           </button>
           <div className="flex items-center gap-3">
             <Server className="w-6 h-6 text-emerald-400" />
-            <span className="text-lg font-bold">MCP Servers</span>
+            <span className="text-lg font-bold">{t('mcpServersTitle')}</span>
           </div>
         </div>
 
@@ -270,9 +273,9 @@ export default function MCPServerList() {
             onChange={e => setFilter(e.target.value as typeof filter)}
             className="input py-2 px-3 text-sm"
           >
-            <option value="all">All</option>
-            <option value="enabled">Enabled</option>
-            <option value="disabled">Disabled</option>
+            <option value="all">{t('all')}</option>
+            <option value="enabled">{t('enabled')}</option>
+            <option value="disabled">{t('disabled')}</option>
           </select>
 
           <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
@@ -280,7 +283,7 @@ export default function MCPServerList() {
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/mcp-servers/new')}>
             <Plus className="w-4 h-4" />
-            New Server
+            {t('newMCP')}
           </button>
         </div>
       </header>
@@ -290,16 +293,15 @@ export default function MCPServerList() {
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <span className="text-red-400">
-              {error instanceof Error ? error.message : 'Failed to load MCP servers'}
+              {error instanceof Error ? error.message : t('failedToLoadMCPServers')}
             </span>
           </div>
         )}
 
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-primary mb-2">MCP Servers</h1>
+          <h1 className="text-2xl font-bold text-primary mb-2">{t('mcpServersTitle')}</h1>
           <p className="text-secondary">
-            Model Context Protocol (MCP) servers extend Agent capabilities with external tools, data
-            sources, and integrations. Configure and manage your MCP servers here.
+            {t('mcpServersDesc')}
           </p>
         </div>
 
@@ -310,11 +312,11 @@ export default function MCPServerList() {
         ) : filteredServers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Server className="w-16 h-16 text-muted mb-4" />
-            <p className="text-secondary text-lg">No MCP servers found</p>
+            <p className="text-secondary text-lg">{t('noMCPServersFound')}</p>
             <p className="text-muted mt-2">
               {filter !== 'all'
-                ? 'Try changing the filter or create a new server'
-                : 'Create your first MCP server to get started'}
+                ? t('tryChangingFilter')
+                : t('createFirstMCPServer')}
             </p>
           </div>
         ) : (

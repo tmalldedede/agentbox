@@ -1,5 +1,6 @@
 import { Settings } from 'lucide-react'
 import type { Provider } from '../../types'
+import { useLanguage } from '../../contexts/LanguageContext'
 import { Section } from './Section'
 import ProviderSelector from '../ProviderSelector'
 
@@ -44,36 +45,37 @@ export function BasicInfoSection({
   isNewProfile,
   isBuiltIn,
 }: BasicInfoSectionProps) {
+  const { t } = useLanguage()
   const disabled = !isNewProfile && isBuiltIn
 
   return (
-    <Section title="Basic Information" icon={<Settings className="w-5 h-5" />}>
+    <Section title={t('basicInformation')} icon={<Settings className="w-5 h-5" />}>
       <div className="space-y-4 mt-4">
         <div>
-          <label className="block text-sm font-medium text-secondary mb-1">Name *</label>
+          <label className="block text-sm font-medium text-secondary mb-1">{t('name')} *</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             className="input w-full"
-            placeholder="Enter profile name"
+            placeholder={t('profileNamePlaceholder')}
             disabled={disabled}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-secondary mb-1">Description</label>
+          <label className="block text-sm font-medium text-secondary mb-1">{t('description')}</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             className="input w-full"
             rows={3}
-            placeholder="Describe what this profile is for"
+            placeholder={t('profileDescPlaceholder')}
             disabled={disabled}
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-secondary mb-1">Adapter</label>
+            <label className="block text-sm font-medium text-secondary mb-1">{t('adapter')}</label>
             {isNewProfile ? (
               <select
                 value={adapter}
@@ -89,7 +91,7 @@ export function BasicInfoSection({
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-secondary mb-1">Model</label>
+            <label className="block text-sm font-medium text-secondary mb-1">{t('model')}</label>
             <input
               type="text"
               value={modelName}
@@ -102,8 +104,8 @@ export function BasicInfoSection({
         </div>
         <div>
           <label className="block text-sm font-medium text-secondary mb-1">
-            API Base URL
-            <span className="text-muted font-normal ml-2">(Optional)</span>
+            {t('apiBaseUrl')}
+            <span className="text-muted font-normal ml-2">({t('optional')})</span>
           </label>
           <input
             type="text"
@@ -114,7 +116,7 @@ export function BasicInfoSection({
             disabled={disabled}
           />
           <p className="text-xs text-muted mt-1">
-            Leave empty to use the default API endpoint. Use for proxies or compatible APIs.
+            {t('leaveEmptyDefault')}. {t('useForProxies')}.
           </p>
         </div>
 

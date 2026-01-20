@@ -24,6 +24,7 @@ import type { MCPServer, MCPServerType, MCPCategory } from '../types'
 import { useMCPServers, useUpdateMCPServer, useDeleteMCPServer } from '../hooks'
 import { api } from '../services/api'
 import { toast } from 'sonner'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const categoryIcons: Record<MCPCategory, React.ReactNode> = {
   filesystem: <Server className="w-4 h-4" />,
@@ -40,6 +41,7 @@ const serverTypes: MCPServerType[] = ['stdio', 'sse', 'http']
 
 export default function MCPServerDetail() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const { serverId } = useParams<{ serverId: string }>()
   const { data: servers = [], isLoading } = useMCPServers()
   const updateServer = useUpdateMCPServer()
@@ -262,25 +264,25 @@ export default function MCPServerDetail() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Name *</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('name')} *</label>
               <input
                 type="text"
                 value={formData.name || ''}
                 onChange={e => updateField('name', e.target.value)}
                 disabled={isReadOnly}
                 className="input"
-                placeholder="My MCP Server"
+                placeholder={t('enterName')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Description</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('description')}</label>
               <textarea
                 value={formData.description || ''}
                 onChange={e => updateField('description', e.target.value)}
                 disabled={isReadOnly}
                 className="input min-h-[80px]"
-                placeholder="A brief description of what this MCP server does"
+                placeholder={t('enterDescription')}
               />
             </div>
 
@@ -365,7 +367,7 @@ export default function MCPServerDetail() {
                       onChange={e => setNewArg(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && addArg()}
                       className="input flex-1 font-mono text-sm"
-                      placeholder="Add an argument..."
+                      placeholder={t('addArgument')}
                     />
                     <button onClick={addArg} className="btn btn-secondary">
                       <Plus className="w-4 h-4" />
@@ -470,7 +472,7 @@ export default function MCPServerDetail() {
                   onChange={e => setNewTag(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addTag()}
                   className="input flex-1"
-                  placeholder="Add a tag..."
+                  placeholder={t('addTag')}
                 />
                 <button onClick={addTag} className="btn btn-secondary">
                   <Plus className="w-4 h-4" />

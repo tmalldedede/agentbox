@@ -16,7 +16,7 @@ export function AgentsPanel({ agents, isLoading }: AgentsPanelProps) {
       <div className="panel-header">
         <div>
           <div className="panel-title">{t('supportedAgents')}</div>
-          <div className="panel-subtitle">{agents.length} available</div>
+          <div className="panel-subtitle">{agents.length} {t('available')}</div>
         </div>
       </div>
       <div className="panel-content">
@@ -29,7 +29,7 @@ export function AgentsPanel({ agents, isLoading }: AgentsPanelProps) {
         ) : agents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <Cpu className="w-12 h-12 text-muted mb-4" />
-            <p className="text-secondary">No agents available</p>
+            <p className="text-secondary">{t('noAgentsAvailable')}</p>
           </div>
         ) : (
           agents.map(agent => <AgentItem key={agent.name} agent={agent} />)

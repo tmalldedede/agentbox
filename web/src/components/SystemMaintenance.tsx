@@ -21,9 +21,11 @@ import {
 } from 'lucide-react'
 import type { SystemHealth, SystemStats } from '../types'
 import { api } from '../services/api'
+import { useLanguage } from '../contexts/LanguageContext'
 
 export default function SystemMaintenance() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [health, setHealth] = useState<SystemHealth | null>(null)
   const [stats, setStats] = useState<SystemStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -43,7 +45,7 @@ export default function SystemMaintenance() {
       setStats(statsData)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch system data')
+      setError(err instanceof Error ? err.message : t('failedToFetchSystemData'))
     } finally {
       setLoading(false)
     }
@@ -61,13 +63,13 @@ export default function SystemMaintenance() {
       setCleanupResult(null)
       const result = await api.cleanupContainers()
       if (result.removed.length > 0) {
-        setCleanupResult(`Removed ${result.removed.length} orphan container(s)`)
+        setCleanupResult(`${t('removed')} ${result.removed.length} ${t('orphanContainers')}`)
       } else {
-        setCleanupResult('No orphan containers found')
+        setCleanupResult(t('noOrphanContainersFound'))
       }
       fetchData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cleanup containers')
+      setError(err instanceof Error ? err.message : t('failedToCleanupContainers'))
     } finally {
       setCleaningContainers(false)
     }
@@ -80,13 +82,13 @@ export default function SystemMaintenance() {
       const result = await api.cleanupImages({ unused_only: true })
       if (result.removed.length > 0) {
         const spaceMB = (result.space_freed / 1024 / 1024).toFixed(1)
-        setCleanupResult(`Removed ${result.removed.length} image(s), freed ${spaceMB} MB`)
+        setCleanupResult(`${t('removed')} ${result.removed.length} ${t('images')}, ${t('freed')} ${spaceMB} MB`)
       } else {
-        setCleanupResult('No unused images to remove')
+        setCleanupResult(t('noUnusedImagesToRemove'))
       }
       fetchData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cleanup images')
+      setError(err instanceof Error ? err.message : t('failedToCleanupImages'))
     } finally {
       setCleaningImages(false)
     }
@@ -118,9 +120,9 @@ export default function SystemMaintenance() {
           <div className="flex items-center gap-3">
             <Activity className="w-6 h-6 text-emerald-400" />
             <div>
-              <h1 className="text-xl font-semibold text-primary">System Maintenance</h1>
+              <h1 className="text-xl font-semibold text-primary">{t('systemMaintenance')}</h1>
               <p className="text-sm text-muted">
-                Health checks, stats & cleanup
+                {t('healthChecksStatsCleanup')}
               </p>
             </div>
           </div>
@@ -129,7 +131,7 @@ export default function SystemMaintenance() {
         <div className="flex items-center gap-3">
           <button onClick={fetchData} className="btn btn-secondary" disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('refresh')}
           </button>
         </div>
       </header>
@@ -160,7 +162,7 @@ export default function SystemMaintenance() {
           <div className="card p-6">
             <h3 className="text-lg font-medium text-primary mb-4 flex items-center gap-2">
               <Gauge className="w-5 h-5 text-emerald-400" />
-              System Health
+              {t('systemHealth')}
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -182,12 +184,12 @@ export default function SystemMaintenance() {
                   )}
                   <div>
                     <p className="font-medium text-primary capitalize">{health.status}</p>
-                    <p className="text-sm text-muted">Overall Status</p>
+                    <p className="text-sm text-muted">{t('overallStatus')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted">
                   <Clock className="w-4 h-4" />
-                  Uptime: {health.uptime}
+                  {t('uptime')}: {health.uptime}
                 </div>
               </div>
 
@@ -205,16 +207,16 @@ export default function SystemMaintenance() {
                   )}
                   <div>
                     <p className="font-medium text-primary capitalize">Docker {health.docker.status}</p>
-                    <p className="text-sm text-muted">Container Runtime</p>
+                    <p className="text-sm text-muted">{t('containerRuntime')}</p>
                   </div>
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted">Containers</span>
+                    <span className="text-muted">{t('containers')}</span>
                     <span className="text-secondary">{health.docker.containers}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted">Images</span>
+                    <span className="text-muted">{t('images')}</span>
                     <span className="text-secondary">{health.docker.images}</span>
                   </div>
                 </div>
@@ -227,26 +229,26 @@ export default function SystemMaintenance() {
                     <Server className="w-5 h-5 text-purple-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-primary">Resources</p>
-                    <p className="text-sm text-muted">Server Info</p>
+                    <p className="font-medium text-primary">{t('resources')}</p>
+                    <p className="text-sm text-muted">{t('serverInfo')}</p>
                   </div>
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted flex items-center gap-1">
-                      <MemoryStick className="w-3 h-3" /> Memory
+                      <MemoryStick className="w-3 h-3" /> {t('memory')}
                     </span>
                     <span className="text-secondary">{health.resources.memory_usage_mb} MB</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted flex items-center gap-1">
-                      <Cpu className="w-3 h-3" /> CPU Cores
+                      <Cpu className="w-3 h-3" /> {t('cpuCores')}
                     </span>
                     <span className="text-secondary">{health.resources.num_cpu}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted flex items-center gap-1">
-                      <Zap className="w-3 h-3" /> Goroutines
+                      <Zap className="w-3 h-3" /> {t('goroutines')}
                     </span>
                     <span className="text-secondary">{health.resources.num_goroutines}</span>
                   </div>
@@ -256,7 +258,7 @@ export default function SystemMaintenance() {
 
             {/* Health Checks */}
             <div className="mt-6 pt-4 border-t border-default">
-              <p className="text-sm font-medium text-muted mb-3">Health Checks</p>
+              <p className="text-sm font-medium text-muted mb-3">{t('healthChecks')}</p>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(health.checks).map(([name, status]) => (
                   <span
@@ -291,20 +293,20 @@ export default function SystemMaintenance() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-primary">{stats.sessions.total}</p>
-                  <p className="text-sm text-muted">Sessions</p>
+                  <p className="text-sm text-muted">{t('sessions')}</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted">Running</span>
+                  <span className="text-muted">{t('running')}</span>
                   <span className="text-emerald-400">{stats.sessions.running}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Stopped</span>
+                  <span className="text-muted">{t('stopped')}</span>
                   <span className="text-gray-400">{stats.sessions.stopped}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Error</span>
+                  <span className="text-muted">{t('error')}</span>
                   <span className="text-red-400">{stats.sessions.error}</span>
                 </div>
               </div>
@@ -318,20 +320,20 @@ export default function SystemMaintenance() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-primary">{stats.containers.total}</p>
-                  <p className="text-sm text-muted">Containers</p>
+                  <p className="text-sm text-muted">{t('containers')}</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted">Running</span>
+                  <span className="text-muted">{t('running')}</span>
                   <span className="text-emerald-400">{stats.containers.running}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Stopped</span>
+                  <span className="text-muted">{t('stopped')}</span>
                   <span className="text-gray-400">{stats.containers.stopped}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Other</span>
+                  <span className="text-muted">{t('other')}</span>
                   <span className="text-amber-400">{stats.containers.other}</span>
                 </div>
               </div>
@@ -345,20 +347,20 @@ export default function SystemMaintenance() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-primary">{stats.images.total}</p>
-                  <p className="text-sm text-muted">Images</p>
+                  <p className="text-sm text-muted">{t('images')}</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted">Agent Images</span>
+                  <span className="text-muted">{t('agentImages')}</span>
                   <span className="text-purple-400">{stats.images.agent_images}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">In Use</span>
+                  <span className="text-muted">{t('inUse')}</span>
                   <span className="text-emerald-400">{stats.images.in_use}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Total Size</span>
+                  <span className="text-muted">{t('totalSize')}</span>
                   <span className="text-secondary">{formatSize(stats.images.total_size)}</span>
                 </div>
               </div>
@@ -372,20 +374,20 @@ export default function SystemMaintenance() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-primary">{stats.system.num_cpu}</p>
-                  <p className="text-sm text-muted">CPU Cores</p>
+                  <p className="text-sm text-muted">{t('cpuCores')}</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted">Memory</span>
+                  <span className="text-muted">{t('memory')}</span>
                   <span className="text-secondary">{stats.system.memory_usage_mb} MB</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Go Version</span>
+                  <span className="text-muted">{t('goVersion')}</span>
                   <span className="text-secondary">{stats.system.go_version.replace('go', '')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Uptime</span>
+                  <span className="text-muted">{t('uptime')}</span>
                   <span className="text-secondary">{stats.system.uptime}</span>
                 </div>
               </div>
@@ -397,15 +399,15 @@ export default function SystemMaintenance() {
         <div className="card p-6">
           <h3 className="text-lg font-medium text-primary mb-4 flex items-center gap-2">
             <Trash2 className="w-5 h-5 text-red-400" />
-            Cleanup Actions
+            {t('cleanupActions')}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Cleanup Containers */}
             <div className="p-4 rounded-lg bg-card border border-default">
-              <h4 className="font-medium text-primary mb-2">Orphan Containers</h4>
+              <h4 className="font-medium text-primary mb-2">{t('orphanContainersTitle')}</h4>
               <p className="text-sm text-muted mb-4">
-                Remove containers that are managed by AgentBox but no longer have an associated session.
+                {t('orphanContainersDesc')}
               </p>
               <button
                 onClick={handleCleanupContainers}
@@ -415,12 +417,12 @@ export default function SystemMaintenance() {
                 {cleaningContainers ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Cleaning...
+                    {t('cleaning')}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Cleanup Containers
+                    {t('cleanupContainers')}
                   </>
                 )}
               </button>
@@ -428,9 +430,9 @@ export default function SystemMaintenance() {
 
             {/* Cleanup Images */}
             <div className="p-4 rounded-lg bg-card border border-default">
-              <h4 className="font-medium text-primary mb-2">Unused Images</h4>
+              <h4 className="font-medium text-primary mb-2">{t('unusedImagesTitle')}</h4>
               <p className="text-sm text-muted mb-4">
-                Remove images that are not being used by any container (excludes Agent images).
+                {t('unusedImagesDesc')}
               </p>
               <button
                 onClick={handleCleanupImages}
@@ -440,12 +442,12 @@ export default function SystemMaintenance() {
                 {cleaningImages ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Cleaning...
+                    {t('cleaning')}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Cleanup Images
+                    {t('cleanupImages')}
                   </>
                 )}
               </button>

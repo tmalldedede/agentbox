@@ -17,6 +17,7 @@ import {
 import type { MCPServerType, MCPCategory, CreateMCPServerRequest } from '../types'
 import { api } from '../services/api'
 import { toast } from 'sonner'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const categoryIcons: Record<MCPCategory, React.ReactNode> = {
   filesystem: <Server className="w-4 h-4" />,
@@ -33,6 +34,7 @@ const serverTypes: MCPServerType[] = ['stdio', 'sse', 'http']
 
 export default function MCPServerForm() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [saving, setSaving] = useState(false)
 
   const [formData, setFormData] = useState<CreateMCPServerRequest>({
@@ -191,24 +193,24 @@ export default function MCPServerForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Name *</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('name')} *</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={e => updateField('name', e.target.value)}
                 className="input"
-                placeholder="My MCP Server"
+                placeholder={t('enterName')}
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Description</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('description')}</label>
               <textarea
                 value={formData.description || ''}
                 onChange={e => updateField('description', e.target.value)}
                 className="input min-h-[80px]"
-                placeholder="A brief description of what this MCP server does"
+                placeholder={t('enterDescription')}
               />
             </div>
 
@@ -308,7 +310,7 @@ export default function MCPServerForm() {
                       }
                     }}
                     className="input flex-1 font-mono text-sm"
-                    placeholder="Add an argument (e.g., /workspace)"
+                    placeholder={t('addArgument')}
                   />
                   <button type="button" onClick={addArg} className="btn btn-secondary">
                     <Plus className="w-4 h-4" />
@@ -427,7 +429,7 @@ export default function MCPServerForm() {
                   }
                 }}
                 className="input flex-1"
-                placeholder="Add a tag..."
+                placeholder={t('addTag')}
               />
               <button type="button" onClick={addTag} className="btn btn-secondary">
                 <Plus className="w-4 h-4" />
@@ -442,13 +444,13 @@ export default function MCPServerForm() {
           <h3 className="font-semibold text-lg mb-4">Metadata (Optional)</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Author</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('author')}</label>
               <input
                 type="text"
                 value={formData.author || ''}
                 onChange={e => updateField('author', e.target.value)}
                 className="input"
-                placeholder="Your name"
+                placeholder={t('yourName')}
               />
             </div>
             <div>

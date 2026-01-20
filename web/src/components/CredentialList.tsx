@@ -22,6 +22,7 @@ import { useCredentials, useDeleteCredential } from '../hooks'
 import { api } from '../services/api'
 import { toast } from 'sonner'
 import CreateCredentialModal from './CreateCredentialModal'
+import { useLanguage } from '../contexts/LanguageContext'
 
 // Provider icon mapping
 const providerIcons: Record<CredentialProvider, React.ReactNode> = {
@@ -65,6 +66,7 @@ function CredentialCard({
   onVerify: () => void
   isVerifying: boolean
 }) {
+  const { t } = useLanguage()
   const [showValue, setShowValue] = useState(false)
   const colors = providerColors[credential.provider] || providerColors.custom
   const icon = providerIcons[credential.provider] || providerIcons.custom
@@ -84,12 +86,12 @@ function CredentialCard({
             {credential.is_valid ? (
               <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
                 <CheckCircle className="w-3 h-3" />
-                Valid
+                {t('valid')}
               </span>
             ) : (
               <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400">
                 <XCircle className="w-3 h-3" />
-                Invalid
+                {t('invalid')}
               </span>
             )}
           </div>
@@ -178,6 +180,7 @@ function CredentialCard({
 
 export default function CredentialList() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [scopeFilter, setScopeFilter] = useState<CredentialScope | 'all'>('all')
   const [providerFilter, setProviderFilter] = useState<CredentialProvider | 'all'>('all')
   const [showCreate, setShowCreate] = useState(false)
@@ -235,7 +238,7 @@ export default function CredentialList() {
           </button>
           <div className="flex items-center gap-3">
             <Key className="w-6 h-6 text-amber-400" />
-            <span className="text-lg font-bold">Credentials</span>
+            <span className="text-lg font-bold">{t('credentialsTitle')}</span>
           </div>
         </div>
 
@@ -245,10 +248,10 @@ export default function CredentialList() {
             onChange={e => setScopeFilter(e.target.value as typeof scopeFilter)}
             className="input py-2 px-3 text-sm"
           >
-            <option value="all">All Scopes</option>
-            <option value="global">Global</option>
-            <option value="profile">Profile</option>
-            <option value="session">Session</option>
+            <option value="all">{t('allScopes')}</option>
+            <option value="global">{t('global')}</option>
+            <option value="profile">{t('profile')}</option>
+            <option value="session">{t('session')}</option>
           </select>
 
           <select
@@ -256,11 +259,11 @@ export default function CredentialList() {
             onChange={e => setProviderFilter(e.target.value as typeof providerFilter)}
             className="input py-2 px-3 text-sm"
           >
-            <option value="all">All Providers</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="openai">OpenAI</option>
-            <option value="github">GitHub</option>
-            <option value="custom">Custom</option>
+            <option value="all">{t('allProviders')}</option>
+            <option value="anthropic">{t('anthropic')}</option>
+            <option value="openai">{t('openai')}</option>
+            <option value="github">{t('github')}</option>
+            <option value="custom">{t('custom')}</option>
           </select>
 
           <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
@@ -268,7 +271,7 @@ export default function CredentialList() {
           </button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4" />
-            New Credential
+            {t('newCredential')}
           </button>
         </div>
       </header>
@@ -278,26 +281,24 @@ export default function CredentialList() {
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <span className="text-red-400">
-              {error instanceof Error ? error.message : 'Failed to load credentials'}
+              {error instanceof Error ? error.message : t('failedToLoadCredentials')}
             </span>
           </div>
         )}
 
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-primary mb-2">Credentials</h1>
+          <h1 className="text-2xl font-bold text-primary mb-2">{t('credentialsTitle')}</h1>
           <p className="text-secondary">
-            Securely manage API keys and tokens for AI providers and services. Credentials are
-            encrypted at rest and can be scoped to global, profile, or session level.
+            {t('credentialsListDesc')}
           </p>
         </div>
 
         <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
           <Shield className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-amber-400 font-medium">Security Notice</p>
+            <p className="text-amber-400 font-medium">{t('securityNotice')}</p>
             <p className="text-sm text-amber-400/80 mt-1">
-              Credentials are stored with AES-256 encryption. Only masked values are shown in the
-              UI. The actual values are only decrypted when injected into agent sessions.
+              {t('securityNoticeDesc')}
             </p>
           </div>
         </div>
@@ -309,11 +310,11 @@ export default function CredentialList() {
         ) : filteredCredentials.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Key className="w-16 h-16 text-muted mb-4" />
-            <p className="text-secondary text-lg">No credentials found</p>
+            <p className="text-secondary text-lg">{t('noCredentialsFound')}</p>
             <p className="text-muted mt-2">
               {scopeFilter !== 'all' || providerFilter !== 'all'
-                ? 'Try changing the filters or add a new credential'
-                : 'Add your first API key to get started'}
+                ? t('tryChangingFilterOrAddCredential')
+                : t('addFirstAPIKey')}
             </p>
           </div>
         ) : (

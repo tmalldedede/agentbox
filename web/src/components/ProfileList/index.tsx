@@ -15,9 +15,11 @@ import {
 import type { Profile } from '../../types'
 import { useProfiles, useDeleteProfile, useCloneProfile } from '../../hooks'
 import { ProfileGroup } from './ProfileGroup'
+import { useLanguage } from '../../contexts/LanguageContext'
 
 export default function ProfileList() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [deletingId, setDeletingId] = useState<string | undefined>()
   const [cloningId, setCloningId] = useState<string | undefined>()
 
@@ -75,7 +77,7 @@ export default function ProfileList() {
           </button>
           <div className="flex items-center gap-3">
             <Zap className="w-6 h-6 text-emerald-400" />
-            <span className="text-lg font-bold">Profiles</span>
+            <span className="text-lg font-bold">{t('profiles')}</span>
           </div>
         </div>
 
@@ -89,7 +91,7 @@ export default function ProfileList() {
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/profiles/new')}>
             <Plus className="w-4 h-4" />
-            New Profile
+            {t('newProfile')}
           </button>
         </div>
       </header>
@@ -100,17 +102,16 @@ export default function ProfileList() {
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <span className="text-red-400">
-              {error instanceof Error ? error.message : 'Failed to load profiles'}
+              {error instanceof Error ? error.message : t('failedToLoadProfiles')}
             </span>
           </div>
         )}
 
         {/* Description */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-primary mb-2">Agent Profiles</h1>
+          <h1 className="text-2xl font-bold text-primary mb-2">{t('agentProfiles')}</h1>
           <p className="text-secondary">
-            Profiles are pre-configured templates that combine adapter settings, model selection, MCP
-            servers, and permissions. Use them to quickly create sessions with your preferred setup.
+            {t('profilesDescription')}
           </p>
         </div>
 
@@ -121,13 +122,13 @@ export default function ProfileList() {
         ) : profiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Server className="w-16 h-16 text-muted mb-4" />
-            <p className="text-secondary text-lg">No profiles found</p>
-            <p className="text-muted mt-2">Create your first profile to get started</p>
+            <p className="text-secondary text-lg">{t('noProfilesFound')}</p>
+            <p className="text-muted mt-2">{t('createFirstProfile')}</p>
           </div>
         ) : (
           <div className="space-y-8">
             <ProfileGroup
-              title="Claude Code"
+              title={t('claudeCode')}
               icon={<Cpu className="w-4 h-4 text-purple-400" />}
               iconBgColor="bg-purple-500/20"
               profiles={claudeProfiles}
@@ -139,7 +140,7 @@ export default function ProfileList() {
             />
 
             <ProfileGroup
-              title="Codex"
+              title={t('codex')}
               icon={<Shield className="w-4 h-4 text-emerald-400" />}
               iconBgColor="bg-emerald-500/20"
               profiles={codexProfiles}
@@ -151,7 +152,7 @@ export default function ProfileList() {
             />
 
             <ProfileGroup
-              title="OpenCode"
+              title={t('opencode')}
               icon={<Code2 className="w-4 h-4 text-blue-400" />}
               iconBgColor="bg-blue-500/20"
               profiles={opencodeProfiles}
@@ -163,7 +164,7 @@ export default function ProfileList() {
             />
 
             <ProfileGroup
-              title="Other"
+              title={t('other')}
               icon={<Server className="w-4 h-4 text-gray-400" />}
               iconBgColor="bg-gray-500/20"
               profiles={otherProfiles}

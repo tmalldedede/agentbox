@@ -18,9 +18,11 @@ import {
 } from 'lucide-react'
 import type { Image } from '../types'
 import { useImages, usePullImage, useRemoveImage } from '../hooks'
+import { useLanguage } from '../contexts/LanguageContext'
 
 export default function ImageList() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [filter, setFilter] = useState<'all' | 'agent'>('all')
   const [pullImageName, setPullImageName] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -44,7 +46,7 @@ export default function ImageList() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this image?')) return
+    if (!confirm(t('confirmDeleteImage'))) return
 
     setDeletingId(id)
     removeImage.mutate(id, {
@@ -95,9 +97,9 @@ export default function ImageList() {
           <div className="flex items-center gap-3">
             <Box className="w-6 h-6 text-blue-400" />
             <div>
-              <h1 className="text-xl font-semibold text-primary">Images</h1>
+              <h1 className="text-xl font-semibold text-primary">{t('imagesTitle')}</h1>
               <p className="text-sm text-muted">
-                {images.length} images • {formatSize(getTotalSize())} total
+                {images.length} {t('imagesCount')} • {formatSize(getTotalSize())} {t('totalSize')}
               </p>
             </div>
           </div>
@@ -106,7 +108,7 @@ export default function ImageList() {
         <div className="flex items-center gap-3">
           <button onClick={() => refetch()} className="btn btn-secondary" disabled={isFetching}>
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('refresh')}
           </button>
         </div>
       </header>
@@ -115,7 +117,7 @@ export default function ImageList() {
         {error && (
           <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error instanceof Error ? error.message : 'Failed to fetch images'}</span>
+            <span>{error instanceof Error ? error.message : t('failedToFetchImages')}</span>
           </div>
         )}
 
@@ -123,14 +125,14 @@ export default function ImageList() {
         <div className="card p-6">
           <h3 className="text-lg font-medium text-primary mb-4 flex items-center gap-2">
             <Download className="w-5 h-5 text-emerald-400" />
-            Pull Image
+            {t('pullImage')}
           </h3>
           <form onSubmit={handlePull} className="flex gap-3">
             <input
               type="text"
               value={pullImageName}
               onChange={e => setPullImageName(e.target.value)}
-              placeholder="e.g. anthropic/claude-code:latest"
+              placeholder={t('imagePlaceholder')}
               className="input flex-1"
               disabled={pullImage.isPending}
             />
@@ -142,24 +144,24 @@ export default function ImageList() {
               {pullImage.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Pulling...
+                  {t('pulling')}
                 </>
               ) : (
                 <>
                   <Download className="w-4 h-4" />
-                  Pull
+                  {t('pull')}
                 </>
               )}
             </button>
           </form>
-          <p className="text-xs text-muted mt-2">Enter full image name with registry and tag</p>
+          <p className="text-xs text-muted mt-2">{t('enterFullImageName')}</p>
         </div>
 
         {/* Filter */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-muted">
             <Filter className="w-4 h-4" />
-            <span className="text-sm">Filter:</span>
+            <span className="text-sm">{t('filter')}:</span>
           </div>
           <div className="flex gap-2">
             <button
@@ -170,7 +172,7 @@ export default function ImageList() {
                   : 'bg-card text-muted hover:text-secondary'
               }`}
             >
-              All Images
+              {t('allImages')}
             </button>
             <button
               onClick={() => setFilter('agent')}
@@ -181,7 +183,7 @@ export default function ImageList() {
               }`}
             >
               <Terminal className="w-3 h-3 inline mr-1" />
-              Agent Images Only
+              {t('agentImagesOnly')}
             </button>
           </div>
         </div>
@@ -191,8 +193,8 @@ export default function ImageList() {
           {images.length === 0 ? (
             <div className="card p-12 flex flex-col items-center justify-center text-center">
               <Box className="w-12 h-12 text-muted mb-4 opacity-50" />
-              <p className="text-muted">No images found</p>
-              <p className="text-sm text-muted mt-1">Pull an image to get started</p>
+              <p className="text-muted">{t('noImagesFound')}</p>
+              <p className="text-sm text-muted mt-1">{t('pullImageToGetStarted')}</p>
             </div>
           ) : (
             images.map(image => (

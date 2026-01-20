@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import type { Task, TaskStatus, Profile } from '../types'
 import { useTasks, useTaskLogs, useCreateTask, useCancelTask, useProfiles } from '../hooks'
+import { useLanguage } from '../contexts/LanguageContext'
 
 // 状态图标映射
 const statusIcons: Record<TaskStatus, React.ReactNode> = {
@@ -193,6 +194,7 @@ function CreateTaskModal({
   profiles: Profile[]
   isCreating: boolean
 }) {
+  const { t } = useLanguage()
   const [profileId, setProfileId] = useState('')
   const [prompt, setPrompt] = useState('')
 
@@ -214,11 +216,11 @@ function CreateTaskModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="card w-full max-w-lg p-6">
-        <h2 className="text-xl font-bold text-primary mb-4">Create New Task</h2>
+        <h2 className="text-xl font-bold text-primary mb-4">{t('createNewTask')}</h2>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Profile</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('profile')}</label>
               <select
                 value={profileId}
                 onChange={e => setProfileId(e.target.value)}
@@ -233,23 +235,23 @@ function CreateTaskModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Prompt</label>
+              <label className="block text-sm font-medium text-secondary mb-2">{t('prompt')}</label>
               <textarea
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
                 className="input w-full h-32 resize-none"
-                placeholder="Describe what you want the agent to do..."
+                placeholder={t('describeTask')}
                 required
               />
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <button type="button" onClick={onClose} className="btn btn-ghost" disabled={isCreating}>
-              Cancel
+              {t('cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={isCreating}>
               {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Create Task
+              {t('createTask')}
             </button>
           </div>
         </form>
@@ -268,6 +270,7 @@ function LogsModal({
   onClose: () => void
   taskId: string | null
 }) {
+  const { t } = useLanguage()
   const { data: logsData, isLoading } = useTaskLogs(taskId || undefined)
 
   if (!isOpen || !taskId) return null
@@ -276,7 +279,7 @@ function LogsModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="card w-full max-w-4xl max-h-[80vh] p-6 flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-primary">Task Logs: {taskId.slice(0, 8)}</h2>
+          <h2 className="text-xl font-bold text-primary">{t('logs')}: {taskId.slice(0, 8)}</h2>
           <button onClick={onClose} className="btn btn-ghost btn-icon">
             ✕
           </button>
@@ -291,7 +294,7 @@ function LogsModal({
               {logsData.logs}
             </pre>
           ) : (
-            <p className="text-muted text-center">No logs available</p>
+            <p className="text-muted text-center">{t('noLogsAvailable')}</p>
           )}
         </div>
       </div>
@@ -301,6 +304,7 @@ function LogsModal({
 
 export default function TaskList() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [filter, setFilter] = useState<'all' | TaskStatus>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showLogsModal, setShowLogsModal] = useState(false)
@@ -326,7 +330,7 @@ export default function TaskList() {
   }
 
   const handleCancel = (task: Task) => {
-    if (!confirm(`Cancel task "${task.id.slice(0, 8)}"?`)) return
+    if (!confirm(`${t('confirmCancelTask')} "${task.id.slice(0, 8)}"?`)) return
     cancelTask.mutate(task.id)
   }
 
@@ -360,7 +364,7 @@ export default function TaskList() {
           </button>
           <div className="flex items-center gap-3">
             <ListTodo className="w-6 h-6 text-emerald-400" />
-            <span className="text-lg font-bold">Tasks</span>
+            <span className="text-lg font-bold">{t('tasksTitle')}</span>
           </div>
         </div>
 
@@ -371,11 +375,11 @@ export default function TaskList() {
             onChange={e => setFilter(e.target.value as typeof filter)}
             className="input py-2 px-3 text-sm"
           >
-            <option value="all">All ({stats.total})</option>
-            <option value="running">Running ({stats.running})</option>
-            <option value="queued">Queued ({stats.queued})</option>
-            <option value="completed">Completed ({stats.completed})</option>
-            <option value="failed">Failed ({stats.failed})</option>
+            <option value="all">{t('allTasks')} ({stats.total})</option>
+            <option value="running">{t('running')} ({stats.running})</option>
+            <option value="queued">{t('queuedTasks')} ({stats.queued})</option>
+            <option value="completed">{t('completedTasks')} ({stats.completed})</option>
+            <option value="failed">{t('failedTasks')} ({stats.failed})</option>
           </select>
 
           <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
@@ -383,7 +387,7 @@ export default function TaskList() {
           </button>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             <Plus className="w-4 h-4" />
-            New Task
+            {t('newTask')}
           </button>
         </div>
       </header>
@@ -394,7 +398,7 @@ export default function TaskList() {
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <span className="text-red-400">
-              {error instanceof Error ? error.message : 'Failed to fetch tasks'}
+              {error instanceof Error ? error.message : t('failedToLoadTasks')}
             </span>
           </div>
         )}
@@ -403,29 +407,29 @@ export default function TaskList() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="card p-4">
             <div className="text-2xl font-bold text-primary">{stats.total}</div>
-            <div className="text-sm text-muted">Total Tasks</div>
+            <div className="text-sm text-muted">{t('tasksTitle')}</div>
           </div>
           <div className="card p-4 border-emerald-500/30">
             <div className="text-2xl font-bold text-emerald-400">{stats.running}</div>
-            <div className="text-sm text-muted">Running</div>
+            <div className="text-sm text-muted">{t('running')}</div>
           </div>
           <div className="card p-4 border-blue-500/30">
             <div className="text-2xl font-bold text-blue-400">{stats.queued}</div>
-            <div className="text-sm text-muted">Queued</div>
+            <div className="text-sm text-muted">{t('queuedTasks')}</div>
           </div>
           <div className="card p-4 border-green-500/30">
             <div className="text-2xl font-bold text-green-400">{stats.completed}</div>
-            <div className="text-sm text-muted">Completed</div>
+            <div className="text-sm text-muted">{t('completedTasks')}</div>
           </div>
           <div className="card p-4 border-red-500/30">
             <div className="text-2xl font-bold text-red-400">{stats.failed}</div>
-            <div className="text-sm text-muted">Failed</div>
+            <div className="text-sm text-muted">{t('failedTasks')}</div>
           </div>
         </div>
 
         {/* Description */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-primary mb-2">Async Tasks</h1>
+          <h1 className="text-2xl font-bold text-primary mb-2">{t('tasksTitle')}</h1>
           <p className="text-secondary">
             Tasks are background jobs that run agents autonomously. Create a task with a prompt, and
             the system will queue it, execute it in a container, and store the results.
@@ -439,11 +443,11 @@ export default function TaskList() {
         ) : filteredTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <ListTodo className="w-16 h-16 text-muted mb-4" />
-            <p className="text-secondary text-lg">No tasks found</p>
+            <p className="text-secondary text-lg">{t('noTasksFound')}</p>
             <p className="text-muted mt-2">
               {filter !== 'all'
-                ? 'Try changing the filter or create a new task'
-                : 'Create your first task to get started'}
+                ? t('tryChangingFilter')
+                : t('createTaskToGetStarted')}
             </p>
           </div>
         ) : (

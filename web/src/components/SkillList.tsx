@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import type { Skill, SkillCategory } from '../types'
 import { useSkills, useUpdateSkill, useDeleteSkill, useCloneSkill, useExportSkill } from '../hooks'
+import { useLanguage } from '../contexts/LanguageContext'
 
 // 类别图标映射
 const categoryIcons: Record<SkillCategory, React.ReactNode> = {
@@ -61,6 +62,7 @@ function SkillCard({
   onExport: () => void
   onClick: () => void
 }) {
+  const { t } = useLanguage()
   const colors = categoryColors[skill.category] || categoryColors.other
   const icon = categoryIcons[skill.category] || categoryIcons.other
 
@@ -86,12 +88,12 @@ function SkillCard({
             {skill.is_built_in && (
               <span className="badge badge-scaling text-xs">
                 <Lock className="w-3 h-3" />
-                Built-in
+                {t('builtIn')}
               </span>
             )}
             {!skill.is_enabled && (
               <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
-                Disabled
+                {t('disabled')}
               </span>
             )}
           </div>
@@ -196,6 +198,7 @@ function SkillCard({
 
 export default function SkillList() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
 
   // React Query hooks
@@ -261,7 +264,7 @@ export default function SkillList() {
           </button>
           <div className="flex items-center gap-3">
             <Zap className="w-6 h-6 text-emerald-400" />
-            <span className="text-lg font-bold">Skills</span>
+            <span className="text-lg font-bold">{t('skills')}</span>
           </div>
         </div>
 
@@ -272,9 +275,9 @@ export default function SkillList() {
             onChange={e => setFilter(e.target.value as typeof filter)}
             className="input py-2 px-3 text-sm"
           >
-            <option value="all">All</option>
-            <option value="enabled">Enabled</option>
-            <option value="disabled">Disabled</option>
+            <option value="all">{t('all')}</option>
+            <option value="enabled">{t('enabled')}</option>
+            <option value="disabled">{t('disabled')}</option>
           </select>
 
           <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
@@ -282,7 +285,7 @@ export default function SkillList() {
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/skills/new')}>
             <Plus className="w-4 h-4" />
-            New Skill
+            {t('newSkill')}
           </button>
         </div>
       </header>
@@ -293,18 +296,16 @@ export default function SkillList() {
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <span className="text-red-400">
-              {error instanceof Error ? error.message : 'Failed to fetch skills'}
+              {error instanceof Error ? error.message : t('failedToLoadSkills')}
             </span>
           </div>
         )}
 
         {/* Description */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-primary mb-2">Skills</h1>
+          <h1 className="text-2xl font-bold text-primary mb-2">{t('skillsTitle')}</h1>
           <p className="text-secondary">
-            Skills are reusable task templates that define how agents should handle specific tasks.
-            Use commands like <code className="text-emerald-400">/commit</code> or{' '}
-            <code className="text-emerald-400">/review-pr</code> to invoke them.
+            {t('skillsDesc')}
           </p>
         </div>
 
@@ -315,11 +316,11 @@ export default function SkillList() {
         ) : filteredSkills.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Zap className="w-16 h-16 text-muted mb-4" />
-            <p className="text-secondary text-lg">No skills found</p>
+            <p className="text-secondary text-lg">{t('noSkillsFound')}</p>
             <p className="text-muted mt-2">
               {filter !== 'all'
-                ? 'Try changing the filter or create a new skill'
-                : 'Create your first skill to get started'}
+                ? t('tryChangingFilterOrCreateSkill')
+                : t('createFirstSkill')}
             </p>
           </div>
         ) : (
