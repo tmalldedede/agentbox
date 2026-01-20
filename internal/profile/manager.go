@@ -308,6 +308,7 @@ func (m *Manager) loadBuiltInProfiles() {
 			MemoryMB: 2048,
 		},
 		IsBuiltIn: true,
+		IsPublic:  true, // 在 API Playground 可见
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -340,6 +341,7 @@ func (m *Manager) loadBuiltInProfiles() {
 		Name:        "安全研究",
 		Description: "安全研究与分析配置",
 		Adapter:     AdapterClaudeCode,
+		IsPublic:    true, // 在 API Playground 可见
 		Model: ModelConfig{
 			Name: "opus",
 		},
@@ -381,6 +383,7 @@ func (m *Manager) loadBuiltInProfiles() {
 		Name:        "数据分析",
 		Description: "数据分析与可视化配置",
 		Adapter:     AdapterClaudeCode,
+		IsPublic:    true, // 在 API Playground 可见
 		Model: ModelConfig{
 			Name: "sonnet",
 		},

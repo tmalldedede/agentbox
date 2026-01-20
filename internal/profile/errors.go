@@ -1,16 +1,16 @@
 package profile
 
-import "errors"
+import "github.com/tmalldedede/agentbox/internal/apperr"
 
-// Profile errors
+// Profile errors - 使用 apperr 提供正确的 HTTP 状态码
 var (
-	ErrProfileNotFound        = errors.New("profile not found")
-	ErrProfileAlreadyExists   = errors.New("profile already exists")
-	ErrProfileIDRequired      = errors.New("profile ID is required")
-	ErrProfileNameRequired    = errors.New("profile name is required")
-	ErrProfileAdapterRequired = errors.New("profile adapter is required")
-	ErrProfileInvalidAdapter  = errors.New("invalid adapter type")
-	ErrProfileIsBuiltIn       = errors.New("cannot modify built-in profile")
-	ErrProfileCircularExtends = errors.New("circular profile inheritance detected")
-	ErrProfileParentNotFound  = errors.New("parent profile not found")
+	ErrProfileNotFound        = apperr.NotFound("profile")
+	ErrProfileAlreadyExists   = apperr.AlreadyExists("profile")
+	ErrProfileIDRequired      = apperr.Validation("profile ID is required")
+	ErrProfileNameRequired    = apperr.Validation("profile name is required")
+	ErrProfileAdapterRequired = apperr.Validation("profile adapter is required")
+	ErrProfileInvalidAdapter  = apperr.Validation("invalid adapter type")
+	ErrProfileIsBuiltIn       = apperr.BadRequest("cannot modify built-in profile")
+	ErrProfileCircularExtends = apperr.BadRequest("circular profile inheritance detected")
+	ErrProfileParentNotFound  = apperr.NotFound("parent profile")
 )
