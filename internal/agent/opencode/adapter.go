@@ -108,39 +108,53 @@ func (a *Adapter) PrepareContainerWithProfile(session *agent.SessionInfo, p *pro
 }
 
 // PrepareExec 准备执行命令
+// OpenCode CLI 使用 `opencode run [message..]` 格式
 func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
 	args := []string{
 		"opencode",
-		"-p", req.Prompt,
-		"-q", // 静默模式，隐藏 spinner
+		"run",           // 子命令
+		req.Prompt,      // message 作为位置参数
+		"--format", "json", // JSON 输出便于解析
 	}
 
 	return args
 }
 
 // PrepareExecWithProfile 使用 Profile 准备执行命令
-// 根据 Profile 配置生成完整的 opencode CLI 命令
+// OpenCode CLI 使用 `opencode run [message..] [options]` 格式
+// 支持的选项参考: opencode run --help
 func (a *Adapter) PrepareExecWithProfile(req *agent.ExecOptions, p *profile.Profile) []string {
-	args := []string{"opencode", "-p", req.Prompt}
-
-	// ===== 工作目录 =====
-	// OpenCode 默认使用 /workspace
-	args = append(args, "-c", "/workspace")
+	// 基础命令: opencode run "prompt"
+	args := []string{"opencode", "run", req.Prompt}
 
 	// ===== 输出格式 =====
-	if p.OutputFormat != "" {
-		args = append(args, "-f", p.OutputFormat)
+	// --format: default (formatted) 或 json (raw JSON events)
+	if p.OutputFormat == "json" || p.OutputFormat == "" {
+		args = append(args, "--format", "json")
 	} else {
-		// 默认使用 JSON 格式便于解析
-		args = append(args, "-f", "json")
+		args = append(args, "--format", "default")
 	}
 
-	// ===== 静默模式 =====
-	args = append(args, "-q")
+	// ===== 模型配置 =====
+	// --model, -m: provider/model 格式 (如 anthropic/claude-sonnet-4-20250514)
+	if p.Model.Name != "" {
+		// 如果指定了 provider，使用 provider/model 格式
+		if p.Model.Provider != "" {
+			args = append(args, "--model", p.Model.Provider+"/"+p.Model.Name)
+		} else {
+			args = append(args, "--model", p.Model.Name)
+		}
+	}
+
+	// ===== Agent 配置 =====
+	// --agent: 指定使用的 OpenCode agent（可通过 ConfigOverrides 传递）
+	if agent, ok := p.ConfigOverrides["agent"]; ok && agent != "" {
+		args = append(args, "--agent", agent)
+	}
 
 	// ===== 调试模式 =====
 	if p.Debug.Verbose {
-		args = append(args, "-d")
+		args = append(args, "--print-logs")
 	}
 
 	return args
