@@ -173,6 +173,9 @@ func main() {
 	}
 	log.Printf("Loaded %d credentials", len(credentialMgr.List()))
 
+	// 设置 Credential Manager 到 Session Manager（用于 API Key 自动注入）
+	sessionMgr.SetCredentialManager(credentialMgr)
+
 	// 初始化 Task Store (SQLite)
 	taskDBPath := filepath.Join(cfg.Container.WorkspaceBase, "agentbox.db")
 	taskStore, err := task.NewSQLiteStore(taskDBPath)

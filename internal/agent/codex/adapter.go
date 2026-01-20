@@ -80,7 +80,8 @@ func (a *Adapter) PrepareContainer(session *agent.SessionInfo) *container.Create
 			CPULimit:    2.0,
 			MemoryLimit: 4 * 1024 * 1024 * 1024, // 4GB
 		},
-		NetworkMode: "bridge", // Codex 需要网络访问 API
+		NetworkMode: "bridge",      // Codex 需要网络访问 API
+		Privileged:  true,          // Codex landlock 需要特权模式
 		Labels: map[string]string{
 			"agentbox.managed":    "true",
 			"agentbox.agent":      AgentName,
@@ -132,6 +133,11 @@ func (a *Adapter) GenerateConfigTOML(p *profile.Profile) string {
 	// disable_response_storage - 禁用响应存储 (隐私)
 	sb.WriteString("disable_response_storage = true\n")
 
+	// sandbox_mode - 沙箱模式
+	// Docker 容器环境不支持 landlock，必须使用 danger-full-access 禁用沙箱
+	// 参考: codex-rs/core/src/sandboxing/mod.rs - SandboxType::None
+	sb.WriteString("sandbox_mode = \"danger-full-access\"\n")
+
 	sb.WriteString("\n")
 
 	// ===== Provider 配置 =====
@@ -144,43 +150,33 @@ func (a *Adapter) GenerateConfigTOML(p *profile.Profile) string {
 		sb.WriteString(fmt.Sprintf("base_url = \"%s\"\n", p.Model.BaseURL))
 
 		// wire_api - API 协议类型 (chat/responses)
+		// - "responses": OpenAI 官方新版 Responses API
+		// - "chat": OpenAI 兼容的 Chat Completions API（第三方 Provider 使用）
 		wireAPI := p.Model.WireAPI
 		if wireAPI == "" {
-			// 第三方提供商（非 OpenAI）默认使用 chat API
-			if strings.ToLower(p.Model.Provider) != "openai" {
-				wireAPI = "chat"
-			} else {
+			// 只有官方 OpenAI 使用 responses API，其他第三方都用 chat API
+			if providerName == "openai" {
 				wireAPI = "responses"
+			} else {
+				wireAPI = "chat"
 			}
 		}
 		sb.WriteString(fmt.Sprintf("wire_api = \"%s\"\n", wireAPI))
 
-		// 认证配置 - 支持三种方式:
-		// 1. env_key: 使用指定的环境变量名获取 API Key
-		// 2. bearer_token: 直接使用 token（experimental_bearer_token）
-		// 3. requires_openai_auth: 使用 OPENAI_API_KEY（默认）
-		if p.Model.EnvKey != "" {
-			sb.WriteString(fmt.Sprintf("env_key = \"%s\"\n", p.Model.EnvKey))
-			sb.WriteString("requires_openai_auth = false\n")
-		} else if p.Model.BearerToken != "" {
-			sb.WriteString(fmt.Sprintf("experimental_bearer_token = \"%s\"\n", p.Model.BearerToken))
-			sb.WriteString("requires_openai_auth = false\n")
-		} else {
+		// requires_openai_auth - 是否需要 OpenAI OAuth 认证
+		// - true: 需要 OpenAI OAuth 登录，凭证存储在 auth.json
+		// - false: API Key 从 env_key 环境变量获取（第三方 Provider 使用）
+		if providerName == "openai" {
 			sb.WriteString("requires_openai_auth = true\n")
+		} else {
+			sb.WriteString("requires_openai_auth = false\n")
+			sb.WriteString("env_key = \"OPENAI_API_KEY\"\n")
 		}
 
 		// 重试配置
 		sb.WriteString("request_max_retries = 4\n")
 		sb.WriteString("stream_max_retries = 10\n")
 		sb.WriteString("stream_idle_timeout_ms = 300000\n")
-
-		sb.WriteString("\n")
-
-		// ===== Profile 配置 =====
-		// 生成 [profiles.xxx] 配置块，方便使用 codex -p xxx 切换
-		sb.WriteString(fmt.Sprintf("[profiles.%s]\n", providerName))
-		sb.WriteString(fmt.Sprintf("model = \"%s\"\n", p.Model.Name))
-		sb.WriteString(fmt.Sprintf("model_provider = \"%s\"\n", providerName))
 	}
 
 	return sb.String()
@@ -195,19 +191,22 @@ func (a *Adapter) GenerateAuthJSON(apiKey string) string {
 
 // GetConfigFiles 返回需要挂载到容器的配置文件
 // 返回: map[容器内路径]文件内容
-// 注意: Codex 容器以 agent 用户运行，配置文件在 /home/agent/.codex/
+// 注意: 使用 ~ 前缀表示需要在运行时展开为用户 home 目录
 func (a *Adapter) GetConfigFiles(p *profile.Profile, apiKey string) map[string]string {
 	files := make(map[string]string)
 
-	// ~/.codex/config.toml (agent 用户)
+	// ~/.codex/config.toml
 	configTOML := a.GenerateConfigTOML(p)
 	if configTOML != "" {
-		files["/home/agent/.codex/config.toml"] = configTOML
+		files["~/.codex/config.toml"] = configTOML
 	}
 
-	// ~/.codex/auth.json (agent 用户)
-	if apiKey != "" {
-		files["/home/agent/.codex/auth.json"] = a.GenerateAuthJSON(apiKey)
+	// ~/.codex/auth.json
+	// 只有官方 OpenAI 需要 auth.json（requires_openai_auth = true）
+	// 第三方 Provider 通过环境变量 OPENAI_API_KEY 传入（requires_openai_auth = false）
+	providerName := strings.ToLower(p.Model.Provider)
+	if apiKey != "" && providerName == "openai" {
+		files["~/.codex/auth.json"] = a.GenerateAuthJSON(apiKey)
 	}
 
 	return files
@@ -216,13 +215,13 @@ func (a *Adapter) GetConfigFiles(p *profile.Profile, apiKey string) map[string]s
 // PrepareExec 准备执行命令
 func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
 	// 使用 exec 子命令执行非交互式任务
-	// --full-auto 等同于 -a on-request + -s workspace-write
+	// --dangerously-bypass-approvals-and-sandbox 绕过审批和沙箱（Docker 容器不支持 landlock）
 	// --skip-git-repo-check 跳过 git 仓库检查（容器内可能没有 .git 目录）
 	args := []string{
 		"codex",
 		"exec",
 		req.Prompt,
-		"--full-auto",
+		"--dangerously-bypass-approvals-and-sandbox",
 		"--skip-git-repo-check",
 	}
 
@@ -236,8 +235,13 @@ func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
 // 根据 Profile 配置生成完整的 codex CLI 命令
 func (a *Adapter) PrepareExecWithProfile(req *agent.ExecOptions, p *profile.Profile) []string {
 	// Codex 使用 exec 子命令执行非交互式任务
+	// --dangerously-bypass-approvals-and-sandbox 绕过审批和沙箱（Docker 容器不支持 landlock）
 	// --skip-git-repo-check 跳过 git 仓库检查（容器内可能没有 .git 目录）
-	args := []string{"codex", "exec", req.Prompt, "--skip-git-repo-check"}
+	args := []string{
+		"codex", "exec", req.Prompt,
+		"--dangerously-bypass-approvals-and-sandbox",
+		"--skip-git-repo-check",
+	}
 
 	// ===== 模型配置 =====
 	if p.Model.Name != "" {
@@ -249,20 +253,8 @@ func (a *Adapter) PrepareExecWithProfile(req *agent.ExecOptions, p *profile.Prof
 		args = append(args, "--reasoning-effort", p.Model.ReasoningEffort)
 	}
 
-	// ===== 沙箱模式 =====
-	if p.Permissions.FullAuto {
-		// --full-auto 是 -a on-request + -s workspace-write 的快捷方式
-		args = append(args, "--full-auto")
-	} else {
-		// 审批策略
-		if p.Permissions.ApprovalPolicy != "" {
-			args = append(args, "--ask-for-approval", p.Permissions.ApprovalPolicy)
-		}
-		// 沙箱模式
-		if p.Permissions.SandboxMode != "" {
-			args = append(args, "--sandbox", p.Permissions.SandboxMode)
-		}
-	}
+	// 注意: 沙箱模式和审批策略已通过 --dangerously-bypass-approvals-and-sandbox 禁用
+	// Docker 容器环境不支持 landlock，必须使用此参数
 
 	// ===== 目录访问 =====
 	for _, dir := range p.Permissions.AdditionalDirs {
@@ -381,10 +373,6 @@ func (a *Adapter) SupportedFeatures() []string {
 		"timeout",
 		"config_overrides",
 		"output_schema",
-		"custom_provider",
-		"env_key",
-		"bearer_token",
-		"wire_api",
 	}
 }
 

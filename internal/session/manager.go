@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/credential"
 	"github.com/tmalldedede/agentbox/internal/profile"
 )
 
@@ -20,6 +22,7 @@ type Manager struct {
 	containerMgr  container.Manager
 	agentRegistry *agent.Registry
 	profileMgr    *profile.Manager
+	credentialMgr *credential.Manager
 	workspaceBase string
 }
 
@@ -36,6 +39,11 @@ func NewManager(store Store, containerMgr container.Manager, registry *agent.Reg
 // SetProfileManager 设置 Profile 管理器（可选依赖）
 func (m *Manager) SetProfileManager(mgr *profile.Manager) {
 	m.profileMgr = mgr
+}
+
+// SetCredentialManager 设置 Credential 管理器（可选依赖）
+func (m *Manager) SetCredentialManager(mgr *credential.Manager) {
+	m.credentialMgr = mgr
 }
 
 // Create 创建会话
@@ -88,11 +96,33 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
+	// 准备环境变量（可能需要从 Credential 注入 API Key）
+	envVars := make(map[string]string)
+	for k, v := range req.Env {
+		envVars[k] = v
+	}
+
+	// 如果请求中没有 API Key，尝试从 Profile 关联的 Credential 获取
+	hasAPIKey := false
+	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
+		if _, ok := envVars[key]; ok {
+			hasAPIKey = true
+			break
+		}
+	}
+	if !hasAPIKey && req.ProfileID != "" && m.profileMgr != nil && m.credentialMgr != nil {
+		if p, err := m.profileMgr.Get(req.ProfileID); err == nil && p.CredentialID != "" {
+			if apiKey, err := m.credentialMgr.GetDecrypted(p.CredentialID); err == nil {
+				envVars["OPENAI_API_KEY"] = apiKey
+			}
+		}
+	}
+
 	// 准备容器配置
 	containerConfig := adapter.PrepareContainer(&agent.SessionInfo{
 		ID:        sessionID,
 		Workspace: workspace,
-		Env:       req.Env,
+		Env:       envVars,
 	})
 
 	// 应用资源限制
@@ -120,6 +150,8 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	if err := m.writeConfigFiles(ctx, adapter, ctr.ID, req); err != nil {
 		// 配置文件写入失败不中断创建，但记录警告
 		fmt.Printf("Warning: failed to write config files: %v\n", err)
+	} else {
+		fmt.Printf("Config files written successfully for session %s\n", sessionID)
 	}
 
 	session.Status = StatusRunning
@@ -133,10 +165,12 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 // writeConfigFiles 写入配置文件到容器
 func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, containerID string, req *CreateRequest) error {
 	// 检查适配器是否实现 ConfigFilesProvider 接口
-	provider, ok := adapter.(agent.ConfigFilesProvider)
+	cfgProvider, ok := adapter.(agent.ConfigFilesProvider)
 	if !ok {
+		fmt.Printf("[writeConfigFiles] Adapter does not implement ConfigFilesProvider\n")
 		return nil // 适配器不需要配置文件
 	}
+	fmt.Printf("[writeConfigFiles] Adapter implements ConfigFilesProvider, profile_id=%s\n", req.ProfileID)
 
 	// 获取 Profile
 	var p *profile.Profile
@@ -146,40 +180,98 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 		if err != nil {
 			return fmt.Errorf("failed to get profile: %w", err)
 		}
+		// 创建副本以避免修改原始 Profile
+		pCopy := *p
+		p = &pCopy
 	} else {
 		// 创建空 Profile
 		p = &profile.Profile{}
 	}
 
-	// 从环境变量提取 API Key
-	// 常见的 API Key 环境变量名
+	// 如果 Profile 没有 Model 配置，尝试从环境变量提取
+	if p.Model.BaseURL == "" {
+		// Codex 使用 OPENAI_BASE_URL
+		if baseURL, ok := req.Env["OPENAI_BASE_URL"]; ok && baseURL != "" {
+			p.Model.BaseURL = baseURL
+		}
+	}
+	if p.Model.Provider == "" {
+		// 尝试从 MODEL_PROVIDER 环境变量获取
+		if provider, ok := req.Env["MODEL_PROVIDER"]; ok && provider != "" {
+			p.Model.Provider = provider
+		} else if p.Model.BaseURL != "" {
+			// 从 BaseURL 推断 Provider 名称
+			p.Model.Provider = inferProviderFromBaseURL(p.Model.BaseURL)
+		}
+	}
+	if p.Model.Name == "" {
+		// 尝试从 MODEL 或 CODEX_MODEL 环境变量获取
+		for _, key := range []string{"MODEL", "CODEX_MODEL", "OPENAI_MODEL"} {
+			if model, ok := req.Env[key]; ok && model != "" {
+				p.Model.Name = model
+				break
+			}
+		}
+	}
+	if p.Model.WireAPI == "" {
+		// 尝试从 WIRE_API 环境变量获取
+		if wireAPI, ok := req.Env["WIRE_API"]; ok && wireAPI != "" {
+			p.Model.WireAPI = wireAPI
+		}
+	}
+
+	// 获取 API Key（优先级：环境变量 > Profile Credential）
 	apiKey := ""
+	// 1. 先尝试从环境变量获取
 	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
 		if v, ok := req.Env[key]; ok && v != "" {
 			apiKey = v
 			break
 		}
 	}
+	// 2. 如果没有，尝试从 Profile 关联的 Credential 获取
+	if apiKey == "" && p.CredentialID != "" && m.credentialMgr != nil {
+		if decrypted, err := m.credentialMgr.GetDecrypted(p.CredentialID); err == nil {
+			apiKey = decrypted
+		}
+	}
 
 	// 获取配置文件
-	configFiles := provider.GetConfigFiles(p, apiKey)
+	fmt.Printf("[writeConfigFiles] Profile Model: name=%s, provider=%s, base_url=%s\n", p.Model.Name, p.Model.Provider, p.Model.BaseURL)
+	fmt.Printf("[writeConfigFiles] API Key present: %v\n", apiKey != "")
+	configFiles := cfgProvider.GetConfigFiles(p, apiKey)
+	fmt.Printf("[writeConfigFiles] Got %d config files\n", len(configFiles))
+	for path := range configFiles {
+		fmt.Printf("[writeConfigFiles] - File: %s\n", path)
+	}
 	if len(configFiles) == 0 {
+		fmt.Printf("[writeConfigFiles] No config files to write, returning early\n")
 		return nil
 	}
 
 	// 通过 exec 命令写入每个配置文件
 	for path, content := range configFiles {
-		// 创建目录
-		dir := filepath.Dir(path)
-		mkdirCmd := []string{"mkdir", "-p", dir}
-		if _, err := m.containerMgr.Exec(ctx, containerID, mkdirCmd); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		fmt.Printf("[writeConfigFiles] Writing file: %s (len=%d)\n", path, len(content))
+
+		// 处理 ~ 路径：使用 shell 展开
+		// 注意：~ 只在 shell 中展开，所以必须用 sh -c
+		expandedPath := path
+		if strings.HasPrefix(path, "~/") {
+			// 使用 $HOME 替代 ~，在 sh -c 中会正确展开
+			expandedPath = "$HOME" + path[1:]
 		}
 
-		// 使用 cat 和 heredoc 写入文件内容
-		// 转义内容中的特殊字符
+		// 获取目录路径
+		dir := filepath.Dir(expandedPath)
+
+		// 使用单个 shell 命令完成创建目录和写入文件
+		// 转义内容中的特殊字符（单引号）
 		escapedContent := strings.ReplaceAll(content, "'", "'\"'\"'")
-		writeCmd := []string{"sh", "-c", fmt.Sprintf("cat > '%s' << 'AGENTBOX_EOF'\n%s\nAGENTBOX_EOF", path, escapedContent)}
+		writeCmd := []string{
+			"sh", "-c",
+			fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_EOF'\n%s\nAGENTBOX_EOF", dir, expandedPath, escapedContent),
+		}
+		fmt.Printf("[writeConfigFiles] Exec command: mkdir -p %s && cat > %s ...\n", dir, expandedPath)
 		if _, err := m.containerMgr.Exec(ctx, containerID, writeCmd); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", path, err)
 		}
@@ -218,13 +310,11 @@ func (m *Manager) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	// 删除容器
+	// 删除容器（忽略容器不存在的错误）
 	if session.ContainerID != "" {
-		// 忽略停止错误，继续删除
 		_ = m.containerMgr.Stop(ctx, session.ContainerID)
-		if err := m.containerMgr.Remove(ctx, session.ContainerID); err != nil {
-			return fmt.Errorf("failed to remove container: %w", err)
-		}
+		_ = m.containerMgr.Remove(ctx, session.ContainerID)
+		// 忽略错误，容器可能已经被删除
 	}
 
 	// 删除会话记录
@@ -320,6 +410,15 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 
 	if session.Status != StatusRunning {
 		return nil, fmt.Errorf("session is not running: %s", session.Status)
+	}
+
+	// 检查容器是否存在
+	_, err = m.containerMgr.Inspect(ctx, session.ContainerID)
+	if err != nil {
+		// 容器不存在，更新 session 状态
+		session.Status = StatusError
+		_ = m.store.Update(session)
+		return nil, fmt.Errorf("container no longer exists, session marked as error: %w", err)
 	}
 
 	// 获取 Agent 适配器
@@ -428,25 +527,125 @@ func (m *Manager) GetWorkspace(sessionID string) (string, error) {
 	return session.Workspace, nil
 }
 
-// GetLogs 获取会话容器日志
+// ANSI color codes
+const (
+	ansiReset      = "\x1b[0m"
+	ansiBold       = "\x1b[1m"
+	ansiDim        = "\x1b[2m"
+	ansiRed        = "\x1b[31m"
+	ansiGreen      = "\x1b[32m"
+	ansiYellow     = "\x1b[33m"
+	ansiBlue       = "\x1b[34m"
+	ansiMagenta    = "\x1b[35m"
+	ansiCyan       = "\x1b[36m"
+	ansiGray       = "\x1b[90m"
+	ansiBrightWhite = "\x1b[97m"
+)
+
+// GetLogs 获取会话的执行日志（带 ANSI 颜色）
 func (m *Manager) GetLogs(ctx context.Context, id string) (string, error) {
-	session, err := m.store.Get(id)
+	// 验证会话存在
+	_, err := m.store.Get(id)
 	if err != nil {
 		return "", err
 	}
 
-	if session.ContainerID == "" {
-		return "", fmt.Errorf("session has no container")
-	}
-
-	reader, err := m.containerMgr.Logs(ctx, session.ContainerID)
+	// 从执行记录聚合日志
+	executions, err := m.store.ListExecutions(id)
 	if err != nil {
-		return "", fmt.Errorf("failed to get logs: %w", err)
+		return "", fmt.Errorf("failed to get executions: %w", err)
 	}
-	defer reader.Close()
 
-	// 读取日志内容
-	buf := make([]byte, 64*1024) // 64KB 限制
-	n, _ := reader.Read(buf)
-	return string(buf[:n]), nil
+	if len(executions) == 0 {
+		return "", nil
+	}
+
+	// 按开始时间排序
+	sort.Slice(executions, func(i, j int) bool {
+		return executions[i].StartedAt.Before(executions[j].StartedAt)
+	})
+
+	var logs strings.Builder
+	for i, exec := range executions {
+		if i > 0 {
+			logs.WriteString("\n")
+		}
+
+		// 状态颜色
+		statusColor := ansiGray
+		switch exec.Status {
+		case ExecutionSuccess:
+			statusColor = ansiGreen
+		case ExecutionFailed:
+			statusColor = ansiRed
+		case ExecutionRunning:
+			statusColor = ansiYellow
+		}
+
+		// 执行头部信息
+		logs.WriteString(fmt.Sprintf("%s%s=== Execution %s %s%s[%s]%s %s===%s\n",
+			ansiBold, ansiCyan, exec.ID, ansiReset,
+			statusColor, exec.Status, ansiReset,
+			ansiBold+ansiCyan, ansiReset))
+		logs.WriteString(fmt.Sprintf("%sStarted: %s%s\n", ansiGray, exec.StartedAt.Format(time.RFC3339), ansiReset))
+		if exec.EndedAt != nil {
+			logs.WriteString(fmt.Sprintf("%sEnded: %s%s\n", ansiGray, exec.EndedAt.Format(time.RFC3339), ansiReset))
+		}
+
+		// Prompt
+		logs.WriteString(fmt.Sprintf("\n%s❯%s %s%s%s\n", ansiGreen, ansiReset, ansiBrightWhite, exec.Prompt, ansiReset))
+
+		// 输出内容
+		if exec.Output != "" {
+			logs.WriteString(fmt.Sprintf("\n%s--- Output ---%s\n", ansiDim, ansiReset))
+			logs.WriteString(exec.Output)
+			if !strings.HasSuffix(exec.Output, "\n") {
+				logs.WriteString("\n")
+			}
+		}
+
+		// 错误内容
+		if exec.Error != "" {
+			logs.WriteString(fmt.Sprintf("\n%s--- Error ---%s\n", ansiRed, ansiReset))
+			logs.WriteString(fmt.Sprintf("%s%s%s\n", ansiRed, exec.Error, ansiReset))
+		}
+
+		// 退出码
+		if exec.ExitCode != 0 {
+			logs.WriteString(fmt.Sprintf("\n%sExit Code: %d%s\n", ansiRed, exec.ExitCode, ansiReset))
+		}
+	}
+
+	return logs.String(), nil
+}
+
+// inferProviderFromBaseURL 从 BaseURL 推断 Provider 名称
+func inferProviderFromBaseURL(baseURL string) string {
+	// 常见的 Provider URL 模式
+	providerPatterns := map[string][]string{
+		"openai":    {"api.openai.com"},
+		"azure":     {"azure.com", "openai.azure.com"},
+		"deepseek":  {"api.deepseek.com"},
+		"zhipu":     {"open.bigmodel.cn", "bigmodel.cn"},
+		"qwen":      {"dashscope.aliyuncs.com"},
+		"kimi":      {"api.moonshot.cn", "moonshot.cn"},
+		"minimax":   {"api.minimax.chat", "api.minimaxi.com"},
+		"baichuan":  {"api.baichuan-ai.com"},
+		"openrouter": {"openrouter.ai"},
+		"together":  {"api.together.xyz"},
+		"groq":      {"api.groq.com"},
+		"fireworks": {"api.fireworks.ai"},
+	}
+
+	baseURLLower := strings.ToLower(baseURL)
+	for provider, patterns := range providerPatterns {
+		for _, pattern := range patterns {
+			if strings.Contains(baseURLLower, pattern) {
+				return provider
+			}
+		}
+	}
+
+	// 默认返回 "custom"
+	return "custom"
 }

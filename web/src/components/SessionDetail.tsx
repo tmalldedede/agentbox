@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -29,6 +29,7 @@ import {
   useDeleteSession,
   useExecSession,
 } from '../hooks'
+import TerminalViewer, { formatExecutionLogs } from './TerminalViewer'
 
 interface ExecutionHistory {
   id: string
@@ -63,12 +64,22 @@ export default function SessionDetail() {
   const [prompt, setPrompt] = useState('')
   const [history, setHistory] = useState<ExecutionHistory[]>([])
 
-  const outputRef = useRef<HTMLDivElement>(null)
+  // 格式化执行历史为终端显示内容
+  const terminalContent = useMemo(() => {
+    if (history.length === 0) return ''
 
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight
-    }
+    return formatExecutionLogs(
+      history.map(item => ({
+        id: item.id,
+        prompt: item.prompt,
+        output: item.output || undefined,
+        error: item.error,
+        exitCode: item.exitCode,
+        status: item.exitCode === -1 ? 'running' : item.exitCode === 0 ? 'success' : 'failed',
+        startedAt: item.timestamp,
+        endedAt: item.exitCode === -1 ? undefined : item.timestamp,
+      }))
+    )
   }, [history])
 
   const handleExecute = async (e: React.FormEvent) => {
@@ -339,12 +350,9 @@ export default function SessionDetail() {
         {/* Right: Terminal */}
         <div className="flex-1 flex flex-col">
           {/* Output Area */}
-          <div
-            ref={outputRef}
-            className="flex-1 p-6 overflow-y-auto scrollbar-thin font-mono text-sm terminal-area"
-          >
+          <div className="flex-1 overflow-hidden">
             {history.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-muted">
+              <div className="h-full flex flex-col items-center justify-center text-muted bg-[#0d1117]">
                 <Terminal className="w-12 h-12 mb-4 opacity-50" />
                 <p>Execute a prompt to see output here</p>
                 {session.status !== 'running' && (
@@ -354,43 +362,12 @@ export default function SessionDetail() {
                 )}
               </div>
             ) : (
-              <div className="space-y-6">
-                {history.map(item => (
-                  <div key={item.id} className="space-y-2">
-                    {/* Prompt */}
-                    <div className="flex items-start gap-2">
-                      <span className="text-emerald-400">❯</span>
-                      <span className="text-primary">{item.prompt}</span>
-                    </div>
-
-                    {/* Output */}
-                    {item.exitCode === -1 ? (
-                      <div className="flex items-center gap-2 text-muted ml-4">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Executing...</span>
-                      </div>
-                    ) : (
-                      <>
-                        {item.error ? (
-                          <div className="ml-4 text-red-400">
-                            <span className="text-red-500">Error: </span>
-                            {item.error}
-                          </div>
-                        ) : item.output ? (
-                          <pre className="ml-4 text-secondary whitespace-pre-wrap">
-                            {item.output}
-                          </pre>
-                        ) : (
-                          <div className="ml-4 text-muted">(no output)</div>
-                        )}
-                        <div className="ml-4 text-xs text-muted">
-                          Exit code: {item.exitCode} • {item.timestamp.toLocaleTimeString()}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <TerminalViewer
+                content={terminalContent}
+                loading={execSession.isPending}
+                placeholder="Execute a prompt to see output here"
+                minHeight="100%"
+              />
             )}
           </div>
 

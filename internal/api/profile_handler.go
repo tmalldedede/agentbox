@@ -92,6 +92,7 @@ type CreateProfileRequest struct {
 	Tags                  []string                  `json:"tags"`
 	Adapter               string                    `json:"adapter" binding:"required"`
 	Extends               string                    `json:"extends"`
+	CredentialID          string                    `json:"credential_id"`
 	Model                 profile.ModelConfig       `json:"model"`
 	MCPServers            []profile.MCPServerConfig `json:"mcp_servers"`
 	Permissions           profile.PermissionConfig  `json:"permissions"`
@@ -132,6 +133,7 @@ func (h *ProfileHandler) Create(c *gin.Context) {
 		Tags:                  req.Tags,
 		Adapter:               req.Adapter,
 		Extends:               req.Extends,
+		CredentialID:          req.CredentialID,
 		Model:                 req.Model,
 		MCPServers:            req.MCPServers,
 		Permissions:           req.Permissions,
@@ -184,6 +186,7 @@ func (h *ProfileHandler) Update(c *gin.Context) {
 		Tags:                  req.Tags,
 		Adapter:               req.Adapter,
 		Extends:               req.Extends,
+		CredentialID:          req.CredentialID,
 		Model:                 req.Model,
 		MCPServers:            req.MCPServers,
 		Permissions:           req.Permissions,

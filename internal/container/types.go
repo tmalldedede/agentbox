@@ -69,6 +69,7 @@ type CreateConfig struct {
 	Resources   ResourceConfig    // 资源限制
 	NetworkMode string            // 网络模式
 	Labels      map[string]string // 标签
+	Privileged  bool              // 特权模式 (用于 Codex landlock)
 }
 
 // Mount 挂载配置

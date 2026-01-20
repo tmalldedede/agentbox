@@ -23,6 +23,9 @@ type Profile struct {
 	// Inheritance: extends another Profile
 	Extends string `json:"extends,omitempty"`
 
+	// Credential ID for API authentication
+	CredentialID string `json:"credential_id,omitempty"`
+
 	// Model configuration
 	Model ModelConfig `json:"model"`
 

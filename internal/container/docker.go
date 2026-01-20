@@ -69,6 +69,7 @@ func (m *DockerManager) Create(ctx context.Context, config *CreateConfig) (*Cont
 			Mounts:      mounts,
 			Resources:   resources,
 			NetworkMode: container.NetworkMode(config.NetworkMode),
+			Privileged:  config.Privileged,
 		},
 		nil,
 		nil,
