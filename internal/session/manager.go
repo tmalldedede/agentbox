@@ -1,8 +1,12 @@
 package session
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,8 +17,16 @@ import (
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/credential"
+	"github.com/tmalldedede/agentbox/internal/logger"
 	"github.com/tmalldedede/agentbox/internal/profile"
 )
+
+// 模块日志器
+var log *slog.Logger
+
+func init() {
+	log = logger.Module("session")
+}
 
 // Manager 会话管理器
 type Manager struct {
@@ -149,9 +161,9 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	// 写入配置文件（如果适配器需要）
 	if err := m.writeConfigFiles(ctx, adapter, ctr.ID, req); err != nil {
 		// 配置文件写入失败不中断创建，但记录警告
-		fmt.Printf("Warning: failed to write config files: %v\n", err)
+		log.Warn("failed to write config files", "session_id", sessionID, "error", err)
 	} else {
-		fmt.Printf("Config files written successfully for session %s\n", sessionID)
+		log.Debug("config files written", "session_id", sessionID)
 	}
 
 	session.Status = StatusRunning
@@ -167,10 +179,10 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 	// 检查适配器是否实现 ConfigFilesProvider 接口
 	cfgProvider, ok := adapter.(agent.ConfigFilesProvider)
 	if !ok {
-		fmt.Printf("[writeConfigFiles] Adapter does not implement ConfigFilesProvider\n")
+		log.Debug("adapter does not implement ConfigFilesProvider", "adapter", adapter.Name())
 		return nil // 适配器不需要配置文件
 	}
-	fmt.Printf("[writeConfigFiles] Adapter implements ConfigFilesProvider, profile_id=%s\n", req.ProfileID)
+	log.Debug("adapter implements ConfigFilesProvider", "adapter", adapter.Name(), "profile_id", req.ProfileID)
 
 	// 获取 Profile
 	var p *profile.Profile
@@ -237,21 +249,22 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 	}
 
 	// 获取配置文件
-	fmt.Printf("[writeConfigFiles] Profile Model: name=%s, provider=%s, base_url=%s\n", p.Model.Name, p.Model.Provider, p.Model.BaseURL)
-	fmt.Printf("[writeConfigFiles] API Key present: %v\n", apiKey != "")
+	log.Debug("profile model config",
+		"model", p.Model.Name,
+		"provider", p.Model.Provider,
+		"base_url", p.Model.BaseURL,
+		"api_key_present", apiKey != "",
+	)
 	configFiles := cfgProvider.GetConfigFiles(p, apiKey)
-	fmt.Printf("[writeConfigFiles] Got %d config files\n", len(configFiles))
-	for path := range configFiles {
-		fmt.Printf("[writeConfigFiles] - File: %s\n", path)
-	}
+	log.Debug("got config files", "count", len(configFiles))
 	if len(configFiles) == 0 {
-		fmt.Printf("[writeConfigFiles] No config files to write, returning early\n")
+		log.Debug("no config files to write")
 		return nil
 	}
 
 	// 通过 exec 命令写入每个配置文件
 	for path, content := range configFiles {
-		fmt.Printf("[writeConfigFiles] Writing file: %s (len=%d)\n", path, len(content))
+		log.Debug("writing config file", "path", path, "content_len", len(content))
 
 		// 处理 ~ 路径：使用 shell 展开
 		// 注意：~ 只在 shell 中展开，所以必须用 sh -c
@@ -271,10 +284,13 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 			"sh", "-c",
 			fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_EOF'\n%s\nAGENTBOX_EOF", dir, expandedPath, escapedContent),
 		}
-		fmt.Printf("[writeConfigFiles] Exec command: mkdir -p %s && cat > %s ...\n", dir, expandedPath)
-		if _, err := m.containerMgr.Exec(ctx, containerID, writeCmd); err != nil {
+		log.Debug("exec write command", "dir", dir, "path", expandedPath)
+		result, err := m.containerMgr.Exec(ctx, containerID, writeCmd)
+		if err != nil {
+			log.Error("failed to write config file", "path", path, "error", err)
 			return fmt.Errorf("failed to write file %s: %w", path, err)
 		}
+		log.Debug("config file written", "path", path, "exit_code", result.ExitCode)
 	}
 
 	return nil
@@ -429,11 +445,13 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 
 	// 准备执行选项
 	execOpts := &agent.ExecOptions{
-		Prompt:          req.Prompt,
-		MaxTurns:        req.MaxTurns,
-		Timeout:         req.Timeout,
-		AllowedTools:    req.AllowedTools,
-		DisallowedTools: req.DisallowedTools,
+		Prompt:           req.Prompt,
+		MaxTurns:         req.MaxTurns,
+		Timeout:          req.Timeout,
+		AllowedTools:     req.AllowedTools,
+		DisallowedTools:  req.DisallowedTools,
+		IncludeEvents:    req.IncludeEvents,
+		WorkingDirectory: session.Workspace,
 	}
 
 	// 设置默认值
@@ -443,9 +461,6 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 	if execOpts.Timeout <= 0 {
 		execOpts.Timeout = 300 // 默认 5 分钟
 	}
-
-	// 准备执行命令
-	cmd := adapter.PrepareExec(execOpts)
 
 	// 创建执行记录
 	execID := uuid.New().String()[:8]
@@ -464,12 +479,23 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(execOpts.Timeout)*time.Second)
 	defer cancel()
 
-	// 在容器中执行
-	result, err := m.containerMgr.Exec(execCtx, session.ContainerID, cmd)
+	// 检查 adapter 是否实现了 DirectExecutor 接口
+	if directExec, ok := adapter.(agent.DirectExecutor); ok {
+		// 使用 Go SDK 直接执行
+		return m.execDirect(execCtx, directExec, execOpts, execution)
+	}
+
+	// 回退到 CLI 执行方式
+	return m.execViaCLI(execCtx, adapter, execOpts, session.ContainerID, execution)
+}
+
+// execDirect 使用 Go SDK 直接执行 (Codex)
+func (m *Manager) execDirect(ctx context.Context, executor agent.DirectExecutor, opts *agent.ExecOptions, execution *Execution) (*ExecResponse, error) {
+	result, err := executor.Execute(ctx, opts)
 	if err != nil {
 		execution.Status = ExecutionFailed
-		if execCtx.Err() == context.DeadlineExceeded {
-			execution.Error = fmt.Sprintf("execution timeout after %d seconds", execOpts.Timeout)
+		if ctx.Err() == context.DeadlineExceeded {
+			execution.Error = fmt.Sprintf("execution timeout after %d seconds", opts.Timeout)
 		} else {
 			execution.Error = err.Error()
 		}
@@ -480,6 +506,77 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 	}
 
 	// 更新执行记录
+	now := time.Now()
+	execution.EndedAt = &now
+	execution.Output = result.Message
+	execution.ExitCode = result.ExitCode
+	if result.ExitCode == 0 && result.Error == "" {
+		execution.Status = ExecutionSuccess
+	} else {
+		execution.Status = ExecutionFailed
+		execution.Error = result.Error
+	}
+	_ = m.store.UpdateExecution(execution)
+
+	// 构建响应
+	resp := &ExecResponse{
+		ExecutionID: execution.ID,
+		Message:     result.Message,
+		Output:      result.Message, // 兼容旧版
+		ExitCode:    result.ExitCode,
+		Error:       result.Error,
+	}
+
+	// 添加 token 使用统计
+	if result.Usage != nil {
+		resp.Usage = &TokenUsage{
+			InputTokens:       result.Usage.InputTokens,
+			CachedInputTokens: result.Usage.CachedInputTokens,
+			OutputTokens:      result.Usage.OutputTokens,
+		}
+	}
+
+	// 添加事件列表
+	if opts.IncludeEvents && len(result.Events) > 0 {
+		resp.Events = make([]ExecEvent, len(result.Events))
+		for i, e := range result.Events {
+			resp.Events[i] = ExecEvent{
+				Type: e.Type,
+				Raw:  e.Raw,
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+// execViaCLI 通过 CLI 在容器中执行 (Claude Code, OpenCode, Codex)
+func (m *Manager) execViaCLI(ctx context.Context, adapter agent.Adapter, opts *agent.ExecOptions, containerID string, execution *Execution) (*ExecResponse, error) {
+	// 准备执行命令
+	cmd := adapter.PrepareExec(opts)
+
+	// 在容器中执行
+	result, err := m.containerMgr.Exec(ctx, containerID, cmd)
+	if err != nil {
+		execution.Status = ExecutionFailed
+		if ctx.Err() == context.DeadlineExceeded {
+			execution.Error = fmt.Sprintf("execution timeout after %d seconds", opts.Timeout)
+		} else {
+			execution.Error = err.Error()
+		}
+		now := time.Now()
+		execution.EndedAt = &now
+		_ = m.store.UpdateExecution(execution)
+		return nil, fmt.Errorf("failed to execute: %w", err)
+	}
+
+	// 检查 adapter 是否实现了 JSONOutputParser 接口
+	if parser, ok := adapter.(agent.JSONOutputParser); ok {
+		// 使用 JSON 解析器解析输出 (如 Codex --json 模式)
+		return m.execViaCLIWithJSONParser(parser, opts, result, execution)
+	}
+
+	// 更新执行记录 (普通文本输出模式)
 	now := time.Now()
 	execution.EndedAt = &now
 	execution.Output = result.Stdout
@@ -493,11 +590,281 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 	_ = m.store.UpdateExecution(execution)
 
 	return &ExecResponse{
-		ExecutionID: execID,
+		ExecutionID: execution.ID,
+		Message:     result.Stdout, // CLI 模式下，output 就是 message
 		Output:      result.Stdout,
 		ExitCode:    result.ExitCode,
 		Error:       result.Stderr,
 	}, nil
+}
+
+// execViaCLIWithJSONParser 使用 JSON 解析器处理 CLI 输出 (如 Codex --json 模式)
+func (m *Manager) execViaCLIWithJSONParser(parser agent.JSONOutputParser, opts *agent.ExecOptions, result *container.ExecResult, execution *Execution) (*ExecResponse, error) {
+	// 解析 JSONL 输出
+	parsed, err := parser.ParseJSONLOutput(result.Stdout, opts.IncludeEvents)
+	if err != nil {
+		// 解析失败，回退到普通文本模式
+		now := time.Now()
+		execution.EndedAt = &now
+		execution.Output = result.Stdout
+		execution.ExitCode = result.ExitCode
+		if result.ExitCode == 0 {
+			execution.Status = ExecutionSuccess
+		} else {
+			execution.Status = ExecutionFailed
+			execution.Error = result.Stderr
+		}
+		_ = m.store.UpdateExecution(execution)
+
+		return &ExecResponse{
+			ExecutionID: execution.ID,
+			Message:     result.Stdout,
+			Output:      result.Stdout,
+			ExitCode:    result.ExitCode,
+			Error:       fmt.Sprintf("JSON parse failed: %v; stderr: %s", err, result.Stderr),
+		}, nil
+	}
+
+	// 更新执行记录
+	now := time.Now()
+	execution.EndedAt = &now
+	execution.Output = parsed.Message
+	execution.ExitCode = parsed.ExitCode
+	if parsed.ExitCode == 0 && parsed.Error == "" {
+		execution.Status = ExecutionSuccess
+	} else {
+		execution.Status = ExecutionFailed
+		execution.Error = parsed.Error
+	}
+	_ = m.store.UpdateExecution(execution)
+
+	// 构建响应
+	resp := &ExecResponse{
+		ExecutionID: execution.ID,
+		Message:     parsed.Message,
+		Output:      parsed.Message, // 兼容旧版
+		ExitCode:    parsed.ExitCode,
+		Error:       parsed.Error,
+	}
+
+	// 添加 token 使用统计
+	if parsed.Usage != nil {
+		resp.Usage = &TokenUsage{
+			InputTokens:       parsed.Usage.InputTokens,
+			CachedInputTokens: parsed.Usage.CachedInputTokens,
+			OutputTokens:      parsed.Usage.OutputTokens,
+		}
+	}
+
+	// 添加事件列表
+	if opts.IncludeEvents && len(parsed.Events) > 0 {
+		resp.Events = make([]ExecEvent, len(parsed.Events))
+		for i, e := range parsed.Events {
+			resp.Events[i] = ExecEvent{
+				Type: e.Type,
+				Raw:  e.Raw,
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+// ExecStream 流式执行命令，返回事件通道 (目前仅支持 Codex)
+func (m *Manager) ExecStream(ctx context.Context, id string, req *ExecRequest) (<-chan *StreamEvent, string, error) {
+	session, err := m.store.Get(id)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if session.Status != StatusRunning {
+		return nil, "", fmt.Errorf("session is not running: %s", session.Status)
+	}
+
+	// 检查容器是否存在
+	_, err = m.containerMgr.Inspect(ctx, session.ContainerID)
+	if err != nil {
+		session.Status = StatusError
+		_ = m.store.Update(session)
+		return nil, "", fmt.Errorf("container no longer exists: %w", err)
+	}
+
+	// 获取 Agent 适配器
+	adapter, err := m.agentRegistry.Get(session.Agent)
+	if err != nil {
+		return nil, "", fmt.Errorf("agent not found: %s", session.Agent)
+	}
+
+	// 目前只有 Codex 支持流式输出 (--json 模式)
+	if session.Agent != "codex" {
+		return nil, "", fmt.Errorf("streaming exec only supported for codex agent, got: %s", session.Agent)
+	}
+
+	// 准备执行选项
+	execOpts := &agent.ExecOptions{
+		Prompt:           req.Prompt,
+		MaxTurns:         req.MaxTurns,
+		Timeout:          req.Timeout,
+		IncludeEvents:    true,
+		WorkingDirectory: session.Workspace,
+	}
+
+	if execOpts.MaxTurns <= 0 {
+		execOpts.MaxTurns = 10
+	}
+	if execOpts.Timeout <= 0 {
+		execOpts.Timeout = 300
+	}
+
+	// 创建执行记录
+	execID := uuid.New().String()[:8]
+	execution := &Execution{
+		ID:        execID,
+		SessionID: id,
+		Prompt:    req.Prompt,
+		Status:    ExecutionRunning,
+		StartedAt: time.Now(),
+	}
+	if err := m.store.CreateExecution(execution); err != nil {
+		return nil, "", fmt.Errorf("failed to create execution: %w", err)
+	}
+
+	// 准备执行命令
+	cmd := adapter.PrepareExec(execOpts)
+
+	// 启动流式执行
+	stream, err := m.containerMgr.ExecStream(ctx, session.ContainerID, cmd)
+	if err != nil {
+		execution.Status = ExecutionFailed
+		execution.Error = err.Error()
+		now := time.Now()
+		execution.EndedAt = &now
+		_ = m.store.UpdateExecution(execution)
+		return nil, "", fmt.Errorf("failed to start exec stream: %w", err)
+	}
+
+	// 创建事件通道
+	eventCh := make(chan *StreamEvent, 100)
+
+	// 启动 goroutine 读取输出并解析
+	go m.processExecStream(ctx, stream, execution, eventCh)
+
+	return eventCh, execID, nil
+}
+
+// processExecStream 处理流式执行输出
+func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecStream, execution *Execution, eventCh chan<- *StreamEvent) {
+	defer close(eventCh)
+	defer stream.Reader.Close()
+
+	// 发送开始事件
+	eventCh <- &StreamEvent{
+		Type:        "execution.started",
+		ExecutionID: execution.ID,
+	}
+
+	var outputBuilder strings.Builder
+	var lastMessage string
+	scanner := bufio.NewScanner(stream.Reader)
+	// 增大缓冲区以处理长行
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			eventCh <- &StreamEvent{
+				Type:        "execution.cancelled",
+				ExecutionID: execution.ID,
+				Error:       "context cancelled",
+			}
+			return
+		default:
+		}
+
+		line := scanner.Text()
+		outputBuilder.WriteString(line)
+		outputBuilder.WriteString("\n")
+
+		// 找到 JSON 对象的开始位置 (Codex 输出可能有长度前缀)
+		jsonStart := strings.Index(line, "{")
+		if jsonStart < 0 {
+			continue
+		}
+		jsonLine := line[jsonStart:]
+
+		// 解析 Codex 事件
+		var rawEvent map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(jsonLine), &rawEvent); err != nil {
+			continue
+		}
+
+		// 获取事件类型
+		var eventType string
+		if typeData, ok := rawEvent["type"]; ok {
+			json.Unmarshal(typeData, &eventType)
+		}
+
+		// 构建流式事件
+		streamEvent := &StreamEvent{
+			Type:        eventType,
+			ExecutionID: execution.ID,
+			Data:        json.RawMessage(jsonLine),
+		}
+
+		// 提取 agent_message 文本
+		if eventType == "item.completed" {
+			if itemData, ok := rawEvent["item"]; ok {
+				var item struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				}
+				if err := json.Unmarshal(itemData, &item); err == nil {
+					if item.Type == "agent_message" && item.Text != "" {
+						streamEvent.Text = item.Text
+						lastMessage = item.Text
+					}
+				}
+			}
+		}
+
+		// 处理错误
+		if eventType == "error" || eventType == "turn.failed" {
+			if msgData, ok := rawEvent["message"]; ok {
+				var msg string
+				json.Unmarshal(msgData, &msg)
+				streamEvent.Error = msg
+			}
+			if errData, ok := rawEvent["error"]; ok {
+				var errObj struct {
+					Message string `json:"message"`
+				}
+				if err := json.Unmarshal(errData, &errObj); err == nil {
+					streamEvent.Error = errObj.Message
+				}
+			}
+		}
+
+		eventCh <- streamEvent
+	}
+
+	// 更新执行记录
+	now := time.Now()
+	execution.EndedAt = &now
+	execution.Output = lastMessage
+	execution.Status = ExecutionSuccess
+	if err := scanner.Err(); err != nil {
+		execution.Status = ExecutionFailed
+		execution.Error = err.Error()
+	}
+	_ = m.store.UpdateExecution(execution)
+
+	// 发送完成事件
+	eventCh <- &StreamEvent{
+		Type:        "execution.completed",
+		ExecutionID: execution.ID,
+		Text:        lastMessage,
+	}
 }
 
 // GetExecutions 获取会话的执行历史
@@ -617,6 +984,23 @@ func (m *Manager) GetLogs(ctx context.Context, id string) (string, error) {
 	}
 
 	return logs.String(), nil
+}
+
+// StreamLogs 获取容器实时日志流
+func (m *Manager) StreamLogs(ctx context.Context, id string) (io.ReadCloser, error) {
+	// 获取会话
+	sess, err := m.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查容器是否存在
+	if sess.ContainerID == "" {
+		return nil, fmt.Errorf("session has no container")
+	}
+
+	// 获取容器日志流
+	return m.containerMgr.Logs(ctx, sess.ContainerID)
 }
 
 // inferProviderFromBaseURL 从 BaseURL 推断 Provider 名称

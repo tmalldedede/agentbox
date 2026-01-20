@@ -1,9 +1,10 @@
 package session
 
 import (
-	"fmt"
 	"sync"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // Store 会话存储接口
@@ -43,7 +44,7 @@ func (s *MemoryStore) Create(session *Session) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.sessions[session.ID]; exists {
-		return fmt.Errorf("session already exists: %s", session.ID)
+		return apperr.AlreadyExists("session")
 	}
 
 	session.CreatedAt = time.Now()
@@ -59,7 +60,7 @@ func (s *MemoryStore) Get(id string) (*Session, error) {
 
 	session, ok := s.sessions[id]
 	if !ok {
-		return nil, fmt.Errorf("session not found: %s", id)
+		return nil, apperr.NotFound("session")
 	}
 	return session, nil
 }
@@ -125,7 +126,7 @@ func (s *MemoryStore) Update(session *Session) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.sessions[session.ID]; !exists {
-		return fmt.Errorf("session not found: %s", session.ID)
+		return apperr.NotFound("session")
 	}
 
 	session.UpdatedAt = time.Now()
@@ -139,7 +140,7 @@ func (s *MemoryStore) Delete(id string) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.sessions[id]; !exists {
-		return fmt.Errorf("session not found: %s", id)
+		return apperr.NotFound("session")
 	}
 
 	delete(s.sessions, id)
@@ -152,7 +153,7 @@ func (s *MemoryStore) CreateExecution(exec *Execution) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.executions[exec.ID]; exists {
-		return fmt.Errorf("execution already exists: %s", exec.ID)
+		return apperr.AlreadyExists("execution")
 	}
 
 	exec.StartedAt = time.Now()
@@ -167,7 +168,7 @@ func (s *MemoryStore) GetExecution(id string) (*Execution, error) {
 
 	exec, ok := s.executions[id]
 	if !ok {
-		return nil, fmt.Errorf("execution not found: %s", id)
+		return nil, apperr.NotFound("execution")
 	}
 	return exec, nil
 }
@@ -192,7 +193,7 @@ func (s *MemoryStore) UpdateExecution(exec *Execution) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.executions[exec.ID]; !exists {
-		return fmt.Errorf("execution not found: %s", exec.ID)
+		return apperr.NotFound("execution")
 	}
 
 	s.executions[exec.ID] = exec

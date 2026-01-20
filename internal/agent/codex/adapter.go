@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -217,16 +219,15 @@ func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
 	// 使用 exec 子命令执行非交互式任务
 	// --dangerously-bypass-approvals-and-sandbox 绕过审批和沙箱（Docker 容器不支持 landlock）
 	// --skip-git-repo-check 跳过 git 仓库检查（容器内可能没有 .git 目录）
+	// --json 输出 JSONL 格式，便于解析
 	args := []string{
 		"codex",
 		"exec",
 		req.Prompt,
 		"--dangerously-bypass-approvals-and-sandbox",
 		"--skip-git-repo-check",
+		"--json",
 	}
-
-	// Codex 暂不支持 max_turns 和 tools 参数
-	// 未来可以扩展
 
 	return args
 }
@@ -237,10 +238,12 @@ func (a *Adapter) PrepareExecWithProfile(req *agent.ExecOptions, p *profile.Prof
 	// Codex 使用 exec 子命令执行非交互式任务
 	// --dangerously-bypass-approvals-and-sandbox 绕过审批和沙箱（Docker 容器不支持 landlock）
 	// --skip-git-repo-check 跳过 git 仓库检查（容器内可能没有 .git 目录）
+	// --json 输出 JSONL 格式，便于解析
 	args := []string{
 		"codex", "exec", req.Prompt,
 		"--dangerously-bypass-approvals-and-sandbox",
 		"--skip-git-repo-check",
+		"--json",
 	}
 
 	// ===== 模型配置 =====
@@ -374,6 +377,137 @@ func (a *Adapter) SupportedFeatures() []string {
 		"config_overrides",
 		"output_schema",
 	}
+}
+
+// NOTE: DirectExecutor 接口已禁用
+// codex.Run() 在宿主机进程中执行，而不是容器内，无法使用容器的环境变量和配置
+// 改为使用 CLI 执行 + --json 输出格式，在 execViaCLI 中解析 JSONL 输出
+//
+// func (a *Adapter) Execute(ctx context.Context, opts *agent.ExecOptions) (*agent.ExecResult, error) {
+//     ... 保留代码供将来本地执行场景使用 ...
+// }
+
+// CodexEvent Codex CLI --json 输出的事件结构
+type CodexEvent struct {
+	Type    string          `json:"type"`              // 事件类型: thread.started, turn.completed, item.completed, error
+	Usage   *CodexUsage     `json:"usage,omitempty"`   // Token 使用统计 (turn.completed)
+	Item    json.RawMessage `json:"item,omitempty"`    // 事件内容 (item.completed)
+	Error   *CodexError     `json:"error,omitempty"`   // 错误信息 (error, turn.failed)
+	Message string          `json:"message,omitempty"` // 错误消息 (error)
+}
+
+// CodexUsage Token 使用统计
+type CodexUsage struct {
+	InputTokens       int `json:"input_tokens"`
+	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
+	OutputTokens      int `json:"output_tokens"`
+}
+
+// CodexError 错误信息
+type CodexError struct {
+	Message string `json:"message"`
+}
+
+// CodexItem item.completed 事件中的 item
+type CodexItem struct {
+	Type     string `json:"type"`                // item 类型: agent_message, command_execution, reasoning, etc.
+	Text     string `json:"text,omitempty"`      // agent_message 的文本内容
+	ExitCode *int   `json:"exit_code,omitempty"` // command_execution 的退出码
+}
+
+// ParseJSONLOutput 实现 JSONOutputParser 接口
+// 解析 Codex CLI --json 输出的 JSONL 格式
+func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*agent.ExecResult, error) {
+	var (
+		message  string
+		events   []agent.ExecEvent
+		usage    *agent.TokenUsage
+		exitCode int
+		execErr  string
+	)
+
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Codex --json 输出可能包含长度前缀，需要找到 JSON 对象的开始位置
+		// 例如: "135{\"type\":\"item.completed\",...}"
+		jsonStart := strings.Index(line, "{")
+		if jsonStart < 0 {
+			continue
+		}
+		line = line[jsonStart:]
+
+		var event CodexEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			// 跳过无法解析的行
+			continue
+		}
+
+		// 如果需要包含事件，记录原始 JSON
+		if includeEvents {
+			events = append(events, agent.ExecEvent{
+				Type: event.Type,
+				Raw:  json.RawMessage(line),
+			})
+		}
+
+		// 处理不同事件类型
+		switch event.Type {
+		case "turn.completed":
+			// 获取 token 使用统计
+			if event.Usage != nil {
+				usage = &agent.TokenUsage{
+					InputTokens:       event.Usage.InputTokens,
+					CachedInputTokens: event.Usage.CachedInputTokens,
+					OutputTokens:      event.Usage.OutputTokens,
+				}
+			}
+
+		case "turn.failed":
+			if event.Error != nil {
+				execErr = event.Error.Message
+			}
+
+		case "item.completed":
+			// 解析 item 内容
+			if len(event.Item) > 0 {
+				var item CodexItem
+				if err := json.Unmarshal(event.Item, &item); err == nil {
+					switch item.Type {
+					case "agent_message":
+						// 提取 agent_message 作为最终结果
+						message = item.Text
+					case "command_execution":
+						// 提取命令执行的退出码
+						if item.ExitCode != nil {
+							exitCode = *item.ExitCode
+						}
+					}
+				}
+			}
+
+		case "error":
+			execErr = event.Message
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan output: %w", err)
+	}
+
+	result := &agent.ExecResult{
+		Message:  message,
+		ExitCode: exitCode,
+		Usage:    usage,
+		Error:    execErr,
+	}
+
+	if includeEvents {
+		result.Events = events
+	}
+
+	return result, nil
 }
 
 // init 自动注册到默认注册表

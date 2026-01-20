@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -73,14 +74,40 @@ type ExecRequest struct {
 	Timeout         int      `json:"timeout,omitempty"`          // 超时秒数 (10-3600, 默认 300)
 	AllowedTools    []string `json:"allowed_tools,omitempty"`    // 允许的工具列表
 	DisallowedTools []string `json:"disallowed_tools,omitempty"` // 禁用的工具列表
+	IncludeEvents   bool     `json:"include_events,omitempty"`   // 是否返回完整事件列表
 }
 
 // ExecResponse 执行响应
 type ExecResponse struct {
-	ExecutionID string `json:"execution_id"`
-	Output      string `json:"output"`
-	ExitCode    int    `json:"exit_code"`
-	Error       string `json:"error,omitempty"`
+	ExecutionID string       `json:"execution_id"`
+	Message     string       `json:"message"`                // Agent 最终回复 (新增)
+	Output      string       `json:"output"`                 // 原始输出 (兼容旧版)
+	Events      []ExecEvent  `json:"events,omitempty"`       // 完整事件列表 (当 include_events=true)
+	Usage       *TokenUsage  `json:"usage,omitempty"`        // Token 使用统计
+	ExitCode    int          `json:"exit_code"`
+	Error       string       `json:"error,omitempty"`
+}
+
+// TokenUsage Token 使用统计
+type TokenUsage struct {
+	InputTokens       int `json:"input_tokens"`
+	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
+	OutputTokens      int `json:"output_tokens"`
+}
+
+// ExecEvent 执行事件
+type ExecEvent struct {
+	Type string          `json:"type"`
+	Raw  json.RawMessage `json:"raw,omitempty"`
+}
+
+// StreamEvent SSE 流式事件
+type StreamEvent struct {
+	Type        string          `json:"type"`                   // 事件类型
+	ExecutionID string          `json:"execution_id,omitempty"` // 执行 ID
+	Data        json.RawMessage `json:"data,omitempty"`         // 事件数据
+	Text        string          `json:"text,omitempty"`         // 文本内容 (agent_message)
+	Error       string          `json:"error,omitempty"`        // 错误信息
 }
 
 // ListFilter 列表过滤器
