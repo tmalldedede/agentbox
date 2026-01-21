@@ -14,6 +14,7 @@ import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
 import { LanguageProvider } from './contexts/LanguageContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
@@ -94,17 +95,19 @@ if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <LanguageProvider>
-                <RouterProvider router={router} />
-              </LanguageProvider>
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <FontProvider>
+              <DirectionProvider>
+                <LanguageProvider>
+                  <RouterProvider router={router} />
+                </LanguageProvider>
+              </DirectionProvider>
+            </FontProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
     </StrictMode>
   )
 }

@@ -5,7 +5,9 @@ export * from './use-table-url-state'
 
 // AgentBox API hooks
 export * from './useAgents'
+export * from './useSmartAgents'
 export * from './useCredentials'
+export * from './useHistory'
 export * from './useImages'
 export * from './useMCPServers'
 export * from './useProfiles'

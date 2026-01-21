@@ -5,7 +5,6 @@ import {
   Plus,
   Copy,
   Trash2,
-  ChevronRight,
   Zap,
   Code,
   FileSearch,
@@ -26,7 +25,8 @@ import {
   Star,
   Check,
   ExternalLink,
-  X,
+  MoreVertical,
+  Edit,
 } from 'lucide-react'
 import type { Skill, SkillCategory, RemoteSkill, SkillSource, AddSourceRequest } from '@/types'
 import {
@@ -42,36 +42,65 @@ import {
   useAddSkillSource,
   useRemoveSkillSource,
 } from '@/hooks'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 // 类别图标映射
 const categoryIcons: Record<SkillCategory, React.ReactNode> = {
-  coding: <Code className="w-4 h-4" />,
-  review: <FileSearch className="w-4 h-4" />,
-  docs: <FileText className="w-4 h-4" />,
-  security: <Shield className="w-4 h-4" />,
-  testing: <TestTube className="w-4 h-4" />,
-  other: <Box className="w-4 h-4" />,
+  coding: <Code className="w-5 h-5" />,
+  review: <FileSearch className="w-5 h-5" />,
+  docs: <FileText className="w-5 h-5" />,
+  security: <Shield className="w-5 h-5" />,
+  testing: <TestTube className="w-5 h-5" />,
+  other: <Box className="w-5 h-5" />,
 }
 
 // 类别颜色映射
-const categoryColors: Record<SkillCategory, string> = {
-  coding: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  review: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  docs: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  security: 'bg-red-500/20 text-red-400 border-red-500/30',
-  testing: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  other: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+const categoryBgColors: Record<SkillCategory, string> = {
+  coding: 'bg-blue-500/20 text-blue-400',
+  review: 'bg-purple-500/20 text-purple-400',
+  docs: 'bg-emerald-500/20 text-emerald-400',
+  security: 'bg-red-500/20 text-red-400',
+  testing: 'bg-amber-500/20 text-amber-400',
+  other: 'bg-gray-500/20 text-gray-400',
 }
-
-// 源类型颜色映射
-const sourceTypeColors: Record<string, string> = {
-  official: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  community: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  custom: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-}
-
-// Tab 类型
-type TabType = 'installed' | 'store' | 'sources'
 
 // Skill 卡片组件
 function SkillCard({
@@ -89,136 +118,135 @@ function SkillCard({
   onExport: () => void
   onClick: () => void
 }) {
-  const colors = categoryColors[skill.category] || categoryColors.other
+  const bgColor = categoryBgColors[skill.category] || categoryBgColors.other
   const icon = categoryIcons[skill.category] || categoryIcons.other
 
   return (
-    <div
-      className={`card p-4 cursor-pointer group transition-colors ${
+    <Card
+      className={`cursor-pointer transition-colors ${
         skill.is_enabled
-          ? 'hover:border-emerald-500/50'
-          : 'opacity-60 hover:border-gray-500/50'
+          ? 'hover:border-primary/50'
+          : 'opacity-60 hover:border-muted-foreground/50'
       }`}
       onClick={onClick}
     >
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors}`}>
-          {icon}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground truncate">{skill.name}</span>
-            {skill.is_built_in && (
-              <span className="badge badge-scaling text-xs">
-                <Lock className="w-3 h-3" />
-                Built-in
-              </span>
-            )}
-            {!skill.is_enabled && (
-              <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
-                Disabled
-              </span>
-            )}
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bgColor} flex items-center justify-center`}>
+              {icon}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">{skill.name}</CardTitle>
+                {skill.is_built_in && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Lock className="w-3 h-3 mr-1" />
+                    Built-in
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Terminal className="w-3 h-3 text-muted-foreground" />
+                <code className="text-xs text-emerald-400 font-mono">{skill.command}</code>
+              </div>
+            </div>
           </div>
-
-          {/* Command */}
-          <div className="flex items-center gap-2 mt-1">
-            <Terminal className="w-3 h-3 text-muted-foreground" />
-            <code className="text-sm text-emerald-400 font-mono">{skill.command}</code>
-          </div>
-
-          <p className="text-sm text-foreground/90-foreground mt-1 line-clamp-2">
-            {skill.description || skill.prompt.slice(0, 100)}
-          </p>
-
-          {/* Tags */}
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <span className={`text-xs px-2 py-0.5 rounded border ${colors}`}>
-              {skill.category}
-            </span>
-            {skill.tags?.slice(0, 3).map(tag => (
-              <span
-                key={tag}
-                className="text-xs px-2 py-0.5 rounded bg-muted text-foreground/90"
-              >
-                {tag}
-              </span>
-            ))}
-            {skill.required_mcp && skill.required_mcp.length > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">
-                {skill.required_mcp.length} MCP
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div
-          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Export Button */}
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onExport()
-            }}
-            className="btn btn-ghost btn-icon"
-            title="Export as SKILL.md"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-
-          {/* Toggle Button */}
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onToggle()
-            }}
-            className="btn btn-ghost btn-icon"
-            title={skill.is_enabled ? 'Disable' : 'Enable'}
-          >
-            {skill.is_enabled ? (
-              <Power className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <PowerOff className="w-4 h-4 text-gray-400" />
-            )}
-          </button>
-
-          {/* Clone Button */}
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onClone()
-            }}
-            className="btn btn-ghost btn-icon"
-            title="Clone"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-
-          {/* Delete Button */}
-          {!skill.is_built_in && (
-            <button
-              onClick={e => {
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={(e) => {
                 e.stopPropagation()
-                onDelete()
-              }}
-              className="btn btn-ghost btn-icon text-red-400"
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+                onClick()
+              }}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onExport()
+              }}>
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onToggle()
+              }}>
+                {skill.is_enabled ? (
+                  <>
+                    <PowerOff className="w-4 h-4 mr-2" />
+                    Disable
+                  </>
+                ) : (
+                  <>
+                    <Power className="w-4 h-4 mr-2" />
+                    Enable
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onClone()
+              }}>
+                <Copy className="w-4 h-4 mr-2" />
+                Clone
+              </DropdownMenuItem>
+              {!skill.is_built_in && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-red-600"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete()
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <CardDescription className="mb-3 line-clamp-2">
+          {skill.description || skill.prompt.slice(0, 100)}
+        </CardDescription>
+        <div className="flex items-center gap-2 flex-wrap">
+          {skill.is_enabled ? (
+            <Badge variant="default" className="bg-green-500 text-xs">
+              <Power className="w-3 h-3 mr-1" />
+              Enabled
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-xs">
+              <PowerOff className="w-3 h-3 mr-1" />
+              Disabled
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs capitalize">
+            {skill.category}
+          </Badge>
+          {skill.tags?.slice(0, 2).map(tag => (
+            <Badge key={tag} variant="outline" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+          {skill.required_mcp && skill.required_mcp.length > 0 && (
+            <Badge variant="outline" className="text-xs text-amber-600">
+              {skill.required_mcp.length} MCP
+            </Badge>
           )}
         </div>
-
-        {/* Arrow */}
-        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -232,79 +260,74 @@ function RemoteSkillCard({
   onInstall: () => void
   installing: boolean
 }) {
-  const colors = categoryColors[skill.category as SkillCategory] || categoryColors.other
+  const bgColor = categoryBgColors[skill.category as SkillCategory] || categoryBgColors.other
   const icon = categoryIcons[skill.category as SkillCategory] || categoryIcons.other
 
   return (
-    <div className="card p-4 group transition-colors hover:border-blue-500/50">
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors}`}>
-          {icon}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground truncate">{skill.name}</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-muted text-foreground/90">
-              {skill.source_name}
-            </span>
-            {skill.is_installed && (
-              <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                已安装
-              </span>
-            )}
+    <Card className="transition-colors hover:border-blue-500/50">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bgColor} flex items-center justify-center`}>
+              {icon}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">{skill.name}</CardTitle>
+                <Badge variant="secondary" className="text-xs">
+                  {skill.source_name}
+                </Badge>
+                {skill.is_installed && (
+                  <Badge variant="default" className="bg-green-500 text-xs">
+                    <Check className="w-3 h-3 mr-1" />
+                    Installed
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Terminal className="w-3 h-3 text-muted-foreground" />
+                <code className="text-xs text-blue-400 font-mono">{skill.command}</code>
+              </div>
+            </div>
           </div>
-
-          {/* Command */}
-          <div className="flex items-center gap-2 mt-1">
-            <Terminal className="w-3 h-3 text-muted-foreground" />
-            <code className="text-sm text-blue-400 font-mono">{skill.command}</code>
-          </div>
-
-          <p className="text-sm text-foreground/90-foreground mt-1 line-clamp-2">
-            {skill.description || 'No description'}
-          </p>
-
-          {/* Meta */}
-          <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-            {skill.author && <span>by {skill.author}</span>}
-            {skill.version && <span>v{skill.version}</span>}
-            <span className={`px-2 py-0.5 rounded border ${colors}`}>
-              {skill.category}
-            </span>
-          </div>
-        </div>
-
-        {/* Install Button */}
-        <div className="flex items-center">
           {skill.is_installed ? (
-            <button
-              className="btn btn-ghost text-emerald-400"
-              disabled
-            >
-              <Check className="w-4 h-4" />
-              已安装
-            </button>
+            <Button variant="ghost" disabled className="text-green-500">
+              <Check className="w-4 h-4 mr-2" />
+              Installed
+            </Button>
           ) : (
-            <button
-              onClick={onInstall}
-              disabled={installing}
-              className="btn btn-primary"
-            >
+            <Button onClick={onInstall} disabled={installing}>
               {installing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
-                <Download className="w-4 h-4" />
+                <Download className="w-4 h-4 mr-2" />
               )}
-              安装
-            </button>
+              Install
+            </Button>
           )}
         </div>
-      </div>
-    </div>
+      </CardHeader>
+      <CardContent>
+        <CardDescription className="mb-3 line-clamp-2">
+          {skill.description || 'No description'}
+        </CardDescription>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className="text-xs capitalize">
+            {skill.category}
+          </Badge>
+          {skill.author && (
+            <Badge variant="outline" className="text-xs">
+              by {skill.author}
+            </Badge>
+          )}
+          {skill.version && (
+            <Badge variant="outline" className="text-xs">
+              v{skill.version}
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -322,88 +345,93 @@ function SourceCard({
   refreshing: boolean
   deleting: boolean
 }) {
-  const colors = sourceTypeColors[source.type] || sourceTypeColors.custom
   const isOfficial = source.type === 'official'
 
   return (
-    <div className="card p-4 group transition-colors hover:border-emerald-500/50">
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div className="w-12 h-12 rounded-xl bg-gray-700 flex items-center justify-center">
-          <Github className="w-6 h-6 text-white" />
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
+    <Card className="transition-colors hover:border-primary/50">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center">
+              <Github className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">{source.name}</CardTitle>
+                <Badge
+                  variant={source.type === 'official' ? 'default' : 'secondary'}
+                  className={`text-xs ${source.type === 'official' ? 'bg-emerald-500' : ''}`}
+                >
+                  {source.type}
+                </Badge>
+                {source.stars !== undefined && source.stars > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-amber-400">
+                    <Star className="w-3 h-3" />
+                    {source.stars}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {source.owner}/{source.repo} · {source.branch} · {source.path}
+              </p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground truncate">{source.name}</span>
-            <span className={`text-xs px-2 py-0.5 rounded border ${colors}`}>
-              {source.type}
-            </span>
-            {source.stars !== undefined && source.stars > 0 && (
-              <span className="flex items-center gap-1 text-xs text-amber-400">
-                <Star className="w-3 h-3" />
-                {source.stars}
-              </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              className="h-8 w-8"
+            >
+              <a
+                href={`https://github.com/${source.owner}/${source.repo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View on GitHub"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onRefresh}
+              disabled={refreshing}
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+            {!isOfficial && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-red-400 hover:text-red-500"
+                onClick={onDelete}
+                disabled={deleting}
+                title="Delete"
+              >
+                {deleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </Button>
             )}
           </div>
-
-          <div className="flex items-center gap-2 mt-1 text-sm text-foreground/90">
-            <span>{source.owner}/{source.repo}</span>
-            <span className="text-muted-foreground">·</span>
-            <span>{source.branch}</span>
-            <span className="text-muted-foreground">·</span>
-            <span>{source.path}</span>
-          </div>
-
-          {source.description && (
-            <p className="text-sm text-foreground/90-foreground mt-1 line-clamp-2">
-              {source.description}
-            </p>
-          )}
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <a
-            href={`https://github.com/${source.owner}/${source.repo}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-ghost btn-icon"
-            title="在 GitHub 上查看"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </a>
-          <button
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="btn btn-ghost btn-icon"
-            title="刷新"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
-          {!isOfficial && (
-            <button
-              onClick={onDelete}
-              disabled={deleting}
-              className="btn btn-ghost btn-icon text-red-400"
-              title="删除"
-            >
-              {deleting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+      </CardHeader>
+      {source.description && (
+        <CardContent>
+          <CardDescription>{source.description}</CardDescription>
+        </CardContent>
+      )}
+    </Card>
   )
 }
 
 // 添加源对话框
-function AddSourceModal({
+function AddSourceDialog({
   isOpen,
   onClose,
   onSubmit,
@@ -431,7 +459,6 @@ function AddSourceModal({
   }
 
   const handleGitHubUrlParse = (url: string) => {
-    // 解析 GitHub URL: https://github.com/owner/repo
     const match = url.match(/github\.com\/([^/]+)\/([^/]+)/)
     if (match) {
       const owner = match[1]
@@ -446,163 +473,126 @@ function AddSourceModal({
     }
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-primary border border-border rounded-xl shadow-xl w-full max-w-lg mx-4">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">添加 Skill 源</h2>
-          <button onClick={onClose} className="btn btn-ghost btn-icon">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Skill Source</DialogTitle>
+          <DialogDescription>
+            Add a GitHub repository as a skill source
+          </DialogDescription>
+        </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* GitHub URL 快速填充 */}
-          <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-1">
-              GitHub URL（快速填充）
-            </label>
-            <input
-              type="text"
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>GitHub URL (Quick Fill)</Label>
+            <Input
               placeholder="https://github.com/owner/repo"
-              className="input w-full"
               onChange={e => handleGitHubUrlParse(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground mt-1">粘贴 GitHub 仓库地址自动解析</p>
+            <p className="text-xs text-muted-foreground">Paste GitHub URL to auto-fill</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-1">
-                Owner <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label>Owner <span className="text-red-400">*</span></Label>
+              <Input
                 value={formData.owner}
                 onChange={e => setFormData(prev => ({ ...prev, owner: e.target.value }))}
                 placeholder="anthropics"
-                className="input w-full"
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-1">
-                Repo <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label>Repo <span className="text-red-400">*</span></Label>
+              <Input
                 value={formData.repo}
                 onChange={e => setFormData(prev => ({ ...prev, repo: e.target.value }))}
                 placeholder="skills"
-                className="input w-full"
                 required
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-1">
-                Branch
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label>Branch</Label>
+              <Input
                 value={formData.branch}
                 onChange={e => setFormData(prev => ({ ...prev, branch: e.target.value }))}
                 placeholder="main"
-                className="input w-full"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-1">
-                Skills 路径
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label>Skills Path</Label>
+              <Input
                 value={formData.path}
                 onChange={e => setFormData(prev => ({ ...prev, path: e.target.value }))}
                 placeholder="skills"
-                className="input w-full"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-1">
-                ID <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label>ID <span className="text-red-400">*</span></Label>
+              <Input
                 value={formData.id}
                 onChange={e => setFormData(prev => ({ ...prev, id: e.target.value }))}
                 placeholder="my-skills"
-                className="input w-full"
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-1">
-                名称 <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label>Name <span className="text-red-400">*</span></Label>
+              <Input
                 value={formData.name}
                 onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="My Skills"
-                className="input w-full"
                 required
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-1">
-              描述
-            </label>
-            <input
-              type="text"
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Input
               value={formData.description}
               onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Skills 仓库描述"
-              className="input w-full"
+              placeholder="Skills repository description"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-border">
-            <button type="button" onClick={onClose} className="btn btn-ghost">
-              取消
-            </button>
-            <button
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
               type="submit"
               disabled={submitting || !formData.id || !formData.owner || !formData.repo}
-              className="btn btn-primary"
             >
               {submitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 mr-2" />
               )}
-              添加源
-            </button>
-          </div>
+              Add Source
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 export default function SkillList() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabType>('installed')
+  const [activeTab, setActiveTab] = useState('installed')
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [installingId, setInstallingId] = useState<string | null>(null)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null)
-  const [showAddSourceModal, setShowAddSourceModal] = useState(false)
+  const [showAddSourceDialog, setShowAddSourceDialog] = useState(false)
 
   // React Query hooks - 本地 Skills
   const { data: skills = [], isLoading, isFetching, error, refetch } = useSkills()
@@ -666,7 +656,7 @@ export default function SkillList() {
   }
 
   const handleDeleteSource = (sourceId: string) => {
-    if (!confirm('确定要删除这个源吗？')) return
+    if (!confirm('Are you sure you want to delete this source?')) return
     setDeletingSourceId(sourceId)
     removeSource.mutate(sourceId, {
       onSettled: () => setDeletingSourceId(null),
@@ -675,7 +665,7 @@ export default function SkillList() {
 
   const handleAddSource = (data: AddSourceRequest) => {
     addSource.mutate(data, {
-      onSuccess: () => setShowAddSourceModal(false),
+      onSuccess: () => setShowAddSourceDialog(false),
     })
   }
 
@@ -710,7 +700,6 @@ export default function SkillList() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
       <header className="app-header">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate({ to: '/' })} className="btn btn-ghost btn-icon">
@@ -725,16 +714,16 @@ export default function SkillList() {
         <div className="flex items-center gap-2">
           {activeTab === 'installed' && (
             <>
-              {/* Filter */}
-              <select
-                value={filter}
-                onChange={e => setFilter(e.target.value as typeof filter)}
-                className="input py-2 px-3 text-sm"
-              >
-                <option value="all">All</option>
-                <option value="enabled">Enabled</option>
-                <option value="disabled">Disabled</option>
-              </select>
+              <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="enabled">Enabled</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
 
               <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
                 <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
@@ -745,11 +734,16 @@ export default function SkillList() {
               </button>
             </>
           )}
+          {activeTab === 'sources' && (
+            <Button onClick={() => setShowAddSourceDialog(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Source
+            </Button>
+          )}
         </div>
       </header>
 
       <div className="p-6">
-        {/* Error */}
         {error && (
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400" />
@@ -759,56 +753,32 @@ export default function SkillList() {
           </div>
         )}
 
-        {/* Description */}
-        <div className="mb-6">
+        <div className="mb-8">
           <h1 className="text-2xl font-bold text-foreground mb-2">Skills</h1>
-          <p className="text-foreground/90">
+          <p className="text-muted-foreground">
             Skills are reusable task templates that define how agents should handle specific tasks.
             Use commands like <code className="text-emerald-400">/commit</code> or{' '}
             <code className="text-emerald-400">/review-pr</code> to invoke them.
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 mb-6 border-b border-border">
-          <button
-            onClick={() => setActiveTab('installed')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'installed'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-muted-foreground hover:text-primary'
-            }`}
-          >
-            <Zap className="w-4 h-4 inline mr-2" />
-            已安装 ({skills.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('store')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'store'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-muted-foreground hover:text-primary'
-            }`}
-          >
-            <Store className="w-4 h-4 inline mr-2" />
-            商店 ({remoteSkills.filter(s => !s.is_installed).length})
-          </button>
-          <button
-            onClick={() => setActiveTab('sources')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'sources'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-muted-foreground hover:text-primary'
-            }`}
-          >
-            <Github className="w-4 h-4 inline mr-2" />
-            源 ({sources.length})
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="installed" className="gap-2">
+              <Zap className="w-4 h-4" />
+              Installed ({skills.length})
+            </TabsTrigger>
+            <TabsTrigger value="store" className="gap-2">
+              <Store className="w-4 h-4" />
+              Store ({remoteSkills.filter(s => !s.is_installed).length})
+            </TabsTrigger>
+            <TabsTrigger value="sources" className="gap-2">
+              <Github className="w-4 h-4" />
+              Sources ({sources.length})
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Tab Content */}
-        {activeTab === 'installed' && (
-          <>
+          <TabsContent value="installed">
             {isLoading ? (
               <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
@@ -816,19 +786,16 @@ export default function SkillList() {
             ) : filteredSkills.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <Zap className="w-16 h-16 text-muted-foreground mb-4" />
-                <p className="text-foreground/90 text-lg">No skills found</p>
+                <p className="text-muted-foreground text-lg">No skills found</p>
                 <p className="text-muted-foreground mt-2">
                   {filter !== 'all'
                     ? 'Try changing the filter or create a new skill'
                     : 'Create your first skill or install from the store'}
                 </p>
-                <button
-                  onClick={() => setActiveTab('store')}
-                  className="btn btn-primary mt-4"
-                >
-                  <Store className="w-4 h-4" />
-                  浏览商店
-                </button>
+                <Button className="mt-4" onClick={() => setActiveTab('store')}>
+                  <Store className="w-4 h-4 mr-2" />
+                  Browse Store
+                </Button>
               </div>
             ) : (
               <div className="space-y-8">
@@ -836,14 +803,14 @@ export default function SkillList() {
                   <div key={category}>
                     <div className="flex items-center gap-3 mb-4">
                       <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${categoryColors[category]}`}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${categoryBgColors[category]}`}
                       >
                         {categoryIcons[category]}
                       </div>
                       <h2 className="text-lg font-semibold text-foreground capitalize">{category}</h2>
-                      <span className="text-sm text-foreground/90">({groupedSkills[category].length})</span>
+                      <span className="text-sm text-muted-foreground">({groupedSkills[category].length})</span>
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                       {groupedSkills[category].map(skill => (
                         <SkillCard
                           key={skill.id}
@@ -860,11 +827,9 @@ export default function SkillList() {
                 ))}
               </div>
             )}
-          </>
-        )}
+          </TabsContent>
 
-        {activeTab === 'store' && (
-          <>
+          <TabsContent value="store">
             {loadingRemote ? (
               <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
@@ -872,9 +837,9 @@ export default function SkillList() {
             ) : remoteSkills.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <Store className="w-16 h-16 text-muted-foreground mb-4" />
-                <p className="text-foreground/90 text-lg">商店暂无 Skills</p>
+                <p className="text-muted-foreground text-lg">No skills in store</p>
                 <p className="text-muted-foreground mt-2">
-                  请检查网络连接或添加新的 Skill 源
+                  Check your network connection or add a new skill source
                 </p>
               </div>
             ) : (
@@ -890,12 +855,12 @@ export default function SkillList() {
                         <h2 className="text-lg font-semibold text-foreground">
                           {source?.name || sourceId}
                         </h2>
-                        <span className="text-sm text-foreground/90">({sourceSkills.length})</span>
+                        <span className="text-sm text-muted-foreground">({sourceSkills.length})</span>
                         {fetchingRemote && (
                           <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
                         )}
                       </div>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {sourceSkills.map(skill => (
                           <RemoteSkillCard
                             key={`${skill.source_id}-${skill.id}`}
@@ -910,22 +875,9 @@ export default function SkillList() {
                 })}
               </div>
             )}
-          </>
-        )}
+          </TabsContent>
 
-        {activeTab === 'sources' && (
-          <>
-            {/* 添加源按钮 */}
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => setShowAddSourceModal(true)}
-                className="btn btn-primary"
-              >
-                <Plus className="w-4 h-4" />
-                添加源
-              </button>
-            </div>
-
+          <TabsContent value="sources">
             {loadingSources ? (
               <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
@@ -933,17 +885,14 @@ export default function SkillList() {
             ) : sources.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <Github className="w-16 h-16 text-muted-foreground mb-4" />
-                <p className="text-foreground/90 text-lg">暂无 Skill 源</p>
+                <p className="text-muted-foreground text-lg">No skill sources</p>
                 <p className="text-muted-foreground mt-2">
-                  添加 GitHub 仓库作为 Skill 源
+                  Add a GitHub repository as a skill source
                 </p>
-                <button
-                  onClick={() => setShowAddSourceModal(true)}
-                  className="btn btn-primary mt-4"
-                >
-                  <Plus className="w-4 h-4" />
-                  添加源
-                </button>
+                <Button className="mt-4" onClick={() => setShowAddSourceDialog(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Source
+                </Button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -959,14 +908,13 @@ export default function SkillList() {
                 ))}
               </div>
             )}
-          </>
-        )}
+          </TabsContent>
+        </Tabs>
       </div>
 
-      {/* 添加源对话框 */}
-      <AddSourceModal
-        isOpen={showAddSourceModal}
-        onClose={() => setShowAddSourceModal(false)}
+      <AddSourceDialog
+        isOpen={showAddSourceDialog}
+        onClose={() => setShowAddSourceDialog(false)}
         onSubmit={handleAddSource}
         submitting={addSource.isPending}
       />

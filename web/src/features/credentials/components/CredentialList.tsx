@@ -16,11 +16,41 @@ import {
   Shield,
   Eye,
   EyeOff,
+  MoreVertical,
+  Play,
 } from 'lucide-react'
 import type { Credential, CredentialProvider, CredentialScope } from '@/types'
 import { useCredentials, useDeleteCredential } from '@/hooks'
 import { api } from '@/services/api'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
 import CreateCredentialModal from './CreateCredentialModal'
 
 // Provider icon mapping
@@ -32,25 +62,18 @@ const providerIcons: Record<CredentialProvider, React.ReactNode> = {
 }
 
 // Provider color mapping
-const providerColors: Record<CredentialProvider, string> = {
-  anthropic: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  openai: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  github: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  custom: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+const providerBgColors: Record<CredentialProvider, string> = {
+  anthropic: 'bg-orange-500/20 text-orange-400',
+  openai: 'bg-emerald-500/20 text-emerald-400',
+  github: 'bg-purple-500/20 text-purple-400',
+  custom: 'bg-gray-500/20 text-gray-400',
 }
 
 // Scope icon mapping
 const scopeIcons: Record<CredentialScope, React.ReactNode> = {
-  global: <Globe className="w-4 h-4" />,
-  profile: <User className="w-4 h-4" />,
-  session: <Monitor className="w-4 h-4" />,
-}
-
-// Scope color mapping
-const scopeColors: Record<CredentialScope, string> = {
-  global: 'bg-blue-500/20 text-blue-400',
-  profile: 'bg-purple-500/20 text-purple-400',
-  session: 'bg-amber-500/20 text-amber-400',
+  global: <Globe className="w-3 h-3" />,
+  profile: <User className="w-3 h-3" />,
+  session: <Monitor className="w-3 h-3" />,
 }
 
 // Credential Card component
@@ -66,113 +89,116 @@ function CredentialCard({
   isVerifying: boolean
 }) {
   const [showValue, setShowValue] = useState(false)
-  const colors = providerColors[credential.provider] || providerColors.custom
+  const bgColor = providerBgColors[credential.provider] || providerBgColors.custom
   const icon = providerIcons[credential.provider] || providerIcons.custom
-  const scopeIcon = scopeIcons[credential.scope] || scopeIcons.global
-  const scopeColor = scopeColors[credential.scope] || scopeColors.global
 
   return (
-    <div className="card p-4 group transition-colors">
-      <div className="flex items-start gap-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors}`}>
-          {icon}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground truncate">{credential.name}</span>
-            {credential.is_valid ? (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
-                <CheckCircle className="w-3 h-3" />
-                Valid
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400">
-                <XCircle className="w-3 h-3" />
-                Invalid
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 mt-1">
-            <Shield className="w-3 h-3 text-muted-foreground" />
-            <code className="text-sm text-muted-foreground font-mono">
-              {showValue ? credential.value_masked : '••••••••••••'}
-            </code>
-            <button
-              onClick={e => {
-                e.stopPropagation()
-                setShowValue(!showValue)
-              }}
-              className="p-1 hover:bg-secondary rounded"
-            >
-              {showValue ? (
-                <EyeOff className="w-3 h-3 text-muted-foreground" />
-              ) : (
-                <Eye className="w-3 h-3 text-muted-foreground" />
-              )}
-            </button>
-          </div>
-
-          {credential.env_var && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted-foreground">ENV:</span>
-              <code className="text-xs text-amber-400 font-mono">{credential.env_var}</code>
+    <Card className="transition-colors hover:border-primary/50">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bgColor} flex items-center justify-center`}>
+              {icon}
             </div>
-          )}
-
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <span className={`text-xs px-2 py-0.5 rounded border ${colors}`}>
-              {credential.provider}
-            </span>
-            <span className={`text-xs px-2 py-0.5 rounded ${scopeColor} flex items-center gap-1`}>
-              {scopeIcon}
-              {credential.scope}
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
-              {credential.type}
-            </span>
-            {credential.expires_at && (
-              <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">
-                Expires: {new Date(credential.expires_at).toLocaleDateString()}
-              </span>
-            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">{credential.name}</CardTitle>
+                {credential.is_valid ? (
+                  <Badge variant="default" className="bg-green-500 text-xs">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Valid
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="text-xs">
+                    <XCircle className="w-3 h-3 mr-1" />
+                    Invalid
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Shield className="w-3 h-3 text-muted-foreground" />
+                <code className="text-xs text-muted-foreground font-mono">
+                  {showValue ? credential.value_masked : '••••••••••••'}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowValue(!showValue)
+                  }}
+                >
+                  {showValue ? (
+                    <EyeOff className="w-3 h-3" />
+                  ) : (
+                    <Eye className="w-3 h-3" />
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onVerify()
+                }}
+                disabled={isVerifying}
+              >
+                {isVerifying ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 mr-2" />
+                )}
+                Verify
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete()
+                }}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-
-        <div
-          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onVerify()
-            }}
-            className="btn btn-ghost btn-icon"
-            title="Verify Credential"
-            disabled={isVerifying}
-          >
-            {isVerifying ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <CheckCircle className="w-4 h-4" />
-            )}
-          </button>
-
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onDelete()
-            }}
-            className="btn btn-ghost btn-icon text-red-400"
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+      </CardHeader>
+      <CardContent>
+        {credential.env_var && (
+          <CardDescription className="mb-3">
+            ENV: <code className="text-amber-400 font-mono">{credential.env_var}</code>
+          </CardDescription>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className="text-xs capitalize">
+            {credential.provider}
+          </Badge>
+          <Badge variant="outline" className="text-xs capitalize">
+            {scopeIcons[credential.scope]}
+            <span className="ml-1">{credential.scope}</span>
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {credential.type}
+          </Badge>
+          {credential.expires_at && (
+            <Badge variant="outline" className="text-xs text-amber-600">
+              Expires: {new Date(credential.expires_at).toLocaleDateString()}
+            </Badge>
+          )}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -240,28 +266,30 @@ export default function CredentialList() {
         </div>
 
         <div className="flex items-center gap-2">
-          <select
-            value={scopeFilter}
-            onChange={e => setScopeFilter(e.target.value as typeof scopeFilter)}
-            className="input py-2 px-3 text-sm"
-          >
-            <option value="all">All Scopes</option>
-            <option value="global">Global</option>
-            <option value="profile">Profile</option>
-            <option value="session">Session</option>
-          </select>
+          <Select value={scopeFilter} onValueChange={(v) => setScopeFilter(v as typeof scopeFilter)}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Scopes</SelectItem>
+              <SelectItem value="global">Global</SelectItem>
+              <SelectItem value="profile">Profile</SelectItem>
+              <SelectItem value="session">Session</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <select
-            value={providerFilter}
-            onChange={e => setProviderFilter(e.target.value as typeof providerFilter)}
-            className="input py-2 px-3 text-sm"
-          >
-            <option value="all">All Providers</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="openai">OpenAI</option>
-            <option value="github">GitHub</option>
-            <option value="custom">Custom</option>
-          </select>
+          <Select value={providerFilter} onValueChange={(v) => setProviderFilter(v as typeof providerFilter)}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Providers</SelectItem>
+              <SelectItem value="anthropic">Anthropic</SelectItem>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="github">GitHub</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
 
           <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
@@ -291,16 +319,14 @@ export default function CredentialList() {
           </p>
         </div>
 
-        <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
-          <Shield className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-amber-400 font-medium">Security Notice</p>
-            <p className="text-sm text-amber-400/80 mt-1">
-              Credentials are stored with AES-256 encryption. Only masked values are shown in the
-              UI. The actual values are only decrypted when injected into agent sessions.
-            </p>
-          </div>
-        </div>
+        <Alert className="mb-6 border-amber-500/30 bg-amber-500/10">
+          <Shield className="w-4 h-4 text-amber-400" />
+          <AlertTitle className="text-amber-400">Security Notice</AlertTitle>
+          <AlertDescription className="text-amber-400/80">
+            Credentials are stored with AES-256 encryption. Only masked values are shown in the
+            UI. The actual values are only decrypted when injected into agent sessions.
+          </AlertDescription>
+        </Alert>
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -309,12 +335,16 @@ export default function CredentialList() {
         ) : filteredCredentials.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Key className="w-16 h-16 text-muted-foreground mb-4" />
-            <p className="text-foreground/90 text-lg">No credentials found</p>
+            <p className="text-muted-foreground text-lg">No credentials found</p>
             <p className="text-muted-foreground mt-2">
               {scopeFilter !== 'all' || providerFilter !== 'all'
                 ? 'Try changing the filters or add a new credential'
                 : 'Add your first API key to get started'}
             </p>
+            <Button className="mt-4" onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Credential
+            </Button>
           </div>
         ) : (
           <div className="space-y-8">
@@ -322,14 +352,14 @@ export default function CredentialList() {
               <div key={provider}>
                 <div className="flex items-center gap-3 mb-4">
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${providerColors[provider]}`}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${providerBgColors[provider]}`}
                   >
                     {providerIcons[provider]}
                   </div>
                   <h2 className="text-lg font-semibold text-foreground capitalize">{provider}</h2>
                   <span className="text-sm text-muted-foreground">({groupedCredentials[provider].length})</span>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {groupedCredentials[provider].map(credential => (
                     <CredentialCard
                       key={credential.id}

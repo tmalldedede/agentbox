@@ -4,14 +4,9 @@ import {
   FileX,
   HelpCircle,
   Lock,
-  Bell,
   Palette,
   ServerOff,
-  Settings,
-  Wrench,
-  UserCog,
   UserX,
-  Terminal,
   Server,
   Zap,
   KeyRound,
@@ -20,9 +15,14 @@ import {
   Layers,
   Construction,
   Command,
-  Play,
-  ListTodo,
-  Code,
+  History,
+  Bot,
+  Store,
+  FlaskConical,
+  Settings,
+  UserCog,
+  Wrench,
+  Bell,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -41,32 +41,32 @@ export const sidebarData: SidebarData = {
   ],
   navGroups: [
     {
-      title: 'Workspace',
+      title: 'Main',
       items: [
         {
-          title: 'Quick Start',
-          url: '/',
-          icon: Play,
+          title: 'Agents',
+          url: '/agents',
+          icon: Bot,
         },
         {
-          title: 'Sessions',
-          url: '/sessions',
-          icon: Terminal,
+          title: 'History',
+          url: '/history',
+          icon: History,
+        },
+        {
+          title: 'API Playground',
+          url: '/api-playground',
+          icon: FlaskConical,
         },
         {
           title: 'Profiles',
           url: '/profiles',
           icon: Layers,
         },
-        {
-          title: 'Tasks',
-          url: '/tasks',
-          icon: ListTodo,
-        },
       ],
     },
     {
-      title: 'Admin',
+      title: 'Resources',
       items: [
         {
           title: 'MCP Servers',
@@ -84,6 +84,16 @@ export const sidebarData: SidebarData = {
           icon: KeyRound,
         },
         {
+          title: 'Skill Store',
+          url: '/skill-store',
+          icon: Store,
+        },
+      ],
+    },
+    {
+      title: 'Settings',
+      items: [
+        {
           title: 'Images',
           url: '/images',
           icon: Image,
@@ -94,14 +104,14 @@ export const sidebarData: SidebarData = {
           icon: Webhook,
         },
         {
-          title: 'API Playground',
-          url: '/api-playground',
-          icon: Code,
-        },
-        {
           title: 'System',
           url: '/system',
           icon: Monitor,
+        },
+        {
+          title: 'Appearance',
+          url: '/settings/appearance',
+          icon: Palette,
         },
       ],
     },

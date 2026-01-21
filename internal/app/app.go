@@ -15,12 +15,14 @@ import (
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/credential"
+	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/logger"
 	"github.com/tmalldedede/agentbox/internal/mcp"
 	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/session"
 	"github.com/tmalldedede/agentbox/internal/skill"
+	"github.com/tmalldedede/agentbox/internal/smartagent"
 	"github.com/tmalldedede/agentbox/internal/task"
 	"github.com/tmalldedede/agentbox/internal/webhook"
 )
@@ -50,6 +52,12 @@ type App struct {
 	Skill      *skill.Manager
 	Credential *credential.Manager
 	Webhook    *webhook.Manager
+
+	// 智能体管理
+	SmartAgent *smartagent.Manager
+
+	// 执行历史
+	History *history.Manager
 
 	// 内部状态
 	taskStore *task.SQLiteStore
@@ -142,6 +150,9 @@ func (a *App) initialize() error {
 	// 设置 Credential Manager 到 Session Manager
 	a.Session.SetCredentialManager(a.Credential)
 
+	// 设置 Skill Manager 到 Session Manager
+	a.Session.SetSkillManager(a.Skill)
+
 	// 9. 初始化 Task Store (SQLite)
 	taskDBPath := filepath.Join(a.Config.Container.WorkspaceBase, "agentbox.db")
 	a.taskStore, err = task.NewSQLiteStore(taskDBPath)
@@ -161,6 +172,16 @@ func (a *App) initialize() error {
 	}
 	webhooks, _ := a.Webhook.List()
 	log.Info("loaded webhooks", "count", len(webhooks))
+
+	// 12. 初始化 SmartAgent Manager
+	smartAgentDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "agents")
+	a.SmartAgent = smartagent.NewManager(smartAgentDataDir, a.Profile)
+	log.Info("loaded smart agents", "count", len(a.SmartAgent.List()))
+
+	// 13. 初始化 History Manager
+	historyStore := history.NewMemoryStore()
+	a.History = history.NewManager(historyStore)
+	log.Info("history manager initialized")
 
 	return nil
 }

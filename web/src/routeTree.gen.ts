@@ -30,16 +30,19 @@ import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTasksIndexRouteImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
 import { Route as AuthenticatedSkillsIndexRouteImport } from './routes/_authenticated/skills/index'
+import { Route as AuthenticatedSkillStoreIndexRouteImport } from './routes/_authenticated/skill-store/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSessionsIndexRouteImport } from './routes/_authenticated/sessions/index'
 import { Route as AuthenticatedProfilesIndexRouteImport } from './routes/_authenticated/profiles/index'
 import { Route as AuthenticatedMcpServersIndexRouteImport } from './routes/_authenticated/mcp-servers/index'
 import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenticated/images/index'
+import { Route as AuthenticatedHistoryIndexRouteImport } from './routes/_authenticated/history/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedCredentialsIndexRouteImport } from './routes/_authenticated/credentials/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedApiPlaygroundIndexRouteImport } from './routes/_authenticated/api-playground/index'
+import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents/index'
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
@@ -55,6 +58,8 @@ import { Route as AuthenticatedProfilesIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedMcpServersNewRouteImport } from './routes/_authenticated/mcp-servers/new'
 import { Route as AuthenticatedMcpServersIdRouteImport } from './routes/_authenticated/mcp-servers/$id'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedAgentsNewRouteImport } from './routes/_authenticated/agents/new'
+import { Route as AuthenticatedAgentsIdRouteImport } from './routes/_authenticated/agents/$id'
 
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
   id: '/clerk',
@@ -162,6 +167,12 @@ const AuthenticatedSkillsIndexRoute =
     path: '/skills/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSkillStoreIndexRoute =
+  AuthenticatedSkillStoreIndexRouteImport.update({
+    id: '/skill-store/',
+    path: '/skill-store/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
     id: '/',
@@ -192,6 +203,12 @@ const AuthenticatedImagesIndexRoute =
     path: '/images/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedHistoryIndexRoute =
+  AuthenticatedHistoryIndexRouteImport.update({
+    id: '/history/',
+    path: '/history/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexRouteImport.update({
     id: '/help-center/',
@@ -218,6 +235,12 @@ const AuthenticatedApiPlaygroundIndexRoute =
   AuthenticatedApiPlaygroundIndexRouteImport.update({
     id: '/api-playground/',
     path: '/api-playground/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAgentsIndexRoute =
+  AuthenticatedAgentsIndexRouteImport.update({
+    id: '/agents/',
+    path: '/agents/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const ClerkAuthenticatedUserManagementRoute =
@@ -304,6 +327,16 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAgentsNewRoute = AuthenticatedAgentsNewRouteImport.update({
+  id: '/agents/new',
+  path: '/agents/new',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAgentsIdRoute = AuthenticatedAgentsIdRouteImport.update({
+  id: '/agents/$id',
+  path: '/agents/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -319,6 +352,8 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
+  '/agents/$id': typeof AuthenticatedAgentsIdRoute
+  '/agents/new': typeof AuthenticatedAgentsNewRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
@@ -334,16 +369,19 @@ export interface FileRoutesByFullPath {
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/agents': typeof AuthenticatedAgentsIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/credentials': typeof AuthenticatedCredentialsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/mcp-servers': typeof AuthenticatedMcpServersIndexRoute
   '/profiles': typeof AuthenticatedProfilesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/skill-store': typeof AuthenticatedSkillStoreIndexRoute
   '/skills': typeof AuthenticatedSkillsIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
@@ -363,6 +401,8 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
+  '/agents/$id': typeof AuthenticatedAgentsIdRoute
+  '/agents/new': typeof AuthenticatedAgentsNewRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
@@ -378,16 +418,19 @@ export interface FileRoutesByTo {
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/agents': typeof AuthenticatedAgentsIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/credentials': typeof AuthenticatedCredentialsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/mcp-servers': typeof AuthenticatedMcpServersIndexRoute
   '/profiles': typeof AuthenticatedProfilesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
+  '/skill-store': typeof AuthenticatedSkillStoreIndexRoute
   '/skills': typeof AuthenticatedSkillsIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
@@ -412,6 +455,8 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/agents/$id': typeof AuthenticatedAgentsIdRoute
+  '/_authenticated/agents/new': typeof AuthenticatedAgentsNewRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/_authenticated/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
@@ -427,16 +472,19 @@ export interface FileRoutesById {
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/_authenticated/api-playground/': typeof AuthenticatedApiPlaygroundIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/credentials/': typeof AuthenticatedCredentialsIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/history/': typeof AuthenticatedHistoryIndexRoute
   '/_authenticated/images/': typeof AuthenticatedImagesIndexRoute
   '/_authenticated/mcp-servers/': typeof AuthenticatedMcpServersIndexRoute
   '/_authenticated/profiles/': typeof AuthenticatedProfilesIndexRoute
   '/_authenticated/sessions/': typeof AuthenticatedSessionsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/_authenticated/skill-store/': typeof AuthenticatedSkillStoreIndexRoute
   '/_authenticated/skills/': typeof AuthenticatedSkillsIndexRoute
   '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
@@ -459,6 +507,8 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/'
+    | '/agents/$id'
+    | '/agents/new'
     | '/errors/$error'
     | '/mcp-servers/$id'
     | '/mcp-servers/new'
@@ -474,16 +524,19 @@ export interface FileRouteTypes {
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
+    | '/agents'
     | '/api-playground'
     | '/apps'
     | '/chats'
     | '/credentials'
     | '/help-center'
+    | '/history'
     | '/images'
     | '/mcp-servers'
     | '/profiles'
     | '/sessions'
     | '/settings/'
+    | '/skill-store'
     | '/skills'
     | '/system'
     | '/tasks'
@@ -503,6 +556,8 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/'
+    | '/agents/$id'
+    | '/agents/new'
     | '/errors/$error'
     | '/mcp-servers/$id'
     | '/mcp-servers/new'
@@ -518,16 +573,19 @@ export interface FileRouteTypes {
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
+    | '/agents'
     | '/api-playground'
     | '/apps'
     | '/chats'
     | '/credentials'
     | '/help-center'
+    | '/history'
     | '/images'
     | '/mcp-servers'
     | '/profiles'
     | '/sessions'
     | '/settings'
+    | '/skill-store'
     | '/skills'
     | '/system'
     | '/tasks'
@@ -551,6 +609,8 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/'
+    | '/_authenticated/agents/$id'
+    | '/_authenticated/agents/new'
     | '/_authenticated/errors/$error'
     | '/_authenticated/mcp-servers/$id'
     | '/_authenticated/mcp-servers/new'
@@ -566,16 +626,19 @@ export interface FileRouteTypes {
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
     | '/clerk/_authenticated/user-management'
+    | '/_authenticated/agents/'
     | '/_authenticated/api-playground/'
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
     | '/_authenticated/credentials/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/history/'
     | '/_authenticated/images/'
     | '/_authenticated/mcp-servers/'
     | '/_authenticated/profiles/'
     | '/_authenticated/sessions/'
     | '/_authenticated/settings/'
+    | '/_authenticated/skill-store/'
     | '/_authenticated/skills/'
     | '/_authenticated/system/'
     | '/_authenticated/tasks/'
@@ -747,6 +810,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSkillsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/skill-store/': {
+      id: '/_authenticated/skill-store/'
+      path: '/skill-store'
+      fullPath: '/skill-store'
+      preLoaderRoute: typeof AuthenticatedSkillStoreIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
@@ -782,6 +852,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedImagesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/history/': {
+      id: '/_authenticated/history/'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof AuthenticatedHistoryIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
@@ -815,6 +892,13 @@ declare module '@tanstack/react-router' {
       path: '/api-playground'
       fullPath: '/api-playground'
       preLoaderRoute: typeof AuthenticatedApiPlaygroundIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/agents/': {
+      id: '/_authenticated/agents/'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AuthenticatedAgentsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/clerk/_authenticated/user-management': {
@@ -922,6 +1006,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/agents/new': {
+      id: '/_authenticated/agents/new'
+      path: '/agents/new'
+      fullPath: '/agents/new'
+      preLoaderRoute: typeof AuthenticatedAgentsNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/agents/$id': {
+      id: '/_authenticated/agents/$id'
+      path: '/agents/$id'
+      fullPath: '/agents/$id'
+      preLoaderRoute: typeof AuthenticatedAgentsIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -951,6 +1049,8 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedAgentsIdRoute: typeof AuthenticatedAgentsIdRoute
+  AuthenticatedAgentsNewRoute: typeof AuthenticatedAgentsNewRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedMcpServersIdRoute: typeof AuthenticatedMcpServersIdRoute
   AuthenticatedMcpServersNewRoute: typeof AuthenticatedMcpServersNewRoute
@@ -959,15 +1059,18 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSessionsIdRoute: typeof AuthenticatedSessionsIdRoute
   AuthenticatedSkillsIdRoute: typeof AuthenticatedSkillsIdRoute
   AuthenticatedSkillsNewRoute: typeof AuthenticatedSkillsNewRoute
+  AuthenticatedAgentsIndexRoute: typeof AuthenticatedAgentsIndexRoute
   AuthenticatedApiPlaygroundIndexRoute: typeof AuthenticatedApiPlaygroundIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCredentialsIndexRoute: typeof AuthenticatedCredentialsIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
+  AuthenticatedHistoryIndexRoute: typeof AuthenticatedHistoryIndexRoute
   AuthenticatedImagesIndexRoute: typeof AuthenticatedImagesIndexRoute
   AuthenticatedMcpServersIndexRoute: typeof AuthenticatedMcpServersIndexRoute
   AuthenticatedProfilesIndexRoute: typeof AuthenticatedProfilesIndexRoute
   AuthenticatedSessionsIndexRoute: typeof AuthenticatedSessionsIndexRoute
+  AuthenticatedSkillStoreIndexRoute: typeof AuthenticatedSkillStoreIndexRoute
   AuthenticatedSkillsIndexRoute: typeof AuthenticatedSkillsIndexRoute
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
@@ -978,6 +1081,8 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedAgentsIdRoute: AuthenticatedAgentsIdRoute,
+  AuthenticatedAgentsNewRoute: AuthenticatedAgentsNewRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedMcpServersIdRoute: AuthenticatedMcpServersIdRoute,
   AuthenticatedMcpServersNewRoute: AuthenticatedMcpServersNewRoute,
@@ -986,15 +1091,18 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSessionsIdRoute: AuthenticatedSessionsIdRoute,
   AuthenticatedSkillsIdRoute: AuthenticatedSkillsIdRoute,
   AuthenticatedSkillsNewRoute: AuthenticatedSkillsNewRoute,
+  AuthenticatedAgentsIndexRoute: AuthenticatedAgentsIndexRoute,
   AuthenticatedApiPlaygroundIndexRoute: AuthenticatedApiPlaygroundIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCredentialsIndexRoute: AuthenticatedCredentialsIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
+  AuthenticatedHistoryIndexRoute: AuthenticatedHistoryIndexRoute,
   AuthenticatedImagesIndexRoute: AuthenticatedImagesIndexRoute,
   AuthenticatedMcpServersIndexRoute: AuthenticatedMcpServersIndexRoute,
   AuthenticatedProfilesIndexRoute: AuthenticatedProfilesIndexRoute,
   AuthenticatedSessionsIndexRoute: AuthenticatedSessionsIndexRoute,
+  AuthenticatedSkillStoreIndexRoute: AuthenticatedSkillStoreIndexRoute,
   AuthenticatedSkillsIndexRoute: AuthenticatedSkillsIndexRoute,
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,

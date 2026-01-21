@@ -614,3 +614,137 @@ export interface UpdateProviderRequest {
   default_model?: string
   default_models?: string[]
 }
+
+// SmartAgent Types (API-exposed agents)
+export type SmartAgentStatus = 'active' | 'inactive' | 'error'
+export type SmartAgentAPIAccess = 'public' | 'api_key' | 'private'
+
+export interface SmartAgent {
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  profile_id: string
+  system_prompt?: string
+  env?: Record<string, string>
+  api_access: SmartAgentAPIAccess
+  rate_limit?: number
+  webhook_url?: string
+  status: SmartAgentStatus
+  created_at: string
+  updated_at: string
+  created_by?: string
+}
+
+export interface CreateSmartAgentRequest {
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  profile_id: string
+  system_prompt?: string
+  env?: Record<string, string>
+  api_access?: SmartAgentAPIAccess
+  rate_limit?: number
+  webhook_url?: string
+}
+
+export interface UpdateSmartAgentRequest {
+  name?: string
+  description?: string
+  icon?: string
+  profile_id?: string
+  system_prompt?: string
+  env?: Record<string, string>
+  api_access?: SmartAgentAPIAccess
+  rate_limit?: number
+  webhook_url?: string
+  status?: SmartAgentStatus
+}
+
+export interface RunSmartAgentRequest {
+  prompt: string
+  workspace?: string
+  input?: {
+    files?: string[]
+    text?: string
+  }
+  options?: {
+    max_turns?: number
+    timeout?: number
+    stream?: boolean
+    async?: boolean
+  }
+  metadata?: Record<string, string>
+}
+
+export interface SmartAgentRunResult {
+  run_id: string
+  agent_id: string
+  agent_name: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  output?: string
+  error?: string
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    duration_ms?: number
+    cost_usd?: number
+  }
+  started_at: string
+  ended_at?: string
+}
+
+// History Types (Unified Execution History)
+export type HistorySourceType = 'session' | 'agent'
+export type HistoryStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface HistoryEntry {
+  id: string
+  source_type: HistorySourceType
+  source_id: string
+  source_name: string
+  profile_id?: string
+  profile_name?: string
+  engine?: string
+  prompt: string
+  status: HistoryStatus
+  output?: string
+  error?: string
+  exit_code: number
+  usage?: {
+    input_tokens: number
+    cached_input_tokens?: number
+    output_tokens: number
+  }
+  metadata?: Record<string, string>
+  started_at: string
+  ended_at?: string
+}
+
+export interface HistoryStats {
+  total_executions: number
+  completed_count: number
+  failed_count: number
+  total_input_tokens: number
+  total_output_tokens: number
+  by_source: Record<string, number>
+  by_engine: Record<string, number>
+}
+
+export interface HistoryListResponse {
+  entries: HistoryEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface HistoryFilter {
+  source_type?: HistorySourceType
+  source_id?: string
+  profile_id?: string
+  engine?: string
+  status?: HistoryStatus
+  limit?: number
+  offset?: number
+}

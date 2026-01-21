@@ -1,7 +1,29 @@
 import { useState } from 'react'
-import { X, Key, Loader2, Shield, AlertCircle } from 'lucide-react'
+import { Key, Loader2, Shield, AlertCircle } from 'lucide-react'
 import type { CreateCredentialRequest, CredentialProvider, CredentialScope, CredentialType } from '@/types'
 import { api } from '@/services/api'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Alert,
+  AlertDescription,
+} from '@/components/ui/alert'
 
 interface Props {
   onClose: () => void
@@ -92,39 +114,32 @@ export default function CreateCredentialModal({ onClose, onCreated }: Props) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal max-w-lg" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="modal-header flex items-center justify-between">
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
               <Key className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-foreground">New Credential</h2>
-              <p className="text-sm text-muted-foreground">Add an API key or token</p>
+              <DialogTitle>New Credential</DialogTitle>
+              <DialogDescription>Add an API key or token</DialogDescription>
             </div>
           </div>
-          <button onClick={onClose} className="btn btn-ghost btn-icon">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        {/* Body */}
         <form onSubmit={handleSubmit}>
-          <div className="modal-body space-y-5">
+          <div className="space-y-5 py-4">
             {error && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+              <Alert variant="destructive">
                 <AlertCircle className="w-4 h-4" />
-                {error}
-              </div>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
             {/* Provider Selection */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-3">
-                Provider
-              </label>
+            <div className="space-y-3">
+              <Label>Provider</Label>
               <div className="grid grid-cols-4 gap-2">
                 {providerOptions.map(opt => (
                   <button
@@ -145,118 +160,108 @@ export default function CreateCredentialModal({ onClose, onCreated }: Props) {
             </div>
 
             {/* Name */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-2">
-                Name
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g., Production API Key"
-                className="input"
                 autoFocus
               />
               {name && (
-                <p className="text-xs text-muted-foreground mt-1.5">
+                <p className="text-xs text-muted-foreground">
                   ID: <code className="text-amber-400">{generateId(name)}</code>
                 </p>
               )}
             </div>
 
             {/* Type */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-2">
-                Type
-              </label>
-              <select
-                value={type}
-                onChange={e => setType(e.target.value as CredentialType)}
-                className="input"
-              >
-                <option value="api_key">API Key</option>
-                <option value="token">Token</option>
-                <option value="oauth">OAuth</option>
-              </select>
+            <div className="space-y-2">
+              <Label htmlFor="type">Type</Label>
+              <Select value={type} onValueChange={(v) => setType(v as CredentialType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="api_key">API Key</SelectItem>
+                  <SelectItem value="token">Token</SelectItem>
+                  <SelectItem value="oauth">OAuth</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Value */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-2">
-                Value
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="value">Value</Label>
+              <Input
+                id="value"
                 type="password"
                 value={value}
                 onChange={e => setValue(e.target.value)}
                 placeholder="sk-..."
-                className="input font-mono"
+                className="font-mono"
               />
-              <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Shield className="w-3 h-3" />
                 Value will be encrypted with AES-256
               </p>
             </div>
 
             {/* Scope */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-2">
-                Scope
-              </label>
-              <select
-                value={scope}
-                onChange={e => setScope(e.target.value as CredentialScope)}
-                className="input"
-              >
-                <option value="global">Global - Available to all sessions</option>
-                <option value="profile">Profile - Tied to specific profile</option>
-                <option value="session">Session - Single session only</option>
-              </select>
+            <div className="space-y-2">
+              <Label htmlFor="scope">Scope</Label>
+              <Select value={scope} onValueChange={(v) => setScope(v as CredentialScope)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="global">Global - Available to all sessions</SelectItem>
+                  <SelectItem value="profile">Profile - Tied to specific profile</SelectItem>
+                  <SelectItem value="session">Session - Single session only</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Env Var */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/90 mb-2">
-                Environment Variable (Optional)
-              </label>
-              <input
-                type="text"
+            <div className="space-y-2">
+              <Label htmlFor="envVar">Environment Variable (Optional)</Label>
+              <Input
+                id="envVar"
                 value={envVar}
                 onChange={e => setEnvVar(e.target.value)}
                 placeholder="e.g., ANTHROPIC_API_KEY"
-                className="input font-mono"
+                className="font-mono"
               />
-              <p className="text-xs text-muted-foreground mt-1.5">
+              <p className="text-xs text-muted-foreground">
                 Injected as this env var in agent sessions
               </p>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary">
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={loading || !name.trim() || !value.trim()}
-              className="btn btn-primary"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Creating...
                 </>
               ) : (
                 <>
-                  <Key className="w-4 h-4" />
+                  <Key className="w-4 h-4 mr-2" />
                   Create Credential
                 </>
               )}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -39,6 +39,15 @@ import type {
   UpdateWebhookRequest,
   Task,
   CreateTaskRequest,
+  SmartAgent,
+  CreateSmartAgentRequest,
+  UpdateSmartAgentRequest,
+  RunSmartAgentRequest,
+  SmartAgentRunResult,
+  HistoryEntry,
+  HistoryStats,
+  HistoryListResponse,
+  HistoryFilter,
 } from '../types'
 
 const API_BASE = '/api/v1'
@@ -68,8 +77,37 @@ export const api = {
   // Health
   health: () => request<{ status: string; version: string }>(`${API_BASE}/health`),
 
-  // Agents (只读)
-  listAgents: () => request<Agent[]>(`${API_BASE}/agents`),
+  // Engines (只读) - 底层引擎适配器列表
+  listEngines: () => request<Agent[]>(`${API_BASE}/engines`),
+  listAgents: () => request<Agent[]>(`${API_BASE}/engines`), // Alias for backward compatibility
+
+  // SmartAgents (CRUD + Run) - 对外暴露的智能体 API
+  listSmartAgents: () => request<SmartAgent[]>(`${API_BASE}/agents`),
+
+  getSmartAgent: (id: string) => request<SmartAgent>(`${API_BASE}/agents/${id}`),
+
+  createSmartAgent: (req: CreateSmartAgentRequest) =>
+    request<SmartAgent>(`${API_BASE}/agents`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  updateSmartAgent: (id: string, req: UpdateSmartAgentRequest) =>
+    request<SmartAgent>(`${API_BASE}/agents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  deleteSmartAgent: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`${API_BASE}/agents/${id}`, {
+      method: 'DELETE',
+    }),
+
+  runSmartAgent: (id: string, req: RunSmartAgentRequest) =>
+    request<SmartAgentRunResult>(`${API_BASE}/agents/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
 
   // Profiles (CRUD)
   listProfiles: () => request<Profile[]>(`${API_BASE}/profiles`),
@@ -221,6 +259,36 @@ export const api = {
     request<{ id: string; deleted: boolean }>(`${API_BASE}/webhooks/${id}`, {
       method: 'DELETE',
     }),
+
+  // History (只读) - 统一执行历史
+  listHistory: (filter?: HistoryFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.source_type) params.set('source_type', filter.source_type)
+    if (filter?.source_id) params.set('source_id', filter.source_id)
+    if (filter?.profile_id) params.set('profile_id', filter.profile_id)
+    if (filter?.engine) params.set('engine', filter.engine)
+    if (filter?.status) params.set('status', filter.status)
+    if (filter?.limit) params.set('limit', filter.limit.toString())
+    if (filter?.offset) params.set('offset', filter.offset.toString())
+    const query = params.toString()
+    return request<HistoryListResponse>(`${API_BASE}/history${query ? `?${query}` : ''}`)
+  },
+
+  getHistoryEntry: (id: string) => request<HistoryEntry>(`${API_BASE}/history/${id}`),
+
+  deleteHistoryEntry: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`${API_BASE}/history/${id}`, {
+      method: 'DELETE',
+    }),
+
+  getHistoryStats: (filter?: HistoryFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.source_type) params.set('source_type', filter.source_type)
+    if (filter?.profile_id) params.set('profile_id', filter.profile_id)
+    if (filter?.engine) params.set('engine', filter.engine)
+    const query = params.toString()
+    return request<HistoryStats>(`${API_BASE}/history/stats${query ? `?${query}` : ''}`)
+  },
 
   // ==================== Admin API ====================
   // 平台管理接口

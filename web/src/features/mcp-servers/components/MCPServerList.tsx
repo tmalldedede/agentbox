@@ -5,7 +5,6 @@ import {
   Plus,
   Copy,
   Trash2,
-  ChevronRight,
   Server,
   Database,
   Globe,
@@ -22,32 +21,57 @@ import {
   Play,
   CheckCircle,
   XCircle,
+  MoreVertical,
+  Edit,
 } from 'lucide-react'
 import type { MCPServer, MCPCategory } from '@/types'
 import { useMCPServers, useUpdateMCPServer, useDeleteMCPServer } from '@/hooks'
 import { api } from '@/services/api'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // Category icon mapping
 const categoryIcons: Record<MCPCategory, React.ReactNode> = {
-  filesystem: <Server className="w-4 h-4" />,
-  database: <Database className="w-4 h-4" />,
-  api: <Globe className="w-4 h-4" />,
-  tool: <Wrench className="w-4 h-4" />,
-  browser: <Monitor className="w-4 h-4" />,
-  memory: <Brain className="w-4 h-4" />,
-  other: <Box className="w-4 h-4" />,
+  filesystem: <Server className="w-5 h-5" />,
+  database: <Database className="w-5 h-5" />,
+  api: <Globe className="w-5 h-5" />,
+  tool: <Wrench className="w-5 h-5" />,
+  browser: <Monitor className="w-5 h-5" />,
+  memory: <Brain className="w-5 h-5" />,
+  other: <Box className="w-5 h-5" />,
 }
 
 // Category color mapping
-const categoryColors: Record<MCPCategory, string> = {
-  filesystem: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  database: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  api: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  tool: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  browser: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  memory: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-  other: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+const categoryBgColors: Record<MCPCategory, string> = {
+  filesystem: 'bg-blue-500/20 text-blue-400',
+  database: 'bg-purple-500/20 text-purple-400',
+  api: 'bg-emerald-500/20 text-emerald-400',
+  tool: 'bg-amber-500/20 text-amber-400',
+  browser: 'bg-cyan-500/20 text-cyan-400',
+  memory: 'bg-pink-500/20 text-pink-400',
+  other: 'bg-gray-500/20 text-gray-400',
 }
 
 // MCP Server Card component
@@ -69,18 +93,19 @@ function MCPServerCard({
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
 
-  const colors = categoryColors[server.category] || categoryColors.other
+  const bgColor = categoryBgColors[server.category] || categoryBgColors.other
   const icon = categoryIcons[server.category] || categoryIcons.other
 
-  const handleTest = async (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
     try {
       await onTest()
       setTestResult('ok')
+      toast.success('Connection test successful')
     } catch {
       setTestResult('error')
+      toast.error('Connection test failed')
     } finally {
       setTesting(false)
       setTimeout(() => setTestResult(null), 3000)
@@ -88,115 +113,136 @@ function MCPServerCard({
   }
 
   return (
-    <div
-      className={`card p-4 cursor-pointer group transition-colors ${
+    <Card
+      className={`cursor-pointer transition-colors ${
         server.is_enabled
-          ? 'hover:border-emerald-500/50'
-          : 'opacity-60 hover:border-gray-500/50'
+          ? 'hover:border-primary/50'
+          : 'opacity-60 hover:border-muted-foreground/50'
       }`}
       onClick={onClick}
     >
-      <div className="flex items-start gap-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors}`}>
-          {icon}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground truncate">{server.name}</span>
-            {server.is_built_in && (
-              <span className="badge badge-scaling text-xs">
-                <Lock className="w-3 h-3" />
-                Built-in
-              </span>
-            )}
-            {!server.is_enabled && (
-              <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
-                Disabled
-              </span>
-            )}
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bgColor} flex items-center justify-center`}>
+              {icon}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">{server.name}</CardTitle>
+                {server.is_built_in && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Lock className="w-3 h-3 mr-1" />
+                    Built-in
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground font-mono">{server.id}</p>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-            {server.description || `${server.type} MCP server`}
-          </p>
-
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <span className={`text-xs px-2 py-0.5 rounded border ${colors}`}>{server.category}</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-muted text-foreground/80">
-              {server.type}
-            </span>
-            {server.tags?.slice(0, 3).map(tag => (
-              <span key={tag} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div
-          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            onClick={handleTest}
-            className="btn btn-ghost btn-icon"
-            title="Test Connection"
-            disabled={testing}
-          >
-            {testing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : testResult === 'ok' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-            ) : testResult === 'error' ? (
-              <XCircle className="w-4 h-4 text-red-400" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-          </button>
-
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onToggle()
-            }}
-            className="btn btn-ghost btn-icon"
-            title={server.is_enabled ? 'Disable' : 'Enable'}
-          >
-            {server.is_enabled ? (
-              <Power className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <PowerOff className="w-4 h-4 text-gray-400" />
-            )}
-          </button>
-
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              onClone()
-            }}
-            className="btn btn-ghost btn-icon"
-            title="Clone"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-
-          {!server.is_built_in && (
-            <button
-              onClick={e => {
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={(e) => {
                 e.stopPropagation()
-                onDelete()
-              }}
-              className="btn btn-ghost btn-icon text-red-400"
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
+                onClick()
+              }}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                handleTest()
+              }} disabled={testing}>
+                {testing ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : testResult === 'ok' ? (
+                  <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
+                ) : testResult === 'error' ? (
+                  <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                ) : (
+                  <Play className="w-4 h-4 mr-2" />
+                )}
+                Test Connection
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onToggle()
+              }}>
+                {server.is_enabled ? (
+                  <>
+                    <PowerOff className="w-4 h-4 mr-2" />
+                    Disable
+                  </>
+                ) : (
+                  <>
+                    <Power className="w-4 h-4 mr-2" />
+                    Enable
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onClone()
+              }}>
+                <Copy className="w-4 h-4 mr-2" />
+                Clone
+              </DropdownMenuItem>
+              {!server.is_built_in && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-red-600"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete()
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-
-        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
-      </div>
-    </div>
+      </CardHeader>
+      <CardContent>
+        {server.description && (
+          <CardDescription className="mb-3 line-clamp-2">
+            {server.description}
+          </CardDescription>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {server.is_enabled ? (
+            <Badge variant="default" className="bg-green-500 text-xs">
+              <Power className="w-3 h-3 mr-1" />
+              Enabled
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-xs">
+              <PowerOff className="w-3 h-3 mr-1" />
+              Disabled
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs capitalize">
+            {server.category}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {server.type}
+          </Badge>
+          {server.tags?.slice(0, 2).map(tag => (
+            <Badge key={tag} variant="outline" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -259,21 +305,22 @@ export default function MCPServerList() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3">
-            <Server className="w-6 h-6 text-emerald-400" />
+            <Server className="w-6 h-6 text-blue-400" />
             <span className="text-lg font-bold">MCP Servers</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <select
-            value={filter}
-            onChange={e => setFilter(e.target.value as typeof filter)}
-            className="input py-2 px-3 text-sm"
-          >
-            <option value="all">All</option>
-            <option value="enabled">Enabled</option>
-            <option value="disabled">Disabled</option>
-          </select>
+          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="enabled">Enabled</SelectItem>
+              <SelectItem value="disabled">Disabled</SelectItem>
+            </SelectContent>
+          </Select>
 
           <button onClick={() => refetch()} className="btn btn-ghost btn-icon" disabled={isFetching}>
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
@@ -305,17 +352,21 @@ export default function MCPServerList() {
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
           </div>
         ) : filteredServers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Server className="w-16 h-16 text-muted-foreground mb-4" />
-            <p className="text-foreground/90 text-lg">No MCP servers found</p>
+            <p className="text-muted-foreground text-lg">No MCP servers found</p>
             <p className="text-muted-foreground mt-2">
               {filter !== 'all'
                 ? 'Try changing the filter or create a new server'
                 : 'Create your first MCP server to get started'}
             </p>
+            <Button className="mt-4" onClick={() => navigate({ to: '/mcp-servers/new' })}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create MCP Server
+            </Button>
           </div>
         ) : (
           <div className="space-y-8">
@@ -323,14 +374,14 @@ export default function MCPServerList() {
               <div key={category}>
                 <div className="flex items-center gap-3 mb-4">
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${categoryColors[category]}`}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${categoryBgColors[category]}`}
                   >
                     {categoryIcons[category]}
                   </div>
                   <h2 className="text-lg font-semibold text-foreground capitalize">{category}</h2>
                   <span className="text-sm text-muted-foreground">({groupedServers[category].length})</span>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {groupedServers[category].map(server => (
                     <MCPServerCard
                       key={server.id}

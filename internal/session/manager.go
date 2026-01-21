@@ -19,6 +19,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/credential"
 	"github.com/tmalldedede/agentbox/internal/logger"
 	"github.com/tmalldedede/agentbox/internal/profile"
+	"github.com/tmalldedede/agentbox/internal/skill"
 )
 
 // 模块日志器
@@ -35,6 +36,7 @@ type Manager struct {
 	agentRegistry *agent.Registry
 	profileMgr    *profile.Manager
 	credentialMgr *credential.Manager
+	skillMgr      *skill.Manager
 	workspaceBase string
 }
 
@@ -56,6 +58,11 @@ func (m *Manager) SetProfileManager(mgr *profile.Manager) {
 // SetCredentialManager 设置 Credential 管理器（可选依赖）
 func (m *Manager) SetCredentialManager(mgr *credential.Manager) {
 	m.credentialMgr = mgr
+}
+
+// SetSkillManager 设置 Skill 管理器（可选依赖）
+func (m *Manager) SetSkillManager(mgr *skill.Manager) {
+	m.skillMgr = mgr
 }
 
 // Create 创建会话
@@ -293,6 +300,85 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 		log.Debug("config file written", "path", path, "exit_code", result.ExitCode)
 	}
 
+	// 写入 Skills 文件到容器
+	if err := m.writeSkillFiles(ctx, containerID, p); err != nil {
+		log.Warn("failed to write skill files", "error", err)
+		// 不中断创建，记录警告即可
+	}
+
+	return nil
+}
+
+// writeSkillFiles 写入 Skills 文件到容器
+// Skills 文件存放位置: ~/.codex/skills/{skill-id}/SKILL.md
+func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, p *profile.Profile) error {
+	// 检查是否有 Skill Manager 和 Profile 中的 SkillIDs
+	if m.skillMgr == nil {
+		log.Debug("skill manager not set, skipping skill injection")
+		return nil
+	}
+
+	if len(p.SkillIDs) == 0 {
+		log.Debug("no skills configured in profile")
+		return nil
+	}
+
+	log.Debug("writing skills to container", "skill_ids", p.SkillIDs)
+
+	for _, skillID := range p.SkillIDs {
+		// 获取 Skill
+		s, err := m.skillMgr.Get(skillID)
+		if err != nil {
+			log.Warn("skill not found", "skill_id", skillID, "error", err)
+			continue
+		}
+
+		if !s.IsEnabled {
+			log.Debug("skill is disabled, skipping", "skill_id", skillID)
+			continue
+		}
+
+		// 生成 SKILL.md 内容
+		skillContent := s.ToSkillMD()
+
+		// Skills 目录: ~/.codex/skills/{skill-id}/
+		skillDir := fmt.Sprintf("$HOME/.codex/skills/%s", skillID)
+		skillPath := fmt.Sprintf("%s/SKILL.md", skillDir)
+
+		// 写入 SKILL.md
+		escapedContent := strings.ReplaceAll(skillContent, "'", "'\"'\"'")
+		writeCmd := []string{
+			"sh", "-c",
+			fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_SKILL_EOF'\n%s\nAGENTBOX_SKILL_EOF", skillDir, skillPath, escapedContent),
+		}
+
+		result, err := m.containerMgr.Exec(ctx, containerID, writeCmd)
+		if err != nil {
+			log.Error("failed to write skill file", "skill_id", skillID, "error", err)
+			continue
+		}
+		log.Debug("skill file written", "skill_id", skillID, "path", skillPath, "exit_code", result.ExitCode)
+
+		// 写入附加文件 (references)
+		for _, file := range s.Files {
+			filePath := fmt.Sprintf("%s/%s", skillDir, file.Path)
+			fileDir := filepath.Dir(filePath)
+
+			escapedFileContent := strings.ReplaceAll(file.Content, "'", "'\"'\"'")
+			writeFileCmd := []string{
+				"sh", "-c",
+				fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_SKILL_EOF'\n%s\nAGENTBOX_SKILL_EOF", fileDir, filePath, escapedFileContent),
+			}
+
+			if _, err := m.containerMgr.Exec(ctx, containerID, writeFileCmd); err != nil {
+				log.Warn("failed to write skill file", "skill_id", skillID, "file", file.Path, "error", err)
+			} else {
+				log.Debug("skill reference file written", "skill_id", skillID, "file", file.Path)
+			}
+		}
+	}
+
+	log.Info("skills injected to container", "count", len(p.SkillIDs))
 	return nil
 }
 

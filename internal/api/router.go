@@ -10,11 +10,13 @@ import (
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/credential"
+	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/mcp"
 	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/session"
 	"github.com/tmalldedede/agentbox/internal/skill"
+	"github.com/tmalldedede/agentbox/internal/smartagent"
 	"github.com/tmalldedede/agentbox/internal/task"
 	"github.com/tmalldedede/agentbox/internal/webhook"
 
@@ -23,21 +25,23 @@ import (
 
 // Server HTTP 服务器
 type Server struct {
-	httpServer        *http.Server
-	engine            *gin.Engine
-	handler           *Handler
-	fileHandler       *FileHandler
-	publicFileHandler *PublicFileHandler
-	wsHandler         *WSHandler
-	profileHandler    *ProfileHandler
-	providerHandler   *ProviderHandler
-	mcpHandler        *MCPHandler
-	skillHandler      *SkillHandler
-	credentialHandler *CredentialHandler
-	imageHandler      *ImageHandler
-	systemHandler     *SystemHandler
-	taskHandler       *TaskHandler
-	webhookHandler    *WebhookHandler
+	httpServer         *http.Server
+	engine             *gin.Engine
+	handler            *Handler
+	fileHandler        *FileHandler
+	publicFileHandler  *PublicFileHandler
+	wsHandler          *WSHandler
+	profileHandler     *ProfileHandler
+	providerHandler    *ProviderHandler
+	mcpHandler         *MCPHandler
+	skillHandler       *SkillHandler
+	credentialHandler  *CredentialHandler
+	imageHandler       *ImageHandler
+	systemHandler      *SystemHandler
+	taskHandler        *TaskHandler
+	webhookHandler     *WebhookHandler
+	smartAgentHandler  *SmartAgentHandler
+	historyHandler     *HistoryHandler
 }
 
 // Deps 服务器依赖（从 App 容器注入）
@@ -52,6 +56,8 @@ type Deps struct {
 	Credential *credential.Manager
 	Task       *task.Manager
 	Webhook    *webhook.Manager
+	SmartAgent *smartagent.Manager
+	History    *history.Manager
 }
 
 // NewServer 创建服务器
@@ -75,22 +81,26 @@ func NewServer(deps *Deps) *Server {
 	systemHandler := NewSystemHandler(deps.Container, deps.Session)
 	taskHandler := NewTaskHandler(deps.Task)
 	webhookHandler := NewWebhookHandler(deps.Webhook)
+	smartAgentHandler := NewSmartAgentHandler(deps.SmartAgent, deps.Session, deps.Profile, deps.History)
+	historyHandler := NewHistoryHandler(deps.History)
 
 	s := &Server{
-		engine:            engine,
-		handler:           handler,
-		fileHandler:       fileHandler,
-		publicFileHandler: publicFileHandler,
-		wsHandler:         wsHandler,
-		profileHandler:    profileHandler,
-		providerHandler:   providerHandler,
-		mcpHandler:        mcpHandler,
-		skillHandler:      skillHandler,
-		credentialHandler: credentialHandler,
-		imageHandler:      imageHandler,
-		systemHandler:     systemHandler,
-		taskHandler:       taskHandler,
-		webhookHandler:    webhookHandler,
+		engine:             engine,
+		handler:            handler,
+		fileHandler:        fileHandler,
+		publicFileHandler:  publicFileHandler,
+		wsHandler:          wsHandler,
+		profileHandler:     profileHandler,
+		providerHandler:    providerHandler,
+		mcpHandler:         mcpHandler,
+		skillHandler:       skillHandler,
+		credentialHandler:  credentialHandler,
+		imageHandler:       imageHandler,
+		systemHandler:      systemHandler,
+		taskHandler:        taskHandler,
+		webhookHandler:     webhookHandler,
+		smartAgentHandler:  smartAgentHandler,
+		historyHandler:     historyHandler,
 	}
 
 	s.setupRoutes()
@@ -110,8 +120,11 @@ func (s *Server) setupRoutes() {
 		// Health
 		v1.GET("/health", s.handler.HealthCheck)
 
-		// Agents (只读)
-		v1.GET("/agents", s.handler.ListAgents)
+		// Engines (只读) - 底层引擎适配器列表 (claude-code, codex, opencode)
+		v1.GET("/engines", s.handler.ListAgents)
+
+		// Agents (CRUD + Run) - 对外暴露的智能体 API
+		s.smartAgentHandler.RegisterRoutes(v1)
 
 		// Profiles (CRUD) - Agent 配置模板
 		s.profileHandler.RegisterRoutes(v1)
@@ -154,6 +167,9 @@ func (s *Server) setupRoutes() {
 
 		// Webhooks (CRUD) - Webhook 管理
 		s.webhookHandler.RegisterRoutes(v1)
+
+		// History (只读) - 执行历史记录
+		s.historyHandler.RegisterRoutes(v1)
 	}
 
 	// ==================== Admin API ====================

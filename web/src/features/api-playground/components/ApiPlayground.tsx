@@ -786,6 +786,11 @@ print(result["result"]["text"])`
                       {result.result?.text ? cleanOutput(result.result.text) : '无输出'}
                     </pre>
                   </div>
+                ) : loading ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
+                    <p>任务执行中，请查看「实时日志」了解进度...</p>
+                  </div>
                 ) : (
                   <div className="text-gray-500 text-center py-8">
                     点击「执行」按钮运行任务

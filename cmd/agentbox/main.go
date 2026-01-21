@@ -127,6 +127,8 @@ func main() {
 		Credential: application.Credential,
 		Task:       application.Task,
 		Webhook:    application.Webhook,
+		SmartAgent: application.SmartAgent,
+		History:    application.History,
 	})
 
 	// 打印 API 路由信息
@@ -176,15 +178,17 @@ func main() {
 // printRoutes 打印 API 路由信息
 func printRoutes() {
 	fmt.Println()
-	fmt.Println("Public API (对外服务，参考 Manus API):")
+	fmt.Println("Public API (对外服务):")
 	fmt.Println("  GET    /api/v1/health                 - Health check")
-	fmt.Println("  GET    /api/v1/agents                 - List agents")
+	fmt.Println("  GET    /api/v1/engines                - List engines (claude-code, codex, opencode)")
+	fmt.Println("  *      /api/v1/agents/*               - Agent management (CRUD + Run)")
 	fmt.Println("  *      /api/v1/profiles/*             - Profile management (CRUD)")
 	fmt.Println("  *      /api/v1/providers/*            - Provider management (CRUD)")
 	fmt.Println("  *      /api/v1/sessions/*             - Session management (CRUD)")
 	fmt.Println("  *      /api/v1/tasks/*                - Task management (CRUD)")
 	fmt.Println("  *      /api/v1/files/*                - File upload (CRUD)")
 	fmt.Println("  *      /api/v1/webhooks/*             - Webhook management (CRUD)")
+	fmt.Println("  *      /api/v1/history/*              - Execution history (Read)")
 	fmt.Println()
 	fmt.Println("Admin API (平台管理):")
 	fmt.Println("  *      /api/v1/admin/mcp-servers/*    - MCP server management")

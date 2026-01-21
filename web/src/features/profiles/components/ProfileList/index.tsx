@@ -7,7 +7,7 @@ import {
   Shield,
   Code2,
   Server,
-  Zap,
+  Layers,
   RefreshCw,
   AlertCircle,
   Loader2,
@@ -15,6 +15,7 @@ import {
 import type { Profile } from '@/types'
 import { useProfiles, useDeleteProfile, useCloneProfile } from '@/hooks'
 import { ProfileGroup } from './ProfileGroup'
+import { Button } from '@/components/ui/button'
 
 export default function ProfileList() {
   const navigate = useNavigate()
@@ -74,7 +75,7 @@ export default function ProfileList() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3">
-            <Zap className="w-6 h-6 text-emerald-400" />
+            <Layers className="w-6 h-6 text-emerald-400" />
             <span className="text-lg font-bold">Profiles</span>
           </div>
         </div>
@@ -120,9 +121,13 @@ export default function ProfileList() {
           </div>
         ) : profiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <Server className="w-16 h-16 text-muted-foreground mb-4" />
+            <Layers className="w-16 h-16 text-muted-foreground mb-4" />
             <p className="text-muted-foreground text-lg">No profiles found</p>
             <p className="text-muted-foreground mt-2">Create your first profile to get started</p>
+            <Button className="mt-4" onClick={() => navigate({ to: '/profiles/new' })}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Profile
+            </Button>
           </div>
         ) : (
           <div className="space-y-8">
