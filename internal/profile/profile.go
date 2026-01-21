@@ -32,6 +32,9 @@ type Profile struct {
 	// MCP servers
 	MCPServers []MCPServerConfig `json:"mcp_servers,omitempty"`
 
+	// Skill IDs to inject into the session
+	SkillIDs []string `json:"skill_ids,omitempty"`
+
 	// Permission configuration
 	Permissions PermissionConfig `json:"permissions"`
 
