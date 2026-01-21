@@ -97,6 +97,16 @@ export const translations = {
 
     // Theme
     theme: 'Theme',
+
+    // Form Labels & Placeholders
+    name: 'Name',
+    description: 'Description',
+    enterName: 'Enter name',
+    enterDescription: 'Enter description',
+    enterPrompt: 'Enter prompt',
+    addTag: 'Add a tag...',
+    addArgument: 'Add an argument...',
+    fileContent: 'File content...',
   },
   zh: {
     // Header
@@ -194,6 +204,16 @@ export const translations = {
 
     // Theme
     theme: '主题',
+
+    // Form Labels & Placeholders
+    name: '名称',
+    description: '描述',
+    enterName: '输入名称',
+    enterDescription: '输入描述',
+    enterPrompt: '输入提示词',
+    addTag: '添加标签...',
+    addArgument: '添加参数...',
+    fileContent: '文件内容...',
   },
 } as const
 

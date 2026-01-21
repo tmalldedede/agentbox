@@ -1,17 +1,6 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
+import { MCPServerNewPage } from '@/features/mcp-servers/new'
 
 export const Route = createFileRoute('/_authenticated/mcp-servers/new')({
-  component: MCPServerNew,
+  component: MCPServerNewPage,
 })
-
-function MCPServerNew() {
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    // Redirect to mcp-servers page, new server is created via modal
-    navigate({ to: '/mcp-servers' })
-  }, [navigate])
-
-  return null
-}
