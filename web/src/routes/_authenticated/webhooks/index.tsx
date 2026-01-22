@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Webhooks } from '@/features/webhooks'
+import { WebhookList } from '@/features/webhooks/components/WebhookList'
 
 export const Route = createFileRoute('/_authenticated/webhooks/')({
-  component: Webhooks,
+  component: WebhookList,
 })

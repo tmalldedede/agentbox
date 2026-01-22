@@ -34,6 +34,7 @@ import { Route as AuthenticatedSkillStoreIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSessionsIndexRouteImport } from './routes/_authenticated/sessions/index'
 import { Route as AuthenticatedProfilesIndexRouteImport } from './routes/_authenticated/profiles/index'
+import { Route as AuthenticatedMonitoringIndexRouteImport } from './routes/_authenticated/monitoring/index'
 import { Route as AuthenticatedMcpServersIndexRouteImport } from './routes/_authenticated/mcp-servers/index'
 import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenticated/images/index'
 import { Route as AuthenticatedHistoryIndexRouteImport } from './routes/_authenticated/history/index'
@@ -191,6 +192,12 @@ const AuthenticatedProfilesIndexRoute =
   AuthenticatedProfilesIndexRouteImport.update({
     id: '/profiles/',
     path: '/profiles/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMonitoringIndexRoute =
+  AuthenticatedMonitoringIndexRouteImport.update({
+    id: '/monitoring/',
+    path: '/monitoring/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMcpServersIndexRoute =
@@ -392,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/mcp-servers': typeof AuthenticatedMcpServersIndexRoute
+  '/monitoring': typeof AuthenticatedMonitoringIndexRoute
   '/profiles': typeof AuthenticatedProfilesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -443,6 +451,7 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/mcp-servers': typeof AuthenticatedMcpServersIndexRoute
+  '/monitoring': typeof AuthenticatedMonitoringIndexRoute
   '/profiles': typeof AuthenticatedProfilesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -499,6 +508,7 @@ export interface FileRoutesById {
   '/_authenticated/history/': typeof AuthenticatedHistoryIndexRoute
   '/_authenticated/images/': typeof AuthenticatedImagesIndexRoute
   '/_authenticated/mcp-servers/': typeof AuthenticatedMcpServersIndexRoute
+  '/_authenticated/monitoring/': typeof AuthenticatedMonitoringIndexRoute
   '/_authenticated/profiles/': typeof AuthenticatedProfilesIndexRoute
   '/_authenticated/sessions/': typeof AuthenticatedSessionsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -553,6 +563,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/images'
     | '/mcp-servers'
+    | '/monitoring'
     | '/profiles'
     | '/sessions'
     | '/settings/'
@@ -604,6 +615,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/images'
     | '/mcp-servers'
+    | '/monitoring'
     | '/profiles'
     | '/sessions'
     | '/settings'
@@ -659,6 +671,7 @@ export interface FileRouteTypes {
     | '/_authenticated/history/'
     | '/_authenticated/images/'
     | '/_authenticated/mcp-servers/'
+    | '/_authenticated/monitoring/'
     | '/_authenticated/profiles/'
     | '/_authenticated/sessions/'
     | '/_authenticated/settings/'
@@ -861,6 +874,13 @@ declare module '@tanstack/react-router' {
       path: '/profiles'
       fullPath: '/profiles'
       preLoaderRoute: typeof AuthenticatedProfilesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/monitoring/': {
+      id: '/_authenticated/monitoring/'
+      path: '/monitoring'
+      fullPath: '/monitoring'
+      preLoaderRoute: typeof AuthenticatedMonitoringIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/mcp-servers/': {
@@ -1122,6 +1142,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHistoryIndexRoute: typeof AuthenticatedHistoryIndexRoute
   AuthenticatedImagesIndexRoute: typeof AuthenticatedImagesIndexRoute
   AuthenticatedMcpServersIndexRoute: typeof AuthenticatedMcpServersIndexRoute
+  AuthenticatedMonitoringIndexRoute: typeof AuthenticatedMonitoringIndexRoute
   AuthenticatedProfilesIndexRoute: typeof AuthenticatedProfilesIndexRoute
   AuthenticatedSessionsIndexRoute: typeof AuthenticatedSessionsIndexRoute
   AuthenticatedSkillStoreIndexRoute: typeof AuthenticatedSkillStoreIndexRoute
@@ -1155,6 +1176,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHistoryIndexRoute: AuthenticatedHistoryIndexRoute,
   AuthenticatedImagesIndexRoute: AuthenticatedImagesIndexRoute,
   AuthenticatedMcpServersIndexRoute: AuthenticatedMcpServersIndexRoute,
+  AuthenticatedMonitoringIndexRoute: AuthenticatedMonitoringIndexRoute,
   AuthenticatedProfilesIndexRoute: AuthenticatedProfilesIndexRoute,
   AuthenticatedSessionsIndexRoute: AuthenticatedSessionsIndexRoute,
   AuthenticatedSkillStoreIndexRoute: AuthenticatedSkillStoreIndexRoute,
