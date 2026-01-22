@@ -38,6 +38,7 @@ import { Route as AuthenticatedMcpServersIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenticated/images/index'
 import { Route as AuthenticatedHistoryIndexRouteImport } from './routes/_authenticated/history/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedDemoIndexRouteImport } from './routes/_authenticated/demo/index'
 import { Route as AuthenticatedCredentialsIndexRouteImport } from './routes/_authenticated/credentials/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
@@ -60,6 +61,7 @@ import { Route as AuthenticatedMcpServersIdRouteImport } from './routes/_authent
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedAgentsNewRouteImport } from './routes/_authenticated/agents/new'
 import { Route as AuthenticatedAgentsIdRouteImport } from './routes/_authenticated/agents/$id'
+import { Route as AuthenticatedProfilesIdEditRouteImport } from './routes/_authenticated/profiles/$id/edit'
 
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
   id: '/clerk',
@@ -215,6 +217,11 @@ const AuthenticatedHelpCenterIndexRoute =
     path: '/help-center/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDemoIndexRoute = AuthenticatedDemoIndexRouteImport.update({
+  id: '/demo/',
+  path: '/demo/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCredentialsIndexRoute =
   AuthenticatedCredentialsIndexRouteImport.update({
     id: '/credentials/',
@@ -337,6 +344,12 @@ const AuthenticatedAgentsIdRoute = AuthenticatedAgentsIdRouteImport.update({
   path: '/agents/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedProfilesIdEditRoute =
+  AuthenticatedProfilesIdEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => AuthenticatedProfilesIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -357,7 +370,7 @@ export interface FileRoutesByFullPath {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
-  '/profiles/$id': typeof AuthenticatedProfilesIdRoute
+  '/profiles/$id': typeof AuthenticatedProfilesIdRouteWithChildren
   '/profiles/new': typeof AuthenticatedProfilesNewRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -374,6 +387,7 @@ export interface FileRoutesByFullPath {
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/credentials': typeof AuthenticatedCredentialsIndexRoute
+  '/demo': typeof AuthenticatedDemoIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
@@ -387,6 +401,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
+  '/profiles/$id/edit': typeof AuthenticatedProfilesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -406,7 +421,7 @@ export interface FileRoutesByTo {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
-  '/profiles/$id': typeof AuthenticatedProfilesIdRoute
+  '/profiles/$id': typeof AuthenticatedProfilesIdRouteWithChildren
   '/profiles/new': typeof AuthenticatedProfilesNewRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -423,6 +438,7 @@ export interface FileRoutesByTo {
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/credentials': typeof AuthenticatedCredentialsIndexRoute
+  '/demo': typeof AuthenticatedDemoIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
@@ -436,6 +452,7 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
+  '/profiles/$id/edit': typeof AuthenticatedProfilesIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -460,7 +477,7 @@ export interface FileRoutesById {
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/_authenticated/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
-  '/_authenticated/profiles/$id': typeof AuthenticatedProfilesIdRoute
+  '/_authenticated/profiles/$id': typeof AuthenticatedProfilesIdRouteWithChildren
   '/_authenticated/profiles/new': typeof AuthenticatedProfilesNewRoute
   '/_authenticated/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -477,6 +494,7 @@ export interface FileRoutesById {
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/credentials/': typeof AuthenticatedCredentialsIndexRoute
+  '/_authenticated/demo/': typeof AuthenticatedDemoIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/history/': typeof AuthenticatedHistoryIndexRoute
   '/_authenticated/images/': typeof AuthenticatedImagesIndexRoute
@@ -490,6 +508,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
+  '/_authenticated/profiles/$id/edit': typeof AuthenticatedProfilesIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -529,6 +548,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/chats'
     | '/credentials'
+    | '/demo'
     | '/help-center'
     | '/history'
     | '/images'
@@ -542,6 +562,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users'
     | '/webhooks'
+    | '/profiles/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
@@ -578,6 +599,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/chats'
     | '/credentials'
+    | '/demo'
     | '/help-center'
     | '/history'
     | '/images'
@@ -591,6 +613,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users'
     | '/webhooks'
+    | '/profiles/$id/edit'
   id:
     | '__root__'
     | '/_authenticated'
@@ -631,6 +654,7 @@ export interface FileRouteTypes {
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
     | '/_authenticated/credentials/'
+    | '/_authenticated/demo/'
     | '/_authenticated/help-center/'
     | '/_authenticated/history/'
     | '/_authenticated/images/'
@@ -644,6 +668,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
     | '/_authenticated/webhooks/'
+    | '/_authenticated/profiles/$id/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -866,6 +891,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/demo/': {
+      id: '/_authenticated/demo/'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof AuthenticatedDemoIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/credentials/': {
       id: '/_authenticated/credentials/'
       path: '/credentials'
@@ -1020,6 +1052,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/profiles/$id/edit': {
+      id: '/_authenticated/profiles/$id/edit'
+      path: '/edit'
+      fullPath: '/profiles/$id/edit'
+      preLoaderRoute: typeof AuthenticatedProfilesIdEditRouteImport
+      parentRoute: typeof AuthenticatedProfilesIdRoute
+    }
   }
 }
 
@@ -1046,6 +1085,20 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedProfilesIdRouteChildren {
+  AuthenticatedProfilesIdEditRoute: typeof AuthenticatedProfilesIdEditRoute
+}
+
+const AuthenticatedProfilesIdRouteChildren: AuthenticatedProfilesIdRouteChildren =
+  {
+    AuthenticatedProfilesIdEditRoute: AuthenticatedProfilesIdEditRoute,
+  }
+
+const AuthenticatedProfilesIdRouteWithChildren =
+  AuthenticatedProfilesIdRoute._addFileChildren(
+    AuthenticatedProfilesIdRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -1054,7 +1107,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedMcpServersIdRoute: typeof AuthenticatedMcpServersIdRoute
   AuthenticatedMcpServersNewRoute: typeof AuthenticatedMcpServersNewRoute
-  AuthenticatedProfilesIdRoute: typeof AuthenticatedProfilesIdRoute
+  AuthenticatedProfilesIdRoute: typeof AuthenticatedProfilesIdRouteWithChildren
   AuthenticatedProfilesNewRoute: typeof AuthenticatedProfilesNewRoute
   AuthenticatedSessionsIdRoute: typeof AuthenticatedSessionsIdRoute
   AuthenticatedSkillsIdRoute: typeof AuthenticatedSkillsIdRoute
@@ -1064,6 +1117,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCredentialsIndexRoute: typeof AuthenticatedCredentialsIndexRoute
+  AuthenticatedDemoIndexRoute: typeof AuthenticatedDemoIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedHistoryIndexRoute: typeof AuthenticatedHistoryIndexRoute
   AuthenticatedImagesIndexRoute: typeof AuthenticatedImagesIndexRoute
@@ -1086,7 +1140,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedMcpServersIdRoute: AuthenticatedMcpServersIdRoute,
   AuthenticatedMcpServersNewRoute: AuthenticatedMcpServersNewRoute,
-  AuthenticatedProfilesIdRoute: AuthenticatedProfilesIdRoute,
+  AuthenticatedProfilesIdRoute: AuthenticatedProfilesIdRouteWithChildren,
   AuthenticatedProfilesNewRoute: AuthenticatedProfilesNewRoute,
   AuthenticatedSessionsIdRoute: AuthenticatedSessionsIdRoute,
   AuthenticatedSkillsIdRoute: AuthenticatedSkillsIdRoute,
@@ -1096,6 +1150,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCredentialsIndexRoute: AuthenticatedCredentialsIndexRoute,
+  AuthenticatedDemoIndexRoute: AuthenticatedDemoIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedHistoryIndexRoute: AuthenticatedHistoryIndexRoute,
   AuthenticatedImagesIndexRoute: AuthenticatedImagesIndexRoute,

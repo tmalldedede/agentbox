@@ -11,6 +11,7 @@ type Config struct {
 	Server    ServerConfig    `json:"server"`
 	Container ContainerConfig `json:"container"`
 	Storage   StorageConfig   `json:"storage"`
+	Database  DatabaseConfig  `json:"database"`
 }
 
 // ServerConfig HTTP 服务器配置
@@ -35,6 +36,13 @@ type StorageConfig struct {
 	DSN  string `json:"dsn"`  // 数据源
 }
 
+// DatabaseConfig 数据库配置
+type DatabaseConfig struct {
+	Driver   string `json:"driver"`    // sqlite, postgres
+	DSN      string `json:"dsn"`       // 数据源名称
+	LogLevel string `json:"log_level"` // silent, error, warn, info
+}
+
 // Default 返回默认配置
 func Default() *Config {
 	return &Config{
@@ -54,6 +62,11 @@ func Default() *Config {
 			Type: "sqlite",
 			DSN:  "agentbox.db",
 		},
+		Database: DatabaseConfig{
+			Driver:   "sqlite",
+			DSN:      "", // Will use default path ~/.agentbox/data/agentbox.db
+			LogLevel: "warn",
+		},
 	}
 }
 
@@ -72,6 +85,17 @@ func Load() *Config {
 	}
 	if workspace := os.Getenv("AGENTBOX_WORKSPACE_BASE"); workspace != "" {
 		cfg.Container.WorkspaceBase = workspace
+	}
+
+	// 数据库配置
+	if driver := os.Getenv("AGENTBOX_DB_DRIVER"); driver != "" {
+		cfg.Database.Driver = driver
+	}
+	if dsn := os.Getenv("AGENTBOX_DB_DSN"); dsn != "" {
+		cfg.Database.DSN = dsn
+	}
+	if logLevel := os.Getenv("AGENTBOX_DB_LOG_LEVEL"); logLevel != "" {
+		cfg.Database.LogLevel = logLevel
 	}
 
 	return cfg

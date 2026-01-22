@@ -88,8 +88,10 @@ export interface Profile {
   tags?: string[]
   adapter: 'claude-code' | 'codex' | 'opencode'
   extends?: string
+  credential_id?: string
   model: ModelConfig
   mcp_servers?: MCPServerConfig[]
+  skill_ids?: string[]
   permissions: PermissionConfig
   resources: ResourceConfig
   system_prompt?: string

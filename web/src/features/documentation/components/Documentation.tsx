@@ -250,7 +250,7 @@ export default function Documentation() {
 function CommandCard({
   title,
   description,
-  command,
+  command: _command,
   onCopy,
   copied,
 }: {

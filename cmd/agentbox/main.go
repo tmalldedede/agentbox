@@ -69,6 +69,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/api"
 	"github.com/tmalldedede/agentbox/internal/app"
 	"github.com/tmalldedede/agentbox/internal/config"
+	"github.com/tmalldedede/agentbox/internal/database"
 	"github.com/tmalldedede/agentbox/internal/logger"
 )
 
@@ -104,6 +105,23 @@ func main() {
 
 	// 加载配置
 	cfg := config.Load()
+
+	// 初始化数据库
+	dbConfig := database.Config{
+		Driver:   cfg.Database.Driver,
+		DSN:      cfg.Database.DSN,
+		LogLevel: cfg.Database.LogLevel,
+	}
+	if err := database.Initialize(dbConfig); err != nil {
+		log.Error("failed to initialize database", "error", err)
+		os.Exit(1)
+	}
+	defer database.Close()
+
+	// Seed built-in data
+	if err := database.SeedBuiltInData(); err != nil {
+		log.Warn("failed to seed built-in data", "error", err)
+	}
 
 	// 创建应用程序
 	application, err := app.New(cfg)
