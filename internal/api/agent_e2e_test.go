@@ -1,0 +1,481 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/engine"
+	"github.com/tmalldedede/agentbox/internal/history"
+	"github.com/tmalldedede/agentbox/internal/mcp"
+	"github.com/tmalldedede/agentbox/internal/provider"
+	"github.com/tmalldedede/agentbox/internal/runtime"
+	"github.com/tmalldedede/agentbox/internal/session"
+	"github.com/tmalldedede/agentbox/internal/skill"
+)
+
+// getZhipuAPIKey 尝试从已有 provider 数据或环境变量获取 zhipu API key
+func getZhipuAPIKey(t *testing.T) string {
+	// 1. 优先从已有的 provider 数据库读取（开发环境）
+	realDataDir := "/tmp/agentbox/workspaces/providers"
+	defaultEncKey := "agentbox-default-encryption-key-32b"
+	realProvMgr := provider.NewManager(realDataDir, defaultEncKey)
+	if key, err := realProvMgr.GetDecryptedKey("zhipu"); err == nil && key != "" {
+		t.Logf("Using zhipu API key from existing provider data (masked: %s)", maskKey(key))
+		return key
+	}
+
+	// 2. 回退到环境变量
+	if key := os.Getenv("ZHIPU_API_KEY"); key != "" {
+		t.Log("Using zhipu API key from ZHIPU_API_KEY env var")
+		return key
+	}
+
+	return ""
+}
+
+func maskKey(key string) string {
+	if len(key) <= 8 {
+		return "****"
+	}
+	return key[:4] + "..." + key[len(key)-4:]
+}
+
+// TestAgentRunE2E_CodexZhipu 端到端测试：
+// 创建 Agent (codex + zhipu) → 启动容器 → 发送 prompt → 获取 LLM 回复
+//
+// 运行条件：
+//   - Docker 可用
+//   - zhipu API key 已配置（provider 数据库或 ZHIPU_API_KEY 环境变量）
+//
+// 运行方式:
+//
+//	go test -v -run TestAgentRunE2E_CodexZhipu -timeout 120s ./internal/api/
+func TestAgentRunE2E_CodexZhipu(t *testing.T) {
+	// === 前置检查 ===
+	apiKey := getZhipuAPIKey(t)
+	if apiKey == "" {
+		t.Skip("zhipu API key not available (no provider data and ZHIPU_API_KEY not set), skipping E2E test")
+	}
+
+	// 检查 Docker 是否可用
+	ctx := context.Background()
+	dockerMgr, err := container.NewDockerManager()
+	if err != nil {
+		t.Skipf("Docker not available: %v, skipping E2E test", err)
+	}
+
+	// === 初始化所有 Manager ===
+	tmpDir := t.TempDir()
+
+	// Provider Manager
+	providerDir := filepath.Join(tmpDir, "providers")
+	provMgr := provider.NewManager(providerDir, "e2e-test-key-32bytes-aes256!!")
+
+	// 配置 zhipu 的 API Key
+	err = provMgr.ConfigureKey("zhipu", apiKey)
+	require.NoError(t, err, "configure zhipu API key should succeed")
+
+	// 验证 key 已配置
+	zhipu, err := provMgr.Get("zhipu")
+	require.NoError(t, err)
+	assert.True(t, zhipu.IsConfigured, "zhipu should be configured after setting key")
+	t.Logf("Provider: %s (%s), base_url=%s", zhipu.Name, zhipu.ID, zhipu.BaseURL)
+
+	// Runtime Manager
+	runtimeDir := filepath.Join(tmpDir, "runtimes")
+	rtMgr := runtime.NewManager(runtimeDir)
+
+	// Skill Manager
+	skillDir := filepath.Join(tmpDir, "skills")
+	skillMgr, err := skill.NewManager(skillDir)
+	require.NoError(t, err)
+
+	// MCP Manager
+	mcpDir := filepath.Join(tmpDir, "mcp")
+	mcpMgr, err := mcp.NewManager(mcpDir)
+	require.NoError(t, err)
+
+	// Agent Manager
+	agentDir := filepath.Join(tmpDir, "agents")
+	agentMgr := agent.NewManager(agentDir, provMgr, rtMgr, skillMgr, mcpMgr)
+
+	// Engine Registry
+	registry := engine.DefaultRegistry()
+
+	// Session Manager
+	workspaceBase := filepath.Join(tmpDir, "workspaces")
+	sessionStore := session.NewMemoryStore()
+	sessionMgr := session.NewManager(sessionStore, dockerMgr, registry, workspaceBase)
+	sessionMgr.SetAgentManager(agentMgr)
+
+	// History Manager (optional, nil store uses in-memory)
+	historyMgr := history.NewManager(nil)
+
+	// === 创建 Agent ===
+	testAgent := &agent.Agent{
+		ID:              "e2e-codex-zhipu",
+		Name:            "E2E Codex Zhipu Agent",
+		Description:     "E2E test agent using Codex with Zhipu GLM",
+		Adapter:         agent.AdapterCodex,
+		ProviderID:      "zhipu",
+		Model:           "glm-4-flash",
+		BaseURLOverride: "https://open.bigmodel.cn/api/coding/paas/v4", // zhipu coding plan OpenAI-compatible endpoint
+		SystemPrompt:    "You are a helpful assistant. Always respond in English. Keep responses concise (under 50 words).",
+		Permissions: agent.PermissionConfig{
+			ApprovalPolicy: "never",
+			SandboxMode:    "read-only",
+			FullAuto:       true,
+		},
+	}
+	err = agentMgr.Create(testAgent)
+	require.NoError(t, err, "create agent should succeed")
+	t.Logf("Agent created: id=%s, adapter=%s, provider=%s, model=%s",
+		testAgent.ID, testAgent.Adapter, testAgent.ProviderID, testAgent.Model)
+
+	// === 设置 HTTP Handler ===
+	handler := NewAgentHandler(agentMgr, sessionMgr, historyMgr)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+	handler.RegisterRoutes(v1)
+
+	// === 执行 Run 请求 ===
+	runReq := RunAgentReq{
+		Prompt: "What is 2+3? Reply with just the number.",
+		Options: &agent.RunOptions{
+			MaxTurns: 3,
+			Timeout:  60,
+		},
+	}
+	body, _ := json.Marshal(runReq)
+
+	t.Logf("Sending prompt: %q", runReq.Prompt)
+	t.Log("Waiting for container startup and LLM response (may take 30-60s)...")
+
+	reqCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/e2e-codex-zhipu/run", bytes.NewReader(body)).
+		WithContext(reqCtx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// === 验证响应 ===
+	t.Logf("HTTP Status: %d", w.Code)
+	t.Logf("Response Body: %s", w.Body.String())
+
+	var resp Response
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err, "response should be valid JSON")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, resp.Message)
+	}
+
+	assert.Equal(t, 0, resp.Code, "response code should be 0 (success)")
+
+	// 解析 RunResult
+	resultBytes, _ := json.Marshal(resp.Data)
+	var runResult agent.RunResult
+	err = json.Unmarshal(resultBytes, &runResult)
+	require.NoError(t, err, "should parse RunResult")
+
+	t.Logf("=== Run Result ===")
+	t.Logf("  RunID:   %s", runResult.RunID)
+	t.Logf("  Agent:   %s (%s)", runResult.AgentName, runResult.AgentID)
+	t.Logf("  Status:  %s", runResult.Status)
+	t.Logf("  Output:  %s", truncate(runResult.Output, 200))
+	if runResult.Error != "" {
+		t.Logf("  Error:   %s", runResult.Error)
+	}
+	if runResult.Usage != nil {
+		t.Logf("  Usage:   input=%d, output=%d tokens",
+			runResult.Usage.InputTokens, runResult.Usage.OutputTokens)
+	}
+	if runResult.EndedAt != nil {
+		duration := runResult.EndedAt.Sub(runResult.StartedAt)
+		t.Logf("  Duration: %s", duration.Round(time.Millisecond))
+	}
+
+	// === 核心断言 ===
+	assert.Equal(t, agent.RunStatusCompleted, runResult.Status, "run should complete successfully")
+	assert.NotEmpty(t, runResult.Output, "LLM should return non-empty output")
+	assert.Empty(t, runResult.Error, "run should have no error")
+	assert.Contains(t, runResult.Output, "5", "2+3 should equal 5")
+
+	// 清理：停止容器
+	sessions, _ := sessionStore.List(nil)
+	for _, s := range sessions {
+		if s.ContainerID != "" {
+			_ = dockerMgr.Stop(ctx, s.ContainerID)
+			_ = dockerMgr.Remove(ctx, s.ContainerID)
+			t.Logf("Cleaned up container: %s", s.ContainerID[:12])
+		}
+	}
+}
+
+// TestAgentRunE2E_ClaudeCodeZhipu 端到端测试 Claude Code adapter + Zhipu
+//
+// 运行方式:
+//
+//	ZHIPU_API_KEY=your-key go test -v -run TestAgentRunE2E_ClaudeCodeZhipu -timeout 120s ./internal/api/
+func TestAgentRunE2E_ClaudeCodeZhipu(t *testing.T) {
+	apiKey := getZhipuAPIKey(t)
+	if apiKey == "" {
+		t.Skip("zhipu API key not available, skipping E2E test")
+	}
+
+	ctx := context.Background()
+	dockerMgr, err := container.NewDockerManager()
+	if err != nil {
+		t.Skipf("Docker not available: %v, skipping E2E test", err)
+	}
+
+	tmpDir := t.TempDir()
+
+	// 初始化 Managers
+	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
+	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
+
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	skillMgr, _ := skill.NewManager(filepath.Join(tmpDir, "skills"))
+	mcpMgr, _ := mcp.NewManager(filepath.Join(tmpDir, "mcp"))
+	agentMgr := agent.NewManager(filepath.Join(tmpDir, "agents"), provMgr, rtMgr, skillMgr, mcpMgr)
+
+	registry := engine.DefaultRegistry()
+	sessionStore := session.NewMemoryStore()
+	sessionMgr := session.NewManager(sessionStore, dockerMgr, registry, filepath.Join(tmpDir, "workspaces"))
+	sessionMgr.SetAgentManager(agentMgr)
+
+	historyMgr := history.NewManager(nil)
+
+	// 创建 Agent
+	testAgent := &agent.Agent{
+		ID:           "e2e-claude-zhipu",
+		Name:         "E2E Claude Code Zhipu",
+		Adapter:      agent.AdapterClaudeCode,
+		ProviderID:   "zhipu",
+		Model:        "glm-4-flash",
+		SystemPrompt: "You are a concise assistant. Reply in under 30 words.",
+		Permissions: agent.PermissionConfig{
+			SkipAll: true,
+		},
+	}
+	require.NoError(t, agentMgr.Create(testAgent))
+	t.Logf("Agent: adapter=%s, provider=zhipu, model=%s", testAgent.Adapter, testAgent.Model)
+
+	// 发送 Run 请求
+	handler := NewAgentHandler(agentMgr, sessionMgr, historyMgr)
+	router := gin.New()
+	handler.RegisterRoutes(router.Group("/api/v1"))
+
+	runReq := RunAgentReq{
+		Prompt: "Say hello in exactly 3 words.",
+		Options: &agent.RunOptions{
+			MaxTurns: 2,
+			Timeout:  60,
+		},
+	}
+	body, _ := json.Marshal(runReq)
+
+	t.Log("Sending prompt, waiting for response...")
+	reqCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/e2e-claude-zhipu/run", bytes.NewReader(body)).
+		WithContext(reqCtx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	t.Logf("Status: %d, Body: %s", w.Code, truncate(w.Body.String(), 500))
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, resp.Message)
+	}
+
+	resultBytes, _ := json.Marshal(resp.Data)
+	var result agent.RunResult
+	require.NoError(t, json.Unmarshal(resultBytes, &result))
+
+	t.Logf("Status=%s, Output=%q", result.Status, truncate(result.Output, 200))
+	assert.Equal(t, agent.RunStatusCompleted, result.Status)
+	assert.NotEmpty(t, result.Output)
+
+	// 清理容器
+	cleanSessions, _ := sessionStore.List(nil)
+	for _, s := range cleanSessions {
+		if s.ContainerID != "" {
+			_ = dockerMgr.Stop(ctx, s.ContainerID)
+			_ = dockerMgr.Remove(ctx, s.ContainerID)
+		}
+	}
+}
+
+// TestClaudeCode_MultiTurn_E2E 端到端测试 Claude Code 多轮对话 (--resume)
+//
+// 验证流程:
+//  1. 创建 Session (Claude Code + Zhipu)
+//  2. 第一轮: 计算 7*8, 获取 session_id (ThreadID)
+//  3. 第二轮: 使用 --resume 追问 "乘以2", 验证上下文保持
+//
+// 运行方式:
+//
+//	go test -v -run TestClaudeCode_MultiTurn_E2E -timeout 180s ./internal/api/
+func TestClaudeCode_MultiTurn_E2E(t *testing.T) {
+	apiKey := getZhipuAPIKey(t)
+	if apiKey == "" {
+		t.Skip("zhipu API key not available, skipping E2E test")
+	}
+
+	ctx := context.Background()
+	dockerMgr, err := container.NewDockerManager()
+	if err != nil {
+		t.Skipf("Docker not available: %v, skipping E2E test", err)
+	}
+
+	tmpDir := t.TempDir()
+
+	// 初始化 Managers
+	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
+	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
+
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	skillMgr, _ := skill.NewManager(filepath.Join(tmpDir, "skills"))
+	mcpMgr, _ := mcp.NewManager(filepath.Join(tmpDir, "mcp"))
+	agentMgr := agent.NewManager(filepath.Join(tmpDir, "agents"), provMgr, rtMgr, skillMgr, mcpMgr)
+
+	registry := engine.DefaultRegistry()
+	sessionStore := session.NewMemoryStore()
+	sessionMgr := session.NewManager(sessionStore, dockerMgr, registry, filepath.Join(tmpDir, "workspaces"))
+	sessionMgr.SetAgentManager(agentMgr)
+
+	// 创建 Agent
+	testAgent := &agent.Agent{
+		ID:           "e2e-claude-multiturn",
+		Name:         "E2E Claude MultiTurn",
+		Adapter:      agent.AdapterClaudeCode,
+		ProviderID:   "zhipu",
+		Model:        "glm-4-flash",
+		SystemPrompt: "You are a calculator. Only output the numeric result, nothing else. No explanation.",
+		Permissions: agent.PermissionConfig{
+			SkipAll: true,
+		},
+	}
+	require.NoError(t, agentMgr.Create(testAgent))
+	t.Logf("Agent created: id=%s, adapter=%s", testAgent.ID, testAgent.Adapter)
+
+	// === 创建 Session ===
+	sess, err := sessionMgr.Create(ctx, &session.CreateRequest{
+		AgentID:   testAgent.ID,
+		Workspace: filepath.Join(tmpDir, "workspace-multiturn"),
+	})
+	require.NoError(t, err)
+	t.Logf("Session created: id=%s, container=%s", sess.ID, sess.ContainerID)
+
+	// 确保清理
+	defer func() {
+		if sess.ContainerID != "" {
+			_ = dockerMgr.Stop(ctx, sess.ContainerID)
+			_ = dockerMgr.Remove(ctx, sess.ContainerID)
+			t.Logf("Cleaned up container: %s", sess.ContainerID[:12])
+		}
+	}()
+
+	// === Turn 1: 计算 7*8 ===
+	t.Log("=== Turn 1: What is 7*8? ===")
+	resp1, err := sessionMgr.Exec(ctx, sess.ID, &session.ExecRequest{
+		Prompt:   "What is 7*8? Reply with just the number.",
+		MaxTurns: 2,
+		Timeout:  60,
+	})
+	require.NoError(t, err)
+	t.Logf("Turn 1 result: message=%q, thread_id=%q, error=%q",
+		truncate(resp1.Message, 200), resp1.ThreadID, resp1.Error)
+
+	// 验证第一轮
+	assert.NotEmpty(t, resp1.Message, "Turn 1 should have a message")
+	assert.Contains(t, resp1.Message, "56", "7*8 should be 56")
+	assert.NotEmpty(t, resp1.ThreadID, "Turn 1 should return a ThreadID (session_id)")
+
+	if resp1.ThreadID == "" {
+		t.Fatal("Cannot continue multi-turn test without ThreadID from Turn 1")
+	}
+	t.Logf("Got ThreadID (session_id): %s", resp1.ThreadID)
+
+	// 验证 token 使用
+	if resp1.Usage != nil {
+		t.Logf("Turn 1 usage: input=%d, output=%d", resp1.Usage.InputTokens, resp1.Usage.OutputTokens)
+	}
+
+	// === Turn 2: 使用 --resume 追问 ===
+	t.Log("=== Turn 2: Multiply by 2 (resume) ===")
+	resp2, err := sessionMgr.Exec(ctx, sess.ID, &session.ExecRequest{
+		Prompt:   "Multiply the previous result by 2. Reply with just the number.",
+		MaxTurns: 2,
+		Timeout:  60,
+		ThreadID: resp1.ThreadID, // 传递 session_id 实现 resume
+	})
+	require.NoError(t, err)
+	t.Logf("Turn 2 result: message=%q, thread_id=%q, error=%q",
+		truncate(resp2.Message, 200), resp2.ThreadID, resp2.Error)
+
+	// 验证第二轮：应该知道上一轮的结果是 56，56*2=112
+	assert.NotEmpty(t, resp2.Message, "Turn 2 should have a message")
+	assert.Contains(t, resp2.Message, "112", "56*2 should be 112 (context preserved)")
+
+	// 验证 ThreadID 保持一致
+	if resp2.ThreadID != "" {
+		assert.Equal(t, resp1.ThreadID, resp2.ThreadID, "ThreadID should remain the same across turns")
+	}
+
+	if resp2.Usage != nil {
+		t.Logf("Turn 2 usage: input=%d, output=%d", resp2.Usage.InputTokens, resp2.Usage.OutputTokens)
+	}
+
+	// === Turn 3: 再追加一轮验证 ===
+	t.Log("=== Turn 3: Add 7 (resume) ===")
+	resp3, err := sessionMgr.Exec(ctx, sess.ID, &session.ExecRequest{
+		Prompt:   "Add 7 to the previous result. Reply with just the number.",
+		MaxTurns: 2,
+		Timeout:  60,
+		ThreadID: resp1.ThreadID,
+	})
+	require.NoError(t, err)
+	t.Logf("Turn 3 result: message=%q, thread_id=%q, error=%q",
+		truncate(resp3.Message, 200), resp3.ThreadID, resp3.Error)
+
+	// 验证第三轮：112+7=119
+	assert.NotEmpty(t, resp3.Message, "Turn 3 should have a message")
+	assert.Contains(t, resp3.Message, "119", "112+7 should be 119 (context preserved across 3 turns)")
+
+	if resp3.Usage != nil {
+		t.Logf("Turn 3 usage: input=%d, output=%d", resp3.Usage.InputTokens, resp3.Usage.OutputTokens)
+	}
+
+	t.Log("=== Multi-turn test PASSED: 7*8=56 → *2=112 → +7=119 ===")
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + fmt.Sprintf("... (%d chars total)", len(s))
+}

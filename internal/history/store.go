@@ -184,9 +184,6 @@ func matchFilter(entry *Entry, filter *ListFilter) bool {
 	if filter.SourceID != "" && entry.SourceID != filter.SourceID {
 		return false
 	}
-	if filter.ProfileID != "" && entry.ProfileID != filter.ProfileID {
-		return false
-	}
 	if filter.Engine != "" && entry.Engine != filter.Engine {
 		return false
 	}

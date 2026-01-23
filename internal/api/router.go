@@ -5,59 +5,57 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
-	"github.com/tmalldedede/agentbox/internal/credential"
+	"github.com/tmalldedede/agentbox/internal/engine"
 	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/mcp"
-	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/provider"
+	"github.com/tmalldedede/agentbox/internal/runtime"
 	"github.com/tmalldedede/agentbox/internal/session"
 	"github.com/tmalldedede/agentbox/internal/skill"
-	"github.com/tmalldedede/agentbox/internal/smartagent"
 	"github.com/tmalldedede/agentbox/internal/task"
 	"github.com/tmalldedede/agentbox/internal/webhook"
-
-	_ "github.com/tmalldedede/agentbox/docs" // swagger docs
 )
 
 // Server HTTP 服务器
 type Server struct {
-	httpServer         *http.Server
-	engine             *gin.Engine
-	handler            *Handler
-	fileHandler        *FileHandler
-	publicFileHandler  *PublicFileHandler
-	wsHandler          *WSHandler
-	profileHandler     *ProfileHandler
-	providerHandler    *ProviderHandler
-	mcpHandler         *MCPHandler
-	skillHandler       *SkillHandler
-	credentialHandler  *CredentialHandler
-	imageHandler       *ImageHandler
-	systemHandler      *SystemHandler
-	taskHandler        *TaskHandler
-	webhookHandler     *WebhookHandler
-	smartAgentHandler  *SmartAgentHandler
-	historyHandler     *HistoryHandler
+	httpServer        *http.Server
+	engine            *gin.Engine
+	handler           *Handler
+	fileHandler       *FileHandler
+	publicFileHandler *PublicFileHandler
+	wsHandler         *WSHandler
+	providerHandler   *ProviderHandler
+	mcpHandler        *MCPHandler
+	skillHandler      *SkillHandler
+	imageHandler      *ImageHandler
+	systemHandler     *SystemHandler
+	taskHandler       *TaskHandler
+	webhookHandler    *WebhookHandler
+	runtimeHandler    *RuntimeHandler
+	agentHandler      *AgentHandler
+	historyHandler    *HistoryHandler
+	dashboardHandler  *DashboardHandler
 }
 
 // Deps 服务器依赖（从 App 容器注入）
 type Deps struct {
-	Session    *session.Manager
-	Registry   *agent.Registry
-	Container  container.Manager
-	Profile    *profile.Manager
-	Provider   *provider.Manager
-	MCP        *mcp.Manager
-	Skill      *skill.Manager
-	Credential *credential.Manager
-	Task       *task.Manager
-	Webhook    *webhook.Manager
-	SmartAgent *smartagent.Manager
-	History    *history.Manager
+	Session     *session.Manager
+	Registry    *engine.Registry
+	Container   container.Manager
+	Provider    *provider.Manager
+	Runtime     *runtime.Manager
+	MCP         *mcp.Manager
+	Skill       *skill.Manager
+	Task        *task.Manager
+	Webhook     *webhook.Manager
+	Agent       *agent.Manager
+	History     *history.Manager
+	GC          *container.GarbageCollector
+	FilesConfig config.FilesConfig
+	FileStore   FileStore
 }
 
 // NewServer 创建服务器
@@ -70,70 +68,79 @@ func NewServer(deps *Deps) *Server {
 
 	handler := NewHandler(deps.Session, deps.Registry)
 	fileHandler := NewFileHandler(deps.Session)
-	publicFileHandler := NewPublicFileHandler()
+	publicFileHandler := NewPublicFileHandler(deps.FilesConfig, deps.FileStore)
 	wsHandler := NewWSHandler(deps.Session, deps.Registry, deps.Container)
-	profileHandler := NewProfileHandler(deps.Profile)
 	providerHandler := NewProviderHandler(deps.Provider)
+	runtimeHandler := NewRuntimeHandler(deps.Runtime)
 	mcpHandler := NewMCPHandler(deps.MCP)
 	skillHandler := NewSkillHandler(deps.Skill)
-	credentialHandler := NewCredentialHandler(deps.Credential)
 	imageHandler := NewImageHandler(deps.Container)
-	systemHandler := NewSystemHandler(deps.Container, deps.Session)
+	systemHandler := NewSystemHandler(deps.Container, deps.Session, deps.GC)
 	taskHandler := NewTaskHandler(deps.Task)
 	webhookHandler := NewWebhookHandler(deps.Webhook)
-	smartAgentHandler := NewSmartAgentHandler(deps.SmartAgent, deps.Session, deps.Profile, deps.History)
+	agentHandler := NewAgentHandler(deps.Agent, deps.Session, deps.History)
 	historyHandler := NewHistoryHandler(deps.History)
+	dashboardHandler := NewDashboardHandler(deps.Task, deps.Agent, deps.Session, deps.Provider, deps.Container, deps.History)
 
 	s := &Server{
-		engine:             engine,
-		handler:            handler,
-		fileHandler:        fileHandler,
-		publicFileHandler:  publicFileHandler,
-		wsHandler:          wsHandler,
-		profileHandler:     profileHandler,
-		providerHandler:    providerHandler,
-		mcpHandler:         mcpHandler,
-		skillHandler:       skillHandler,
-		credentialHandler:  credentialHandler,
-		imageHandler:       imageHandler,
-		systemHandler:      systemHandler,
-		taskHandler:        taskHandler,
-		webhookHandler:     webhookHandler,
-		smartAgentHandler:  smartAgentHandler,
-		historyHandler:     historyHandler,
+		engine:            engine,
+		handler:           handler,
+		fileHandler:       fileHandler,
+		publicFileHandler: publicFileHandler,
+		wsHandler:         wsHandler,
+		providerHandler:   providerHandler,
+		runtimeHandler:    runtimeHandler,
+		mcpHandler:        mcpHandler,
+		skillHandler:      skillHandler,
+		imageHandler:      imageHandler,
+		systemHandler:     systemHandler,
+		taskHandler:       taskHandler,
+		webhookHandler:    webhookHandler,
+		agentHandler:      agentHandler,
+		historyHandler:    historyHandler,
+		dashboardHandler:  dashboardHandler,
 	}
 
 	s.setupRoutes()
+
+	// 启动文件清理
+	publicFileHandler.StartCleanup(deps.FilesConfig.CleanupInterval)
+
 	return s
 }
 
 // setupRoutes 设置路由
 func (s *Server) setupRoutes() {
-	// ==================== Swagger API Docs ====================
-	// GET /swagger/*any -> Swagger UI
-	s.engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
 	// ==================== Public API ====================
-	// 参考 Manus API 设计，对外开放的 API
+	// Task-Centric 设计，对齐 Manus API
 	v1 := s.engine.Group("/api/v1")
 	{
 		// Health
 		v1.GET("/health", s.handler.HealthCheck)
 
-		// Engines (只读) - 底层引擎适配器列表 (claude-code, codex, opencode)
+		// Tasks (核心) - 创建/多轮/取消/SSE 事件流
+		s.taskHandler.RegisterRoutes(v1)
+
+		// Files (附件) - 独立文件上传
+		s.publicFileHandler.RegisterRoutes(v1)
+
+		// Agents (只读) - 列表可用 Agent
+		v1.GET("/agents", s.agentHandler.ListPublic)
+		v1.GET("/agents/:id", s.agentHandler.GetPublic)
+
+		// Webhooks (CRUD) - Webhook 管理
+		s.webhookHandler.RegisterRoutes(v1)
+
+		// Engines (只读) - 底层引擎适配器列表
 		v1.GET("/engines", s.handler.ListAgents)
+	}
 
-		// Agents (CRUD + Run) - 对外暴露的智能体 API
-		s.smartAgentHandler.RegisterRoutes(v1)
-
-		// Profiles (CRUD) - Agent 配置模板
-		s.profileHandler.RegisterRoutes(v1)
-
-		// Providers (只读 + 自定义) - API 提供商配置
-		s.providerHandler.RegisterRoutes(v1)
-
-		// Sessions (CRUD) - 工作空间/容器 (类似 Manus Projects)
-		sessions := v1.Group("/sessions")
+	// ==================== Admin API ====================
+	// 平台管理接口，调试和配置用
+	admin := s.engine.Group("/api/v1/admin")
+	{
+		// Sessions (调试用) - 完整的 Session CRUD
+		sessions := admin.Group("/sessions")
 		{
 			sessions.POST("", s.handler.CreateSession)
 			sessions.GET("", s.handler.ListSessions)
@@ -142,11 +149,11 @@ func (s *Server) setupRoutes() {
 			sessions.POST("/:id/start", s.handler.StartSession)
 			sessions.POST("/:id/stop", s.handler.StopSession)
 			sessions.POST("/:id/exec", s.handler.ExecSession)
-			sessions.POST("/:id/exec/stream", s.handler.ExecSessionStream) // SSE 流式执行 (Codex)
+			sessions.POST("/:id/exec/stream", s.handler.ExecSessionStream)
 			sessions.GET("/:id/executions", s.handler.GetExecutions)
 			sessions.GET("/:id/executions/:execId", s.handler.GetExecution)
 			sessions.GET("/:id/logs", s.handler.GetSessionLogs)
-			sessions.GET("/:id/logs/stream", s.handler.StreamSessionLogs) // SSE 实时日志流
+			sessions.GET("/:id/logs/stream", s.handler.StreamSessionLogs)
 
 			// Session 文件管理
 			sessions.GET("/:id/files", s.fileHandler.ListFiles)
@@ -159,37 +166,32 @@ func (s *Server) setupRoutes() {
 			sessions.GET("/:id/stream", s.wsHandler.ExecStream)
 		}
 
-		// Tasks (CRUD) - 异步任务队列
-		s.taskHandler.RegisterRoutes(v1)
+		// Agents (完整 CRUD) - 管理 Agent 配置
+		s.agentHandler.RegisterRoutes(admin)
 
-		// Files (CRUD) - 独立文件上传 (任务附件)
-		s.publicFileHandler.RegisterRoutes(v1)
+		// Providers (CRUD + Key 管理)
+		s.providerHandler.RegisterRoutes(admin)
 
-		// Webhooks (CRUD) - Webhook 管理
-		s.webhookHandler.RegisterRoutes(v1)
+		// Runtimes 管理
+		s.runtimeHandler.RegisterRoutes(admin)
 
-		// History (只读) - 执行历史记录
-		s.historyHandler.RegisterRoutes(v1)
-	}
-
-	// ==================== Admin API ====================
-	// 平台管理接口，需要额外权限
-	admin := s.engine.Group("/api/v1/admin")
-	{
 		// MCP Servers 管理
 		s.mcpHandler.RegisterRoutes(admin)
 
 		// Skills 管理
 		s.skillHandler.RegisterRoutes(admin)
 
-		// Credentials 管理
-		s.credentialHandler.RegisterRoutes(admin)
-
 		// Images 管理
 		s.imageHandler.RegisterRoutes(admin)
 
 		// System 管理
 		s.systemHandler.RegisterRoutes(admin)
+
+		// History (只读) - 执行历史记录
+		s.historyHandler.RegisterRoutes(admin)
+
+		// Dashboard (态势感知大屏)
+		s.dashboardHandler.RegisterRoutes(admin)
 	}
 }
 
@@ -204,6 +206,9 @@ func (s *Server) Run(addr string) error {
 
 // Shutdown 优雅关闭服务器
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.publicFileHandler != nil {
+		s.publicFileHandler.Stop()
+	}
 	if s.httpServer != nil {
 		return s.httpServer.Shutdown(ctx)
 	}

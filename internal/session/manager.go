@@ -16,9 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
-	"github.com/tmalldedede/agentbox/internal/credential"
+	"github.com/tmalldedede/agentbox/internal/engine"
 	"github.com/tmalldedede/agentbox/internal/logger"
-	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/skill"
 )
 
@@ -33,15 +32,14 @@ func init() {
 type Manager struct {
 	store         Store
 	containerMgr  container.Manager
-	agentRegistry *agent.Registry
-	profileMgr    *profile.Manager
-	credentialMgr *credential.Manager
+	agentRegistry *engine.Registry
+	agentMgr      *agent.Manager
 	skillMgr      *skill.Manager
 	workspaceBase string
 }
 
 // NewManager 创建会话管理器
-func NewManager(store Store, containerMgr container.Manager, registry *agent.Registry, workspaceBase string) *Manager {
+func NewManager(store Store, containerMgr container.Manager, registry *engine.Registry, workspaceBase string) *Manager {
 	return &Manager{
 		store:         store,
 		containerMgr:  containerMgr,
@@ -50,14 +48,9 @@ func NewManager(store Store, containerMgr container.Manager, registry *agent.Reg
 	}
 }
 
-// SetProfileManager 设置 Profile 管理器（可选依赖）
-func (m *Manager) SetProfileManager(mgr *profile.Manager) {
-	m.profileMgr = mgr
-}
-
-// SetCredentialManager 设置 Credential 管理器（可选依赖）
-func (m *Manager) SetCredentialManager(mgr *credential.Manager) {
-	m.credentialMgr = mgr
+// SetAgentManager 设置 Agent 管理器
+func (m *Manager) SetAgentManager(mgr *agent.Manager) {
+	m.agentMgr = mgr
 }
 
 // SetSkillManager 设置 Skill 管理器（可选依赖）
@@ -67,10 +60,28 @@ func (m *Manager) SetSkillManager(mgr *skill.Manager) {
 
 // Create 创建会话
 func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, error) {
+	// 确定适配器名称
+	adapterName := req.Agent
+	var fullConfig *agent.AgentFullConfig
+
+	// 新模型：通过 AgentID 解析完整配置
+	if req.AgentID != "" && m.agentMgr != nil {
+		var err error
+		fullConfig, err = m.agentMgr.GetFullConfig(req.AgentID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve agent: %w", err)
+		}
+		adapterName = fullConfig.Agent.Adapter
+	}
+
+	if adapterName == "" {
+		return nil, fmt.Errorf("agent adapter name is required (set agent_id or agent field)")
+	}
+
 	// 获取 Agent 适配器
-	adapter, err := m.agentRegistry.Get(req.Agent)
+	adapter, err := m.agentRegistry.Get(adapterName)
 	if err != nil {
-		return nil, fmt.Errorf("agent not found: %s", req.Agent)
+		return nil, fmt.Errorf("agent not found: %s", adapterName)
 	}
 
 	// 生成会话 ID
@@ -87,17 +98,29 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 		return nil, fmt.Errorf("failed to create workspace: %w", err)
 	}
 
+	// 确定资源配置
+	cpuLimit := 2.0
+	memoryLimit := int64(4 * 1024 * 1024 * 1024)
+	if fullConfig != nil && fullConfig.Runtime != nil {
+		if fullConfig.Runtime.CPUs > 0 {
+			cpuLimit = fullConfig.Runtime.CPUs
+		}
+		if fullConfig.Runtime.MemoryMB > 0 {
+			memoryLimit = int64(fullConfig.Runtime.MemoryMB) * 1024 * 1024
+		}
+	}
+
 	// 创建会话
 	session := &Session{
 		ID:        sessionID,
-		Agent:     req.Agent,
-		ProfileID: req.ProfileID,
+		AgentID:   req.AgentID,
+		Agent:     adapterName,
 		Status:    StatusCreating,
 		Workspace: workspace,
 		Env:       req.Env,
 		Config: Config{
-			CPULimit:    2.0,
-			MemoryLimit: 4 * 1024 * 1024 * 1024,
+			CPULimit:    cpuLimit,
+			MemoryLimit: memoryLimit,
 		},
 	}
 
@@ -115,30 +138,31 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
-	// 准备环境变量（可能需要从 Credential 注入 API Key）
+	// 准备环境变量
 	envVars := make(map[string]string)
+
+	// 新模型：从 Provider 获取环境变量（包含 API Key）
+	if fullConfig != nil && req.AgentID != "" && m.agentMgr != nil {
+		provEnv, err := m.agentMgr.GetProviderEnvVars(req.AgentID)
+		if err == nil {
+			for k, v := range provEnv {
+				envVars[k] = v
+			}
+		}
+		// Agent 自身的 env 覆盖
+		for k, v := range fullConfig.Agent.Env {
+			envVars[k] = v
+		}
+	}
+
+	// 请求中的 env 优先级最高
 	for k, v := range req.Env {
 		envVars[k] = v
 	}
 
-	// 如果请求中没有 API Key，尝试从 Profile 关联的 Credential 获取
-	hasAPIKey := false
-	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
-		if _, ok := envVars[key]; ok {
-			hasAPIKey = true
-			break
-		}
-	}
-	if !hasAPIKey && req.ProfileID != "" && m.profileMgr != nil && m.credentialMgr != nil {
-		if p, err := m.profileMgr.Get(req.ProfileID); err == nil && p.CredentialID != "" {
-			if apiKey, err := m.credentialMgr.GetDecrypted(p.CredentialID); err == nil {
-				envVars["OPENAI_API_KEY"] = apiKey
-			}
-		}
-	}
 
 	// 准备容器配置
-	containerConfig := adapter.PrepareContainer(&agent.SessionInfo{
+	containerConfig := adapter.PrepareContainer(&engine.SessionInfo{
 		ID:        sessionID,
 		Workspace: workspace,
 		Env:       envVars,
@@ -147,6 +171,22 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	// 应用资源限制
 	containerConfig.Resources.CPULimit = session.Config.CPULimit
 	containerConfig.Resources.MemoryLimit = session.Config.MemoryLimit
+
+	// 应用 Runtime 的网络和特权配置（覆盖适配器默认值）
+	if fullConfig != nil && fullConfig.Runtime != nil {
+		if fullConfig.Runtime.Network != "" {
+			containerConfig.NetworkMode = fullConfig.Runtime.Network
+		}
+		if fullConfig.Runtime.Privileged {
+			containerConfig.Privileged = true
+		}
+	}
+
+	// 添加 session_id 标签（便于 GC 关联）
+	if containerConfig.Labels == nil {
+		containerConfig.Labels = make(map[string]string)
+	}
+	containerConfig.Labels["agentbox.session_id"] = sessionID
 
 	// 创建容器
 	ctr, err := m.containerMgr.Create(ctx, containerConfig)
@@ -182,87 +222,83 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 }
 
 // writeConfigFiles 写入配置文件到容器
-func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, containerID string, req *CreateRequest) error {
+func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, containerID string, req *CreateRequest) error {
 	// 检查适配器是否实现 ConfigFilesProvider 接口
-	cfgProvider, ok := adapter.(agent.ConfigFilesProvider)
+	cfgProvider, ok := adapter.(engine.ConfigFilesProvider)
 	if !ok {
 		log.Debug("adapter does not implement ConfigFilesProvider", "adapter", adapter.Name())
 		return nil // 适配器不需要配置文件
 	}
-	log.Debug("adapter implements ConfigFilesProvider", "adapter", adapter.Name(), "profile_id", req.ProfileID)
+	log.Debug("adapter implements ConfigFilesProvider", "adapter", adapter.Name(), "agent_id", req.AgentID)
 
-	// 获取 Profile
-	var p *profile.Profile
-	if req.ProfileID != "" && m.profileMgr != nil {
-		var err error
-		p, err = m.profileMgr.Get(req.ProfileID)
-		if err != nil {
-			return fmt.Errorf("failed to get profile: %w", err)
+	// 构建 AgentConfig
+	cfg := &engine.AgentConfig{}
+
+	// 从 AgentFullConfig 填充（如果通过 AgentID 创建）
+	if req.AgentID != "" && m.agentMgr != nil {
+		if fullConfig, err := m.agentMgr.GetFullConfig(req.AgentID); err == nil {
+			cfg.ID = fullConfig.Agent.ID
+			cfg.Name = fullConfig.Agent.Name
+			cfg.Adapter = fullConfig.Agent.Adapter
+			cfg.Model = engine.ModelConfig{
+				Name:     fullConfig.Agent.Model,
+				Provider: "", // 从 Provider 获取
+			}
+			if fullConfig.Provider != nil {
+				cfg.Model.BaseURL = fullConfig.Provider.BaseURL
+				cfg.Model.Provider = fullConfig.Provider.ID
+			}
+			// Agent 层覆盖 base_url（同一服务商不同 adapter 可能 URL 不同）
+			if fullConfig.Agent.BaseURLOverride != "" {
+				cfg.Model.BaseURL = fullConfig.Agent.BaseURLOverride
+			}
 		}
-		// 创建副本以避免修改原始 Profile
-		pCopy := *p
-		p = &pCopy
-	} else {
-		// 创建空 Profile
-		p = &profile.Profile{}
 	}
 
-	// 如果 Profile 没有 Model 配置，尝试从环境变量提取
-	if p.Model.BaseURL == "" {
-		// Codex 使用 OPENAI_BASE_URL
+	// 从环境变量补充 Model 配置（优先级低于 Agent 配置）
+	if cfg.Model.BaseURL == "" {
 		if baseURL, ok := req.Env["OPENAI_BASE_URL"]; ok && baseURL != "" {
-			p.Model.BaseURL = baseURL
+			cfg.Model.BaseURL = baseURL
 		}
 	}
-	if p.Model.Provider == "" {
-		// 尝试从 MODEL_PROVIDER 环境变量获取
+	if cfg.Model.Provider == "" {
 		if provider, ok := req.Env["MODEL_PROVIDER"]; ok && provider != "" {
-			p.Model.Provider = provider
-		} else if p.Model.BaseURL != "" {
-			// 从 BaseURL 推断 Provider 名称
-			p.Model.Provider = inferProviderFromBaseURL(p.Model.BaseURL)
+			cfg.Model.Provider = provider
+		} else if cfg.Model.BaseURL != "" {
+			cfg.Model.Provider = inferProviderFromBaseURL(cfg.Model.BaseURL)
 		}
 	}
-	if p.Model.Name == "" {
-		// 尝试从 MODEL 或 CODEX_MODEL 环境变量获取
+	if cfg.Model.Name == "" {
 		for _, key := range []string{"MODEL", "CODEX_MODEL", "OPENAI_MODEL"} {
 			if model, ok := req.Env[key]; ok && model != "" {
-				p.Model.Name = model
+				cfg.Model.Name = model
 				break
 			}
 		}
 	}
-	if p.Model.WireAPI == "" {
-		// 尝试从 WIRE_API 环境变量获取
+	if cfg.Model.WireAPI == "" {
 		if wireAPI, ok := req.Env["WIRE_API"]; ok && wireAPI != "" {
-			p.Model.WireAPI = wireAPI
+			cfg.Model.WireAPI = wireAPI
 		}
 	}
 
-	// 获取 API Key（优先级：环境变量 > Profile Credential）
+	// 获取 API Key（从环境变量）
 	apiKey := ""
-	// 1. 先尝试从环境变量获取
 	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
 		if v, ok := req.Env[key]; ok && v != "" {
 			apiKey = v
 			break
 		}
 	}
-	// 2. 如果没有，尝试从 Profile 关联的 Credential 获取
-	if apiKey == "" && p.CredentialID != "" && m.credentialMgr != nil {
-		if decrypted, err := m.credentialMgr.GetDecrypted(p.CredentialID); err == nil {
-			apiKey = decrypted
-		}
-	}
 
 	// 获取配置文件
-	log.Debug("profile model config",
-		"model", p.Model.Name,
-		"provider", p.Model.Provider,
-		"base_url", p.Model.BaseURL,
+	log.Debug("agent model config",
+		"model", cfg.Model.Name,
+		"provider", cfg.Model.Provider,
+		"base_url", cfg.Model.BaseURL,
 		"api_key_present", apiKey != "",
 	)
-	configFiles := cfgProvider.GetConfigFiles(p, apiKey)
+	configFiles := cfgProvider.GetConfigFiles(cfg, apiKey)
 	log.Debug("got config files", "count", len(configFiles))
 	if len(configFiles) == 0 {
 		log.Debug("no config files to write")
@@ -273,19 +309,13 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 	for path, content := range configFiles {
 		log.Debug("writing config file", "path", path, "content_len", len(content))
 
-		// 处理 ~ 路径：使用 shell 展开
-		// 注意：~ 只在 shell 中展开，所以必须用 sh -c
 		expandedPath := path
 		if strings.HasPrefix(path, "~/") {
-			// 使用 $HOME 替代 ~，在 sh -c 中会正确展开
 			expandedPath = "$HOME" + path[1:]
 		}
 
-		// 获取目录路径
 		dir := filepath.Dir(expandedPath)
 
-		// 使用单个 shell 命令完成创建目录和写入文件
-		// 转义内容中的特殊字符（单引号）
 		escapedContent := strings.ReplaceAll(content, "'", "'\"'\"'")
 		writeCmd := []string{
 			"sh", "-c",
@@ -301,9 +331,14 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 	}
 
 	// 写入 Skills 文件到容器
-	if err := m.writeSkillFiles(ctx, containerID, p); err != nil {
+	var skillIDs []string
+	if req.AgentID != "" && m.agentMgr != nil {
+		if fullConfig, err := m.agentMgr.GetFullConfig(req.AgentID); err == nil {
+			skillIDs = fullConfig.Agent.SkillIDs
+		}
+	}
+	if err := m.writeSkillFiles(ctx, containerID, skillIDs); err != nil {
 		log.Warn("failed to write skill files", "error", err)
-		// 不中断创建，记录警告即可
 	}
 
 	return nil
@@ -311,21 +346,20 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter agent.Adapter, c
 
 // writeSkillFiles 写入 Skills 文件到容器
 // Skills 文件存放位置: ~/.codex/skills/{skill-id}/SKILL.md
-func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, p *profile.Profile) error {
-	// 检查是否有 Skill Manager 和 Profile 中的 SkillIDs
+func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, skillIDs []string) error {
 	if m.skillMgr == nil {
 		log.Debug("skill manager not set, skipping skill injection")
 		return nil
 	}
 
-	if len(p.SkillIDs) == 0 {
-		log.Debug("no skills configured in profile")
+	if len(skillIDs) == 0 {
+		log.Debug("no skills configured")
 		return nil
 	}
 
-	log.Debug("writing skills to container", "skill_ids", p.SkillIDs)
+	log.Debug("writing skills to container", "skill_ids", skillIDs)
 
-	for _, skillID := range p.SkillIDs {
+	for _, skillID := range skillIDs {
 		// 获取 Skill
 		s, err := m.skillMgr.Get(skillID)
 		if err != nil {
@@ -378,7 +412,7 @@ func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, p *pr
 		}
 	}
 
-	log.Info("skills injected to container", "count", len(p.SkillIDs))
+	log.Info("skills injected to container", "count", len(skillIDs))
 	return nil
 }
 
@@ -530,13 +564,14 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 	}
 
 	// 准备执行选项
-	execOpts := &agent.ExecOptions{
+	execOpts := &engine.ExecOptions{
 		Prompt:           req.Prompt,
 		MaxTurns:         req.MaxTurns,
 		Timeout:          req.Timeout,
 		AllowedTools:     req.AllowedTools,
 		DisallowedTools:  req.DisallowedTools,
 		IncludeEvents:    req.IncludeEvents,
+		ThreadID:         req.ThreadID,
 		WorkingDirectory: session.Workspace,
 	}
 
@@ -566,7 +601,7 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 	defer cancel()
 
 	// 检查 adapter 是否实现了 DirectExecutor 接口
-	if directExec, ok := adapter.(agent.DirectExecutor); ok {
+	if directExec, ok := adapter.(engine.DirectExecutor); ok {
 		// 使用 Go SDK 直接执行
 		return m.execDirect(execCtx, directExec, execOpts, execution)
 	}
@@ -576,7 +611,7 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 }
 
 // execDirect 使用 Go SDK 直接执行 (Codex)
-func (m *Manager) execDirect(ctx context.Context, executor agent.DirectExecutor, opts *agent.ExecOptions, execution *Execution) (*ExecResponse, error) {
+func (m *Manager) execDirect(ctx context.Context, executor engine.DirectExecutor, opts *engine.ExecOptions, execution *Execution) (*ExecResponse, error) {
 	result, err := executor.Execute(ctx, opts)
 	if err != nil {
 		execution.Status = ExecutionFailed
@@ -611,6 +646,7 @@ func (m *Manager) execDirect(ctx context.Context, executor agent.DirectExecutor,
 		Output:      result.Message, // 兼容旧版
 		ExitCode:    result.ExitCode,
 		Error:       result.Error,
+		ThreadID:    result.ThreadID,
 	}
 
 	// 添加 token 使用统计
@@ -637,9 +673,11 @@ func (m *Manager) execDirect(ctx context.Context, executor agent.DirectExecutor,
 }
 
 // execViaCLI 通过 CLI 在容器中执行 (Claude Code, OpenCode, Codex)
-func (m *Manager) execViaCLI(ctx context.Context, adapter agent.Adapter, opts *agent.ExecOptions, containerID string, execution *Execution) (*ExecResponse, error) {
+func (m *Manager) execViaCLI(ctx context.Context, adapter engine.Adapter, opts *engine.ExecOptions, containerID string, execution *Execution) (*ExecResponse, error) {
 	// 准备执行命令
 	cmd := adapter.PrepareExec(opts)
+
+	log.Debug("execViaCLI: running command", "cmd", strings.Join(cmd, " "), "thread_id", opts.ThreadID)
 
 	// 在容器中执行
 	result, err := m.containerMgr.Exec(ctx, containerID, cmd)
@@ -657,9 +695,14 @@ func (m *Manager) execViaCLI(ctx context.Context, adapter agent.Adapter, opts *a
 	}
 
 	// 检查 adapter 是否实现了 JSONOutputParser 接口
-	if parser, ok := adapter.(agent.JSONOutputParser); ok {
-		// 使用 JSON 解析器解析输出 (如 Codex --json 模式)
+	if parser, ok := adapter.(engine.JSONOutputParser); ok {
+		// 使用 JSON 解析器解析输出 (Codex --json / Claude Code --output-format stream-json)
 		return m.execViaCLIWithJSONParser(parser, opts, result, execution)
+	}
+
+	// 非 JSON adapter 的 resume 模式：纯文本输出
+	if opts.ThreadID != "" {
+		return m.execViaCLIPlainText(opts, result, execution)
 	}
 
 	// 更新执行记录 (普通文本输出模式)
@@ -685,7 +728,16 @@ func (m *Manager) execViaCLI(ctx context.Context, adapter agent.Adapter, opts *a
 }
 
 // execViaCLIWithJSONParser 使用 JSON 解析器处理 CLI 输出 (如 Codex --json 模式)
-func (m *Manager) execViaCLIWithJSONParser(parser agent.JSONOutputParser, opts *agent.ExecOptions, result *container.ExecResult, execution *Execution) (*ExecResponse, error) {
+func (m *Manager) execViaCLIWithJSONParser(parser engine.JSONOutputParser, opts *engine.ExecOptions, result *container.ExecResult, execution *Execution) (*ExecResponse, error) {
+	// 记录原始 CLI 输出
+	log.Debug("CLI raw output",
+		"stdout_len", len(result.Stdout),
+		"stderr_len", len(result.Stderr),
+		"exit_code", result.ExitCode,
+		"stdout_preview", truncateStr(result.Stdout, 500),
+		"stderr_preview", truncateStr(result.Stderr, 300),
+	)
+
 	// 解析 JSONL 输出
 	parsed, err := parser.ParseJSONLOutput(result.Stdout, opts.IncludeEvents)
 	if err != nil {
@@ -731,6 +783,7 @@ func (m *Manager) execViaCLIWithJSONParser(parser agent.JSONOutputParser, opts *
 		Output:      parsed.Message, // 兼容旧版
 		ExitCode:    parsed.ExitCode,
 		Error:       parsed.Error,
+		ThreadID:    parsed.ThreadID,
 	}
 
 	// 添加 token 使用统计
@@ -754,6 +807,77 @@ func (m *Manager) execViaCLIWithJSONParser(parser agent.JSONOutputParser, opts *
 	}
 
 	return resp, nil
+}
+
+// execViaCLIPlainText 处理 resume 模式的纯文本输出（不带 --json）
+func (m *Manager) execViaCLIPlainText(opts *engine.ExecOptions, result *container.ExecResult, execution *Execution) (*ExecResponse, error) {
+	// 从 Docker 多路复用流中提取纯文本
+	message := stripDockerStreamHeaders(result.Stdout)
+	message = strings.TrimSpace(message)
+
+	log.Debug("execViaCLIPlainText: resume output",
+		"raw_len", len(result.Stdout),
+		"message_len", len(message),
+		"exit_code", result.ExitCode,
+		"message_preview", truncateStr(message, 200),
+	)
+
+	now := time.Now()
+	execution.EndedAt = &now
+	execution.Output = message
+	execution.ExitCode = result.ExitCode
+	if result.ExitCode == 0 {
+		execution.Status = ExecutionSuccess
+	} else {
+		execution.Status = ExecutionFailed
+		execution.Error = stripDockerStreamHeaders(result.Stderr)
+	}
+	_ = m.store.UpdateExecution(execution)
+
+	return &ExecResponse{
+		ExecutionID: execution.ID,
+		Message:     message,
+		Output:      message,
+		ExitCode:    result.ExitCode,
+		Error:       execution.Error,
+	}, nil
+}
+
+// stripDockerStreamHeaders 从 Docker 多路复用流中提取纯文本
+// Docker exec 非 TTY 模式下，stdout/stderr 使用 8 字节头部复用：
+// [stream_type(1)][0][0][0][size(4, big-endian)]
+// stream_type: 0x01=stdout, 0x02=stderr
+func stripDockerStreamHeaders(raw string) string {
+	data := []byte(raw)
+	var result []byte
+
+	for len(data) >= 8 {
+		// 读取 8 字节头部
+		streamType := data[0]
+		// 大端序 4 字节 size
+		size := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+
+		data = data[8:]
+
+		if size <= 0 || size > len(data) {
+			// 格式不匹配，可能不是多路复用流，返回原始内容
+			return raw
+		}
+
+		// 只提取 stdout (0x01) 的数据
+		if streamType == 0x01 {
+			result = append(result, data[:size]...)
+		}
+
+		data = data[size:]
+	}
+
+	// 如果没有成功解析任何帧，返回原始内容（可能本身就是纯文本）
+	if len(result) == 0 && len(raw) > 0 {
+		return raw
+	}
+
+	return string(result)
 }
 
 // ExecStream 流式执行命令，返回事件通道 (目前仅支持 Codex)
@@ -787,7 +911,7 @@ func (m *Manager) ExecStream(ctx context.Context, id string, req *ExecRequest) (
 	}
 
 	// 准备执行选项
-	execOpts := &agent.ExecOptions{
+	execOpts := &engine.ExecOptions{
 		Prompt:           req.Prompt,
 		MaxTurns:         req.MaxTurns,
 		Timeout:          req.Timeout,
@@ -971,6 +1095,22 @@ func (m *Manager) GetExecution(ctx context.Context, sessionID, execID string) (*
 	return exec, nil
 }
 
+// ListContainerIDs 列出所有会话关联的容器 ID（实现 container.SessionLister 接口）
+func (m *Manager) ListContainerIDs(ctx context.Context) ([]string, error) {
+	sessions, err := m.store.List(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		if s.ContainerID != "" {
+			ids = append(ids, s.ContainerID)
+		}
+	}
+	return ids, nil
+}
+
 // GetWorkspace 获取会话工作空间路径
 func (m *Manager) GetWorkspace(sessionID string) (string, error) {
 	session, err := m.store.Get(sessionID)
@@ -1118,4 +1258,11 @@ func inferProviderFromBaseURL(baseURL string) string {
 
 	// 默认返回 "custom"
 	return "custom"
+}
+
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...(truncated)"
 }

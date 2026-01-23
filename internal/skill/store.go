@@ -87,31 +87,6 @@ func NewSkillStore(manager *Manager) *SkillStore {
 		githubToken: githubToken,
 	}
 
-	// 添加默认源
-	store.AddSource(&SkillSource{
-		ID:          "anthropic-official",
-		Name:        "Anthropic Official",
-		Owner:       "anthropics",
-		Repo:        "skills",
-		Branch:      "main",
-		Path:        "skills",
-		Type:        "official",
-		Description: "Official Anthropic Agent Skills",
-		IsEnabled:   true,
-	})
-
-	store.AddSource(&SkillSource{
-		ID:          "awesome-claude-skills",
-		Name:        "Awesome Claude Skills",
-		Owner:       "travisvn",
-		Repo:        "awesome-claude-skills",
-		Branch:      "main",
-		Path:        "skills",
-		Type:        "community",
-		Description: "Community curated Claude Skills collection",
-		IsEnabled:   true,
-	})
-
 	return store
 }
 
@@ -205,7 +180,7 @@ func (s *SkillStore) FetchSkills(ctx context.Context, sourceID string) ([]Remote
 
 // FetchAllSkills 从所有启用的源获取 Skills
 func (s *SkillStore) FetchAllSkills(ctx context.Context) ([]RemoteSkill, error) {
-	var allSkills []RemoteSkill
+	allSkills := make([]RemoteSkill, 0)
 
 	for _, source := range s.sources {
 		if !source.IsEnabled {

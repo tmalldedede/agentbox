@@ -3,13 +3,17 @@ package task
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/logger"
-	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/session"
 )
 
@@ -20,15 +24,30 @@ func init() {
 	log = logger.Module("task")
 }
 
+// FileBindFunc 文件绑定回调（将 fileID 关联到 taskID）
+type FileBindFunc func(fileID, taskID string) error
+
+// FilePathFunc 文件路径解析回调（根据 fileID 获取磁盘路径和文件名）
+type FilePathFunc func(fileID string) (path string, filename string, err error)
+
 // Manager 任务管理器
 type Manager struct {
 	store      Store
-	profileMgr *profile.Manager
+	agentMgr   *agent.Manager
 	sessionMgr *session.Manager
 
 	// 调度配置
 	maxConcurrent int           // 最大并发任务数
 	pollInterval  time.Duration // 轮询间隔
+
+	// Idle timeout 配置
+	idleTimeout time.Duration         // 默认 30 分钟
+	idleTimers  map[string]*time.Timer // taskID → idle timer
+	idleMu     sync.Mutex
+
+	// 文件管理
+	fileBinder       FileBindFunc // 创建 task 时绑定附件
+	filePathResolver FilePathFunc // 根据 fileID 解析磁盘路径
 
 	// 运行时状态
 	ctx       context.Context
@@ -36,12 +55,23 @@ type Manager struct {
 	wg        sync.WaitGroup
 	running   map[string]context.CancelFunc // taskID -> cancel func
 	runningMu sync.Mutex
+
+	// 事件广播
+	eventSubs   map[string][]chan *TaskEvent // taskID → subscriber channels
+	eventSubsMu sync.RWMutex
+}
+
+// TaskEvent SSE 事件
+type TaskEvent struct {
+	Type string      `json:"type"` // task.started, agent.thinking, agent.tool_call, agent.message, task.completed, task.failed
+	Data interface{} `json:"data,omitempty"`
 }
 
 // ManagerConfig 管理器配置
 type ManagerConfig struct {
 	MaxConcurrent int
 	PollInterval  time.Duration
+	IdleTimeout   time.Duration
 }
 
 // DefaultManagerConfig 默认配置
@@ -49,27 +79,49 @@ func DefaultManagerConfig() *ManagerConfig {
 	return &ManagerConfig{
 		MaxConcurrent: 5,
 		PollInterval:  time.Second * 2,
+		IdleTimeout:   30 * time.Minute,
 	}
 }
 
 // NewManager 创建任务管理器
-func NewManager(store Store, profileMgr *profile.Manager, sessionMgr *session.Manager, cfg *ManagerConfig) *Manager {
+func NewManager(store Store, agentMgr *agent.Manager, sessionMgr *session.Manager, cfg *ManagerConfig) *Manager {
 	if cfg == nil {
 		cfg = DefaultManagerConfig()
 	}
-
+	if cfg.MaxConcurrent <= 0 {
+		cfg.MaxConcurrent = 5
+	}
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = 2 * time.Second
+	}
+	if cfg.IdleTimeout == 0 {
+		cfg.IdleTimeout = 30 * time.Minute
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Manager{
 		store:         store,
-		profileMgr:    profileMgr,
+		agentMgr:      agentMgr,
 		sessionMgr:    sessionMgr,
 		maxConcurrent: cfg.MaxConcurrent,
 		pollInterval:  cfg.PollInterval,
+		idleTimeout:   cfg.IdleTimeout,
+		idleTimers:    make(map[string]*time.Timer),
 		ctx:           ctx,
 		cancel:        cancel,
 		running:       make(map[string]context.CancelFunc),
+		eventSubs:     make(map[string][]chan *TaskEvent),
 	}
+}
+
+// SetFileBinder 设置文件绑定回调
+func (m *Manager) SetFileBinder(fn FileBindFunc) {
+	m.fileBinder = fn
+}
+
+// SetFilePathResolver 设置文件路径解析回调
+func (m *Manager) SetFilePathResolver(fn FilePathFunc) {
+	m.filePathResolver = fn
 }
 
 // Start 启动调度器
@@ -82,6 +134,14 @@ func (m *Manager) Start() {
 // Stop 停止调度器
 func (m *Manager) Stop() {
 	m.cancel()
+
+	// 停止所有 idle timers
+	m.idleMu.Lock()
+	for _, timer := range m.idleTimers {
+		timer.Stop()
+	}
+	m.idleMu.Unlock()
+
 	m.wg.Wait()
 	log.Info("task manager stopped")
 }
@@ -138,40 +198,77 @@ func (m *Manager) scheduleNext() {
 	}
 }
 
-// CreateTask 创建任务
+// CreateTaskRequest 创建任务请求（简化版）
+type CreateTaskRequest struct {
+	// 核心字段
+	AgentID string `json:"agent_id,omitempty"`          // 首次创建时必填
+	Prompt  string `json:"prompt" binding:"required"`
+	TaskID  string `json:"task_id,omitempty"`           // 多轮时传入已有 task_id
+
+	// 附件
+	Attachments []string `json:"attachments,omitempty"` // file IDs
+
+	// 可选配置
+	WebhookURL string            `json:"webhook_url,omitempty"`
+	Timeout    int               `json:"timeout,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+}
+
+// CreateTask 创建任务（或追加多轮）
 func (m *Manager) CreateTask(req *CreateTaskRequest) (*Task, error) {
-	// 验证 Profile
-	p, err := m.profileMgr.Get(req.ProfileID)
+	// 多轮追加：传了 TaskID
+	if req.TaskID != "" {
+		return m.appendTurn(req)
+	}
+
+	// 新建任务
+	if req.AgentID == "" {
+		return nil, apperr.BadRequestf("agent_id is required for new task")
+	}
+
+	ag, err := m.agentMgr.Get(req.AgentID)
 	if err != nil {
-		return nil, fmt.Errorf("profile not found: %s", req.ProfileID)
+		return nil, apperr.BadRequestf("agent not found: %s", req.AgentID)
+	}
+	if ag.Status == "inactive" {
+		return nil, apperr.BadRequestf("agent is inactive: %s", req.AgentID)
 	}
 
-	// 检查 Profile 是否公开（如果需要）
-	if !p.IsPublic {
-		return nil, fmt.Errorf("profile is not public: %s", req.ProfileID)
-	}
-
-	// 创建任务
 	now := time.Now()
 	task := &Task{
 		ID:          "task-" + uuid.New().String()[:8],
-		ProfileID:   req.ProfileID,
-		ProfileName: p.Name,
-		AgentType:   p.Adapter,
-		SessionID:   req.SessionID, // 使用指定的 Session（如果提供）
+		AgentID:     req.AgentID,
+		AgentName:   ag.Name,
+		AgentType:   ag.Adapter,
 		Prompt:      req.Prompt,
-		Input:       req.Input,
-		Output:      req.Output,
-		WebhookURL:  req.WebhookURL,
-		Timeout:     req.Timeout,
-		Status:      StatusPending,
-		Metadata:    req.Metadata,
-		CreatedAt:   now,
+		Attachments: req.Attachments,
+		TurnCount:   1,
+		Turns: []Turn{
+			{
+				ID:        "turn-" + uuid.New().String()[:8],
+				Prompt:    req.Prompt,
+				CreatedAt: now,
+			},
+		},
+		WebhookURL: req.WebhookURL,
+		Timeout:    req.Timeout,
+		Status:     StatusPending,
+		Metadata:   req.Metadata,
+		CreatedAt:  now,
 	}
 
 	// 保存到数据库
 	if err := m.store.Create(task); err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
+	}
+
+	// 绑定附件文件到 Task
+	if m.fileBinder != nil && len(task.Attachments) > 0 {
+		for _, fileID := range task.Attachments {
+			if err := m.fileBinder(fileID, task.ID); err != nil {
+				log.Warn("failed to bind attachment", "file_id", fileID, "task_id", task.ID, "error", err)
+			}
+		}
 	}
 
 	// 立即入队
@@ -182,8 +279,142 @@ func (m *Manager) CreateTask(req *CreateTaskRequest) (*Task, error) {
 		log.Error("failed to queue task", "task_id", task.ID, "error", err)
 	}
 
-	log.Info("task created", "task_id", task.ID, "profile_id", task.ProfileID)
+	log.Info("task created", "task_id", task.ID, "agent_id", task.AgentID)
 	return task, nil
+}
+
+// appendTurn 追加对话轮次（多轮对话）— 同步部分立即返回，异步执行 Agent
+func (m *Manager) appendTurn(req *CreateTaskRequest) (*Task, error) {
+	task, err := m.store.Get(req.TaskID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 验证 task 状态：running 或 completed 的任务可以追加轮次
+	if task.Status != StatusRunning && task.Status != StatusCompleted {
+		return nil, apperr.BadRequestf("task %s cannot append turn (status: %s)", task.ID, task.Status)
+	}
+
+	// 验证 session 存在
+	if task.SessionID == "" {
+		return nil, apperr.BadRequestf("task %s has no active session", task.ID)
+	}
+
+	// 停止 idle timer（新的轮次进来了）
+	m.stopIdleTimer(task.ID)
+
+	// 创建新 Turn
+	turn := Turn{
+		ID:        "turn-" + uuid.New().String()[:8],
+		Prompt:    req.Prompt,
+		CreatedAt: time.Now(),
+	}
+
+	// 更新 task（同步部分：立即持久化新 turn）
+	task.Turns = append(task.Turns, turn)
+	task.TurnCount = len(task.Turns)
+	task.Status = StatusRunning
+	task.Prompt = req.Prompt
+
+	if err := m.store.Update(task); err != nil {
+		return nil, fmt.Errorf("failed to save turn: %w", err)
+	}
+
+	// 异步执行 Agent
+	go m.executeTurn(task.ID, turn.ID, req.Prompt)
+
+	log.Info("turn appended (async)", "task_id", task.ID, "turn_id", turn.ID, "turn_count", task.TurnCount)
+	return task, nil
+}
+
+// executeTurn 异步执行单个 Turn
+func (m *Manager) executeTurn(taskID, turnID, prompt string) {
+	if m.sessionMgr == nil {
+		log.Error("executeTurn: sessionMgr is nil, cannot execute turn", "task_id", taskID)
+		return
+	}
+
+	task, err := m.store.Get(taskID)
+	if err != nil {
+		log.Error("executeTurn: failed to get task", "task_id", taskID, "error", err)
+		return
+	}
+
+	// 广播事件
+	m.broadcastEvent(taskID, &TaskEvent{Type: "task.turn_started", Data: map[string]interface{}{
+		"turn_id": turnID,
+		"prompt":  prompt,
+	}})
+
+	timeout := task.Timeout
+	if timeout == 0 {
+		timeout = 1800
+	}
+
+	execResp, err := m.sessionMgr.Exec(m.ctx, task.SessionID, &session.ExecRequest{
+		Prompt:   prompt,
+		Timeout:  timeout,
+		ThreadID: task.ThreadID, // 传递 Thread ID 用于 resume 多轮对话
+	})
+	if err != nil {
+		log.Error("executeTurn: exec failed", "task_id", taskID, "turn_id", turnID, "error", err)
+		m.updateTurnResult(taskID, turnID, &Result{Text: "exec error: " + err.Error()})
+		return
+	}
+
+	log.Debug("executeTurn: exec completed",
+		"task_id", taskID, "turn_id", turnID,
+		"thread_id", task.ThreadID,
+		"resp_message", truncateStr(execResp.Message, 200),
+		"resp_thread_id", execResp.ThreadID,
+		"resp_error", execResp.Error,
+		"resp_exit_code", execResp.ExitCode,
+	)
+
+	// 保存 Thread ID（首轮执行后从 thread.started 事件获取）
+	if execResp.ThreadID != "" && task.ThreadID == "" {
+		task.ThreadID = execResp.ThreadID
+		if err := m.store.Update(task); err != nil {
+			log.Error("executeTurn: failed to save thread_id", "task_id", taskID, "error", err)
+		}
+		log.Debug("executeTurn: thread_id saved", "task_id", taskID, "thread_id", task.ThreadID)
+	}
+
+	// 等待执行完成
+	result, err := m.waitExecution(m.ctx, task.SessionID, execResp.ExecutionID, time.Duration(timeout)*time.Second)
+	if err != nil {
+		m.updateTurnResult(taskID, turnID, &Result{Text: err.Error()})
+	} else {
+		m.updateTurnResult(taskID, turnID, result)
+		m.broadcastEvent(taskID, &TaskEvent{Type: "agent.message", Data: map[string]interface{}{
+			"turn_id": turnID,
+			"text":    result.Text,
+		}})
+	}
+
+	// 重置 idle timer
+	m.resetIdleTimer(taskID)
+}
+
+// updateTurnResult 更新指定 Turn 的执行结果
+func (m *Manager) updateTurnResult(taskID, turnID string, result *Result) {
+	task, err := m.store.Get(taskID)
+	if err != nil {
+		log.Error("updateTurnResult: failed to get task", "task_id", taskID, "error", err)
+		return
+	}
+
+	for i := range task.Turns {
+		if task.Turns[i].ID == turnID {
+			task.Turns[i].Result = result
+			break
+		}
+	}
+	task.Result = result // 最新结果
+
+	if err := m.store.Update(task); err != nil {
+		log.Error("updateTurnResult: failed to update", "task_id", taskID, "error", err)
+	}
 }
 
 // GetTask 获取任务
@@ -207,6 +438,9 @@ func (m *Manager) CancelTask(id string) error {
 		return fmt.Errorf("task cannot be cancelled in status: %s", task.Status)
 	}
 
+	// 停止 idle timer
+	m.stopIdleTimer(id)
+
 	// 如果正在运行，取消执行
 	m.runningMu.Lock()
 	if cancel, ok := m.running[id]; ok {
@@ -215,12 +449,62 @@ func (m *Manager) CancelTask(id string) error {
 	}
 	m.runningMu.Unlock()
 
+	// 停止关联 session
+	if task.SessionID != "" {
+		m.sessionMgr.Stop(context.Background(), task.SessionID)
+	}
+
 	// 更新状态
 	task.Status = StatusCancelled
 	now := time.Now()
 	task.CompletedAt = &now
 
+	// 广播事件
+	m.broadcastEvent(id, &TaskEvent{Type: "task.cancelled"})
+
 	return m.store.Update(task)
+}
+
+// SubscribeEvents 订阅任务事件
+func (m *Manager) SubscribeEvents(taskID string) <-chan *TaskEvent {
+	ch := make(chan *TaskEvent, 100)
+	m.eventSubsMu.Lock()
+	m.eventSubs[taskID] = append(m.eventSubs[taskID], ch)
+	m.eventSubsMu.Unlock()
+	return ch
+}
+
+// UnsubscribeEvents 取消订阅
+func (m *Manager) UnsubscribeEvents(taskID string, ch <-chan *TaskEvent) {
+	m.eventSubsMu.Lock()
+	defer m.eventSubsMu.Unlock()
+
+	subs := m.eventSubs[taskID]
+	for i, sub := range subs {
+		if sub == ch {
+			m.eventSubs[taskID] = append(subs[:i], subs[i+1:]...)
+			close(sub)
+			break
+		}
+	}
+	if len(m.eventSubs[taskID]) == 0 {
+		delete(m.eventSubs, taskID)
+	}
+}
+
+// broadcastEvent 广播事件到所有订阅者
+func (m *Manager) broadcastEvent(taskID string, event *TaskEvent) {
+	m.eventSubsMu.RLock()
+	subs := m.eventSubs[taskID]
+	m.eventSubsMu.RUnlock()
+
+	for _, ch := range subs {
+		select {
+		case ch <- event:
+		default:
+			// channel 满了，跳过
+		}
+	}
 }
 
 // executeTask 执行任务
@@ -228,18 +512,11 @@ func (m *Manager) executeTask(task *Task) {
 	defer m.wg.Done()
 
 	ctx, cancel := context.WithCancel(m.ctx)
-	defer cancel()
 
 	// 注册到运行中
 	m.runningMu.Lock()
 	m.running[task.ID] = cancel
 	m.runningMu.Unlock()
-
-	defer func() {
-		m.runningMu.Lock()
-		delete(m.running, task.ID)
-		m.runningMu.Unlock()
-	}()
 
 	// 更新状态为运行中
 	task.Status = StatusRunning
@@ -247,82 +524,103 @@ func (m *Manager) executeTask(task *Task) {
 	task.StartedAt = &now
 	if err := m.store.Update(task); err != nil {
 		log.Error("failed to update task to running", "task_id", task.ID, "error", err)
+		cancel()
 		return
 	}
 
-	log.Info("executing task", "task_id", task.ID, "profile_id", task.ProfileID)
+	// 广播事件
+	m.broadcastEvent(task.ID, &TaskEvent{Type: "task.started", Data: map[string]interface{}{
+		"task_id":  task.ID,
+		"agent_id": task.AgentID,
+	}})
 
-	// 执行任务
+	log.Info("executing task", "task_id", task.ID, "agent_id", task.AgentID)
+
+	// 执行任务（首轮）
 	err := m.doExecute(ctx, task)
 
-	// 更新结果
-	completedAt := time.Now()
-	task.CompletedAt = &completedAt
-
 	if err != nil {
+		// 执行失败 → 终态
+		completedAt := time.Now()
+		task.CompletedAt = &completedAt
 		task.Status = StatusFailed
 		task.ErrorMessage = err.Error()
 		log.Error("task failed", "task_id", task.ID, "error", err)
-	} else {
-		task.Status = StatusCompleted
-		log.Info("task completed", "task_id", task.ID)
+
+		m.broadcastEvent(task.ID, &TaskEvent{Type: "task.failed", Data: map[string]interface{}{
+			"error": err.Error(),
+		}})
+
+		// 清理
+		m.runningMu.Lock()
+		delete(m.running, task.ID)
+		m.runningMu.Unlock()
+		cancel()
+
+		if err := m.store.Update(task); err != nil {
+			log.Error("failed to update task result", "task_id", task.ID, "error", err)
+		}
+
+		if task.WebhookURL != "" {
+			go m.sendWebhook(task)
+		}
+		return
 	}
 
+	// 首轮执行成功 → 保持 running 状态等待多轮
 	if err := m.store.Update(task); err != nil {
-		log.Error("failed to update task result", "task_id", task.ID, "error", err)
+		log.Error("failed to update task after first turn", "task_id", task.ID, "error", err)
 	}
 
-	// 发送 Webhook（如果配置了）
-	if task.WebhookURL != "" {
-		go m.sendWebhook(task)
-	}
+	// 启动 idle timer（等待后续轮次或超时自动完成）
+	m.resetIdleTimer(task.ID)
+
+	log.Info("task first turn completed, waiting for more turns or idle timeout",
+		"task_id", task.ID, "idle_timeout", m.idleTimeout)
+
+	// 注意：不再在这里清理 running map 和 cancel
+	// 因为 task 保持 running 状态等待多轮
+	// 清理会在 completeTask 或 CancelTask 中进行
 }
 
-// doExecute 实际执行任务
+// doExecute 实际执行任务（首轮）
 func (m *Manager) doExecute(ctx context.Context, task *Task) error {
-	// 获取解析后的 Profile
-	p, err := m.profileMgr.GetResolved(task.ProfileID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve profile: %w", err)
+	// 创建新 Session
+	if task.AgentID == "" {
+		return fmt.Errorf("task has no agent_id, cannot create session")
 	}
 
-	var sess *session.Session
-	var needStopSession bool // 是否需要在任务完成后停止 session
-
-	// 如果任务已指定 SessionID，使用现有 Session
-	if task.SessionID != "" {
-		sess, err = m.sessionMgr.Get(ctx, task.SessionID)
-		if err != nil {
-			return fmt.Errorf("failed to get session %s: %w", task.SessionID, err)
-		}
-		// 使用外部创建的 session，任务完成后不停止它
-		needStopSession = false
-		log.Info("using existing session", "session_id", sess.ID, "task_id", task.ID)
+	// 从 Agent 配置获取 workspace
+	workspace := ""
+	if ag, err := m.agentMgr.Get(task.AgentID); err == nil && ag.Workspace != "" {
+		workspace = ag.Workspace
 	} else {
-		// 创建新 Session
-		sess, err = m.sessionMgr.Create(ctx, &session.CreateRequest{
-			Agent:     p.Adapter,
-			ProfileID: task.ProfileID,
-			Workspace: "", // 使用默认，由 session manager 分配
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create session: %w", err)
-		}
-		task.SessionID = sess.ID
-		needStopSession = true // 内部创建的 session，任务完成后需要停止
-
-		// 启动新创建的 Session
-		if err := m.sessionMgr.Start(ctx, sess.ID); err != nil {
-			return fmt.Errorf("failed to start session: %w", err)
-		}
+		workspace = fmt.Sprintf("agent-%s-%s", task.AgentID, task.ID)
 	}
 
-	// 用于条件停止 session 的辅助函数
-	stopSessionIfNeeded := func() {
-		if needStopSession {
-			m.sessionMgr.Stop(ctx, task.SessionID)
-		}
+	createReq := &session.CreateRequest{
+		AgentID:   task.AgentID,
+		Workspace: workspace,
 	}
+
+	sess, err := m.sessionMgr.Create(ctx, createReq)
+	if err != nil {
+		return fmt.Errorf("failed to create session: %w", err)
+	}
+	task.SessionID = sess.ID
+
+	// 启动 Session
+	if err := m.sessionMgr.Start(ctx, sess.ID); err != nil {
+		return fmt.Errorf("failed to start session: %w", err)
+	}
+
+	// 挂载附件到容器工作区
+	if len(task.Attachments) > 0 {
+		m.mountAttachments(ctx, sess, task.Attachments)
+	}
+
+	// 广播事件
+	m.broadcastEvent(task.ID, &TaskEvent{Type: "agent.thinking"})
 
 	// 执行任务 prompt
 	timeout := task.Timeout
@@ -335,46 +633,64 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 		Timeout: timeout,
 	})
 	if err != nil {
-		stopSessionIfNeeded()
+		m.sessionMgr.Stop(ctx, task.SessionID)
 		return fmt.Errorf("failed to execute: %w", err)
 	}
 
+	// 保存 Thread ID（首轮执行后从 thread.started 事件获取，用于后续 resume）
+	if execResp.ThreadID != "" {
+		task.ThreadID = execResp.ThreadID
+		log.Debug("doExecute: thread_id saved", "task_id", task.ID, "thread_id", task.ThreadID)
+	}
+
 	// 等待执行完成
-	execTimeout := time.Duration(timeout) * time.Second
-	timeoutCtx, cancel := context.WithTimeout(ctx, execTimeout)
+	result, err := m.waitExecution(ctx, sess.ID, execResp.ExecutionID, time.Duration(timeout)*time.Second)
+	if err != nil {
+		m.sessionMgr.Stop(ctx, task.SessionID)
+		return err
+	}
+
+	// 保存结果到首轮 Turn
+	if len(task.Turns) > 0 {
+		task.Turns[0].Result = result
+	}
+	task.Result = result
+
+	// 广播事件
+	m.broadcastEvent(task.ID, &TaskEvent{Type: "agent.message", Data: map[string]interface{}{
+		"text": result.Text,
+	}})
+
+	return nil
+}
+
+// waitExecution 等待执行完成
+func (m *Manager) waitExecution(ctx context.Context, sessionID, executionID string, timeout time.Duration) (*Result, error) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// 轮询检查执行状态
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			// 超时或取消
-			stopSessionIfNeeded()
 			if ctx.Err() != nil {
-				return fmt.Errorf("task cancelled")
+				return nil, fmt.Errorf("task cancelled")
 			}
-			return fmt.Errorf("task timeout after %v", execTimeout)
+			return nil, fmt.Errorf("task timeout after %v", timeout)
 
 		case <-ticker.C:
-			// 检查执行状态
-			exec, err := m.sessionMgr.GetExecution(ctx, sess.ID, execResp.ExecutionID)
+			exec, err := m.sessionMgr.GetExecution(ctx, sessionID, executionID)
 			if err != nil {
-				return fmt.Errorf("failed to get execution: %w", err)
+				return nil, fmt.Errorf("failed to get execution: %w", err)
 			}
 
 			switch exec.Status {
 			case session.ExecutionSuccess:
-				// 收集结果
-				task.Result = m.collectResult(exec)
-				// 停止 Session（如果是内部创建的）
-				stopSessionIfNeeded()
-				return nil
+				return m.collectResult(exec), nil
 			case session.ExecutionFailed:
-				stopSessionIfNeeded()
-				return fmt.Errorf("execution failed: %s", exec.Error)
+				return nil, fmt.Errorf("execution failed: %s", exec.Error)
 			}
 			// ExecutionPending 或 ExecutionRunning 继续等待
 		}
@@ -388,32 +704,210 @@ func (m *Manager) collectResult(exec *session.Execution) *Result {
 		Text:    exec.Output,
 	}
 
-	// 计算耗时
 	if exec.EndedAt != nil {
 		result.Usage = &Usage{
 			DurationSeconds: int(exec.EndedAt.Sub(exec.StartedAt).Seconds()),
 		}
 	}
 
-	// TODO: 收集输出文件
-
 	return result
+}
+
+// mountAttachments 挂载附件文件到 Session 工作区
+func (m *Manager) mountAttachments(ctx context.Context, sess *session.Session, fileIDs []string) {
+	if m.filePathResolver == nil {
+		log.Warn("filePathResolver not set, skipping attachment mount")
+		return
+	}
+
+	for _, fileID := range fileIDs {
+		srcPath, filename, err := m.filePathResolver(fileID)
+		if err != nil {
+			log.Warn("attachment file not found", "file_id", fileID, "error", err)
+			continue
+		}
+
+		dstPath := filepath.Join(sess.Workspace, filename)
+		if err := copyFile(srcPath, dstPath); err != nil {
+			log.Error("failed to copy attachment", "file_id", fileID, "src", srcPath, "dst", dstPath, "error", err)
+			continue
+		}
+		log.Info("mounted attachment", "file_id", fileID, "dst", dstPath, "session_id", sess.ID)
+	}
+}
+
+// copyFile 复制文件
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return fmt.Errorf("copy data: %w", err)
+	}
+	return out.Close()
+}
+
+
+// truncateStr 截断字符串用于日志
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// Idle Timer 管理
+
+// resetIdleTimer 重置 idle timer
+func (m *Manager) resetIdleTimer(taskID string) {
+	m.idleMu.Lock()
+	defer m.idleMu.Unlock()
+
+	if timer, ok := m.idleTimers[taskID]; ok {
+		timer.Stop()
+	}
+	m.idleTimers[taskID] = time.AfterFunc(m.idleTimeout, func() {
+		m.completeTask(taskID, "idle timeout")
+	})
+}
+
+// stopIdleTimer 停止 idle timer
+func (m *Manager) stopIdleTimer(taskID string) {
+	m.idleMu.Lock()
+	defer m.idleMu.Unlock()
+
+	if timer, ok := m.idleTimers[taskID]; ok {
+		timer.Stop()
+		delete(m.idleTimers, taskID)
+	}
+}
+
+// completeTask 完成任务（idle timeout 或手动完成）
+func (m *Manager) completeTask(taskID string, reason string) {
+	task, err := m.store.Get(taskID)
+	if err != nil {
+		log.Error("failed to get task for completion", "task_id", taskID, "error", err)
+		return
+	}
+
+	if task.Status != StatusRunning {
+		return // 已经不是 running 状态，不处理
+	}
+
+	log.Info("completing task", "task_id", taskID, "reason", reason)
+
+	// 停止关联 session
+	if task.SessionID != "" {
+		m.sessionMgr.Stop(context.Background(), task.SessionID)
+	}
+
+	// 更新状态
+	task.Status = StatusCompleted
+	now := time.Now()
+	task.CompletedAt = &now
+
+	if err := m.store.Update(task); err != nil {
+		log.Error("failed to update task to completed", "task_id", taskID, "error", err)
+	}
+
+	// 清理 running map
+	m.runningMu.Lock()
+	if cancel, ok := m.running[taskID]; ok {
+		cancel()
+		delete(m.running, taskID)
+	}
+	m.runningMu.Unlock()
+
+	// 清理 idle timer
+	m.stopIdleTimer(taskID)
+
+	// 广播事件
+	m.broadcastEvent(taskID, &TaskEvent{Type: "task.completed", Data: map[string]interface{}{
+		"reason": reason,
+	}})
+
+	// 发送 Webhook
+	if task.WebhookURL != "" {
+		go m.sendWebhook(task)
+	}
+}
+
+// RetryTask 重试失败的任务（创建新任务，复制原任务的 agent + prompt）
+func (m *Manager) RetryTask(id string) (*Task, error) {
+	oldTask, err := m.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if oldTask.Status != StatusFailed && oldTask.Status != StatusCancelled {
+		return nil, apperr.BadRequestf("only failed/cancelled tasks can be retried (current: %s)", oldTask.Status)
+	}
+
+	return m.CreateTask(&CreateTaskRequest{
+		AgentID:     oldTask.AgentID,
+		Prompt:      oldTask.Prompt,
+		Attachments: oldTask.Attachments,
+		WebhookURL:  oldTask.WebhookURL,
+		Timeout:     oldTask.Timeout,
+		Metadata:    oldTask.Metadata,
+	})
+}
+
+// GetStats 获取任务统计
+func (m *Manager) GetStats() (*TaskStats, error) {
+	return m.store.Stats()
+}
+
+// DeleteTask 删除任务
+func (m *Manager) DeleteTask(id string) error {
+	task, err := m.store.Get(id)
+	if err != nil {
+		return err
+	}
+
+	// 只能删除终态任务
+	if !task.Status.IsTerminal() {
+		return apperr.BadRequestf("cannot delete task in status: %s", task.Status)
+	}
+
+	return m.store.Delete(id)
+}
+
+// CleanupTasks 清理旧任务
+func (m *Manager) CleanupTasks(beforeDays int, statuses []Status) (int, error) {
+	if beforeDays <= 0 {
+		beforeDays = 7 // 默认清理 7 天前的
+	}
+	before := time.Now().AddDate(0, 0, -beforeDays)
+
+	if len(statuses) == 0 {
+		statuses = []Status{StatusCompleted, StatusFailed, StatusCancelled}
+	}
+
+	count, err := m.store.Cleanup(before, statuses)
+	if err != nil {
+		return 0, err
+	}
+	log.Info("cleaned up tasks", "count", count, "before_days", beforeDays)
+	return count, nil
+}
+
+// CountTasks 统计任务数量
+func (m *Manager) CountTasks(filter *ListFilter) (int, error) {
+	return m.store.Count(filter)
 }
 
 // sendWebhook 发送 Webhook 通知
 func (m *Manager) sendWebhook(task *Task) {
 	// TODO: 实现 Webhook 发送
 	log.Debug("sending webhook", "task_id", task.ID, "webhook_url", task.WebhookURL)
-}
-
-// CreateTaskRequest 创建任务请求
-type CreateTaskRequest struct {
-	ProfileID  string            `json:"profile_id" binding:"required"`
-	SessionID  string            `json:"session_id,omitempty"` // 可选：使用已存在的 Session
-	Prompt     string            `json:"prompt" binding:"required"`
-	Input      *Input            `json:"input,omitempty"`
-	Output     *OutputConfig     `json:"output,omitempty"`
-	WebhookURL string            `json:"webhook_url,omitempty"`
-	Timeout    int               `json:"timeout,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
 }

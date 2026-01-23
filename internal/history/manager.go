@@ -49,13 +49,12 @@ func (m *Manager) Record(entry *Entry) error {
 }
 
 // RecordSession 记录 Session 执行
-func (m *Manager) RecordSession(execID, sessionID, sessionName, profileID, engine, prompt string) (*Entry, error) {
+func (m *Manager) RecordSession(execID, sessionID, sessionName, engine, prompt string) (*Entry, error) {
 	entry := &Entry{
 		ID:         execID,
 		SourceType: SourceSession,
 		SourceID:   sessionID,
 		SourceName: sessionName,
-		ProfileID:  profileID,
 		Engine:     engine,
 		Prompt:     prompt,
 		Status:     StatusRunning,
@@ -68,19 +67,17 @@ func (m *Manager) RecordSession(execID, sessionID, sessionName, profileID, engin
 	return entry, nil
 }
 
-// RecordAgent 记录 SmartAgent 执行
-func (m *Manager) RecordAgent(execID, agentID, agentName, profileID, profileName, engine, prompt string) (*Entry, error) {
+// RecordAgent 记录 Agent 执行
+func (m *Manager) RecordAgent(execID, agentID, agentName, engine, prompt string) (*Entry, error) {
 	entry := &Entry{
-		ID:          execID,
-		SourceType:  SourceAgent,
-		SourceID:    agentID,
-		SourceName:  agentName,
-		ProfileID:   profileID,
-		ProfileName: profileName,
-		Engine:      engine,
-		Prompt:      prompt,
-		Status:      StatusRunning,
-		StartedAt:   time.Now(),
+		ID:         execID,
+		SourceType: SourceAgent,
+		SourceID:   agentID,
+		SourceName: agentName,
+		Engine:     engine,
+		Prompt:     prompt,
+		Status:     StatusRunning,
+		StartedAt:  time.Now(),
 	}
 
 	if err := m.store.Create(entry); err != nil {

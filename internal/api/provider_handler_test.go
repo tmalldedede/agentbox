@@ -20,7 +20,7 @@ func setupProviderTestRouter(t *testing.T) (*gin.Engine, *ProviderHandler, strin
 	tempDir, err := os.MkdirTemp("", "provider_test")
 	require.NoError(t, err)
 
-	mgr := provider.NewManager(tempDir)
+	mgr := provider.NewManager(tempDir, "test-encryption-key-32bytes!!")
 	handler := NewProviderHandler(mgr)
 
 	router := gin.New()
@@ -63,7 +63,7 @@ func TestProviderListFilterByAgent(t *testing.T) {
 	}{
 		{"claude-code", 5},
 		{"codex", 2},
-		{"all", 1},
+		{"opencode", 1},
 	}
 
 	for _, tt := range tests {
@@ -171,7 +171,7 @@ func TestProviderCreate(t *testing.T) {
 		ID:          "test-provider",
 		Name:        "Test Provider",
 		Description: "A test provider",
-		Agent:       "claude-code",
+		Agents:      []string{"claude-code"},
 		Category:    "third_party",
 		BaseURL:     "https://api.test.com",
 	}
@@ -207,12 +207,11 @@ func TestProviderCreateDuplicate(t *testing.T) {
 	router, _, tempDir := setupProviderTestRouter(t)
 	defer os.RemoveAll(tempDir)
 
-	// Note: Current implementation allows overwriting built-in providers with custom ones
-	// This test verifies the current behavior (which creates/overwrites)
+	// Creating a provider with a duplicate ID (e.g., built-in "anthropic") should fail
 	createReq := CreateProviderRequest{
-		ID:    "anthropic",
-		Name:  "Custom Anthropic",
-		Agent: "claude-code",
+		ID:     "anthropic",
+		Name:   "Custom Anthropic",
+		Agents: []string{"claude-code"},
 	}
 
 	body, _ := json.Marshal(createReq)
@@ -222,19 +221,8 @@ func TestProviderCreateDuplicate(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	// Current implementation overwrites and returns 201
-	assert.Equal(t, http.StatusCreated, w.Code)
-
-	var resp Response
-	err := json.Unmarshal(w.Body.Bytes(), &resp)
-	require.NoError(t, err)
-
-	assert.Equal(t, 0, resp.Code)
-
-	// The new provider should have is_built_in = false
-	p, ok := resp.Data.(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, false, p["is_built_in"])
+	// Duplicate ID should be rejected
+	assert.NotEqual(t, http.StatusCreated, w.Code)
 }
 
 func TestProviderUpdate(t *testing.T) {
@@ -245,7 +233,7 @@ func TestProviderUpdate(t *testing.T) {
 	createReq := CreateProviderRequest{
 		ID:    "update-test",
 		Name:  "Update Test",
-		Agent: "claude-code",
+		Agents: []string{"claude-code"},
 	}
 
 	body, _ := json.Marshal(createReq)
@@ -288,7 +276,7 @@ func TestProviderDelete(t *testing.T) {
 	createReq := CreateProviderRequest{
 		ID:    "delete-test",
 		Name:  "Delete Test",
-		Agent: "claude-code",
+		Agents: []string{"claude-code"},
 	}
 
 	body, _ := json.Marshal(createReq)

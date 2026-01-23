@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/engine"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/session"
 )
@@ -26,12 +26,12 @@ var upgrader = websocket.Upgrader{
 // WSHandler WebSocket 处理器
 type WSHandler struct {
 	sessionMgr    *session.Manager
-	agentRegistry *agent.Registry
+	agentRegistry *engine.Registry
 	containerMgr  container.Manager
 }
 
 // NewWSHandler 创建 WebSocket 处理器
-func NewWSHandler(sessionMgr *session.Manager, registry *agent.Registry, containerMgr container.Manager) *WSHandler {
+func NewWSHandler(sessionMgr *session.Manager, registry *engine.Registry, containerMgr container.Manager) *WSHandler {
 	return &WSHandler{
 		sessionMgr:    sessionMgr,
 		agentRegistry: registry,
@@ -105,7 +105,7 @@ func (h *WSHandler) ExecStream(c *gin.Context) {
 	}
 
 	// 准备执行选项
-	execOpts := &agent.ExecOptions{
+	execOpts := &engine.ExecOptions{
 		Prompt:          req.Prompt,
 		MaxTurns:        req.MaxTurns,
 		Timeout:         req.Timeout,

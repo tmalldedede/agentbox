@@ -14,40 +14,6 @@ type BaseModel struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// ProfileModel represents a profile in the database
-type ProfileModel struct {
-	BaseModel
-	Name                  string `gorm:"size:255;not null" json:"name"`
-	Description           string `gorm:"size:1024" json:"description"`
-	Icon                  string `gorm:"size:255" json:"icon"`
-	Tags                  string `gorm:"type:text" json:"tags"` // JSON array
-	Adapter               string `gorm:"size:64;not null" json:"adapter"`
-	Extends               string `gorm:"size:64" json:"extends"`
-	CredentialID          string `gorm:"size:64" json:"credential_id"`
-	ModelConfig           string `gorm:"type:text" json:"model_config"`           // JSON
-	MCPServers            string `gorm:"type:text" json:"mcp_servers"`             // JSON array
-	SkillIDs              string `gorm:"type:text" json:"skill_ids"`               // JSON array
-	Permissions           string `gorm:"type:text" json:"permissions"`             // JSON
-	Resources             string `gorm:"type:text" json:"resources"`               // JSON
-	Features              string `gorm:"type:text" json:"features"`                // JSON
-	SystemPrompt          string `gorm:"type:text" json:"system_prompt"`
-	AppendSystemPrompt    string `gorm:"type:text" json:"append_system_prompt"`
-	BaseInstructions      string `gorm:"type:text" json:"base_instructions"`
-	DeveloperInstructions string `gorm:"type:text" json:"developer_instructions"`
-	CustomAgents          string `gorm:"type:text" json:"custom_agents"`    // JSON
-	ConfigOverrides       string `gorm:"type:text" json:"config_overrides"` // JSON
-	OutputFormat          string `gorm:"size:64" json:"output_format"`
-	OutputSchema          string `gorm:"type:text" json:"output_schema"`
-	Debug                 string `gorm:"type:text" json:"debug"` // JSON
-	IsBuiltIn             bool   `gorm:"default:false" json:"is_built_in"`
-	IsPublic              bool   `gorm:"default:false" json:"is_public"`
-	CreatedBy             string `gorm:"size:64" json:"created_by"`
-}
-
-func (ProfileModel) TableName() string {
-	return "profiles"
-}
-
 // MCPServerModel represents an MCP server in the database
 type MCPServerModel struct {
 	BaseModel
@@ -88,26 +54,10 @@ func (SkillModel) TableName() string {
 	return "skills"
 }
 
-// CredentialModel represents a credential in the database
-type CredentialModel struct {
-	BaseModel
-	Name        string `gorm:"size:255;not null" json:"name"`
-	Type        string `gorm:"size:64;not null" json:"type"` // api_key, oauth, etc.
-	Provider    string `gorm:"size:64" json:"provider"`      // anthropic, openai, etc.
-	Description string `gorm:"size:1024" json:"description"`
-	Value       string `gorm:"type:text" json:"value"`       // Encrypted
-	Metadata    string `gorm:"type:text" json:"metadata"`    // JSON object
-	IsDefault   bool   `gorm:"default:false" json:"is_default"`
-}
-
-func (CredentialModel) TableName() string {
-	return "credentials"
-}
-
 // SessionModel represents a session in the database
 type SessionModel struct {
 	BaseModel
-	ProfileID   string     `gorm:"size:64;index" json:"profile_id"`
+	AgentID     string     `gorm:"size:64;index" json:"agent_id"`
 	Agent       string     `gorm:"size:64;not null" json:"agent"`
 	Status      string     `gorm:"size:32;not null;index" json:"status"`
 	ContainerID string     `gorm:"size:128" json:"container_id"`
@@ -126,7 +76,7 @@ func (SessionModel) TableName() string {
 type TaskModel struct {
 	BaseModel
 	SessionID   string     `gorm:"size:64;index" json:"session_id"`
-	ProfileID   string     `gorm:"size:64;index" json:"profile_id"`
+	AgentID     string     `gorm:"size:64;index" json:"agent_id"`
 	Status      string     `gorm:"size:32;not null;index" json:"status"`
 	Prompt      string     `gorm:"type:text" json:"prompt"`
 	Input       string     `gorm:"type:text" json:"input"`    // JSON

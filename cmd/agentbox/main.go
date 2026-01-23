@@ -6,7 +6,7 @@
 // @description AgentBox provides a unified API for managing AI coding agents (Claude Code, Codex, OpenCode) in containerized environments.
 // @description
 // @description ## Authentication
-// @description Currently no authentication required. API keys are managed via Credentials API.
+// @description Currently no authentication required. API keys are managed via Provider configuration.
 // @description
 // @description ## API Structure
 // @description - **Public API** (`/api/v1/*`): Core functionality for external integrations
@@ -28,9 +28,6 @@
 // @tag.name Agents
 // @tag.description Agent types (Claude Code, Codex, OpenCode)
 
-// @tag.name Profiles
-// @tag.description Runtime configuration templates for agents
-
 // @tag.name Providers
 // @tag.description API provider presets (Anthropic, OpenAI, DeepSeek, etc.)
 
@@ -49,9 +46,6 @@
 // @tag.name Skills
 // @tag.description Reusable prompt templates (Admin)
 
-// @tag.name Credentials
-// @tag.description API key and token management (Admin)
-
 // @tag.name System
 // @tag.description System health and resource management (Admin)
 
@@ -63,6 +57,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -130,23 +125,48 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 初始化 File Store
+	fileDBPath := filepath.Join(cfg.Container.WorkspaceBase, "agentbox.db")
+	fileStore, err := api.NewSQLiteFileStore(fileDBPath)
+	if err != nil {
+		log.Error("failed to initialize file store", "error", err)
+		os.Exit(1)
+	}
+	defer fileStore.Close()
+
+	// 设置文件绑定回调（Task 创建时将附件关联到 Task）
+	application.Task.SetFileBinder(func(fileID, taskID string) error {
+		return fileStore.BindTask(fileID, taskID, api.FilePurposeAttachment)
+	})
+
+	// 设置文件路径解析回调（挂载附件时获取磁盘路径）
+	application.Task.SetFilePathResolver(func(fileID string) (string, string, error) {
+		record, err := fileStore.Get(fileID)
+		if err != nil {
+			return "", "", err
+		}
+		return record.Path, record.Name, nil
+	})
+
 	// 启动后台服务（Task Manager 等）
 	application.Start()
 
 	// 创建 HTTP 服务器
 	server := api.NewServer(&api.Deps{
-		Session:    application.Session,
-		Registry:   application.AgentRegistry,
-		Container:  application.Container,
-		Profile:    application.Profile,
-		Provider:   application.Provider,
-		MCP:        application.MCP,
-		Skill:      application.Skill,
-		Credential: application.Credential,
-		Task:       application.Task,
-		Webhook:    application.Webhook,
-		SmartAgent: application.SmartAgent,
-		History:    application.History,
+		Session:     application.Session,
+		Registry:    application.AgentRegistry,
+		Container:   application.Container,
+		Provider:    application.Provider,
+		Runtime:     application.Runtime,
+		MCP:         application.MCP,
+		Skill:       application.Skill,
+		Task:        application.Task,
+		Webhook:     application.Webhook,
+		Agent:       application.Agent,
+		History:     application.History,
+		GC:          application.GC,
+		FilesConfig: cfg.Files,
+		FileStore:   fileStore,
 	})
 
 	// 打印 API 路由信息
@@ -200,7 +220,6 @@ func printRoutes() {
 	fmt.Println("  GET    /api/v1/health                 - Health check")
 	fmt.Println("  GET    /api/v1/engines                - List engines (claude-code, codex, opencode)")
 	fmt.Println("  *      /api/v1/agents/*               - Agent management (CRUD + Run)")
-	fmt.Println("  *      /api/v1/profiles/*             - Profile management (CRUD)")
 	fmt.Println("  *      /api/v1/providers/*            - Provider management (CRUD)")
 	fmt.Println("  *      /api/v1/sessions/*             - Session management (CRUD)")
 	fmt.Println("  *      /api/v1/tasks/*                - Task management (CRUD)")
@@ -209,9 +228,9 @@ func printRoutes() {
 	fmt.Println("  *      /api/v1/history/*              - Execution history (Read)")
 	fmt.Println()
 	fmt.Println("Admin API (平台管理):")
+	fmt.Println("  *      /api/v1/admin/runtimes/*       - Runtime management")
 	fmt.Println("  *      /api/v1/admin/mcp-servers/*    - MCP server management")
 	fmt.Println("  *      /api/v1/admin/skills/*         - Skill management")
-	fmt.Println("  *      /api/v1/admin/credentials/*    - Credential management")
 	fmt.Println("  *      /api/v1/admin/images/*         - Image management")
 	fmt.Println("  *      /api/v1/admin/system/*         - System management")
 	fmt.Println()

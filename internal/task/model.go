@@ -28,18 +28,24 @@ var (
 // Task 任务定义
 type Task struct {
 	// 基本信息
-	ID          string `json:"id"`
-	ProfileID   string `json:"profile_id"`
-	ProfileName string `json:"profile_name,omitempty"` // 冗余，方便展示
-	AgentType   string `json:"agent_type,omitempty"`   // claude-code / codex
+	ID        string `json:"id"`
+	AgentID   string `json:"agent_id"`             // 引用 Agent
+	AgentName string `json:"agent_name,omitempty"` // 冗余，方便展示
+	AgentType string `json:"agent_type,omitempty"` // claude-code / codex
 
 	// 任务内容
 	Prompt string `json:"prompt"`
-	Input  *Input `json:"input,omitempty"`
+
+	// 附件和输出文件
+	Attachments []string     `json:"attachments,omitempty"`  // 输入文件 IDs
+	OutputFiles []OutputFile `json:"output_files,omitempty"` // 产出文件
+
+	// 多轮对话
+	Turns     []Turn `json:"turns,omitempty"`  // 对话轮次记录
+	TurnCount int    `json:"turn_count"`       // 轮次计数
 
 	// 输出配置
-	Output     *OutputConfig `json:"output,omitempty"`
-	WebhookURL string        `json:"webhook_url,omitempty"`
+	WebhookURL string `json:"webhook_url,omitempty"`
 
 	// 执行配置
 	Timeout int `json:"timeout,omitempty"` // 秒，0 表示使用默认
@@ -47,8 +53,9 @@ type Task struct {
 	// 运行时状态
 	Status       Status  `json:"status"`
 	SessionID    string  `json:"session_id,omitempty"`    // 关联的 Session
+	ThreadID     string  `json:"thread_id,omitempty"`     // 多轮对话 Thread ID (Codex resume)
 	ErrorMessage string  `json:"error_message,omitempty"` // 失败原因
-	Result       *Result `json:"result,omitempty"`        // 执行结果
+	Result       *Result `json:"result,omitempty"`        // 执行结果（最后一轮）
 
 	// 时间戳
 	CreatedAt   time.Time  `json:"created_at"`
@@ -60,20 +67,12 @@ type Task struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// Input 任务输入
-type Input struct {
-	Type   string `json:"type"` // git / files / text
-	URL    string `json:"url,omitempty"`
-	Branch string `json:"branch,omitempty"`
-	Path   string `json:"path,omitempty"`
-	Text   string `json:"text,omitempty"`
-}
-
-// OutputConfig 输出配置
-type OutputConfig struct {
-	Type   string   `json:"type"`             // files / text / json
-	Format string   `json:"format,omitempty"` // 输出格式
-	Files  []string `json:"files,omitempty"`  // 指定输出的文件
+// Turn 对话轮次
+type Turn struct {
+	ID        string    `json:"id"`
+	Prompt    string    `json:"prompt"`
+	Result    *Result   `json:"result,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Result 执行结果

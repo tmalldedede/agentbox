@@ -58,7 +58,8 @@ func HandleError(c *gin.Context, err error) {
 		return
 	}
 
-	// 普通错误，返回 500
+	// 普通错误，返回 500 — 打印日志方便调试
+	log.Error("unhandled error (500)", "error", err.Error(), "path", c.Request.URL.Path, "method", c.Request.Method)
 	c.JSON(http.StatusInternalServerError, Response{
 		Code:    http.StatusInternalServerError,
 		Message: err.Error(),

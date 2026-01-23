@@ -5,18 +5,18 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/engine"
 	"github.com/tmalldedede/agentbox/internal/session"
 )
 
 // Handler API 处理器
 type Handler struct {
 	sessionMgr    *session.Manager
-	agentRegistry *agent.Registry
+	agentRegistry *engine.Registry
 }
 
 // NewHandler 创建处理器
-func NewHandler(sessionMgr *session.Manager, registry *agent.Registry) *Handler {
+func NewHandler(sessionMgr *session.Manager, registry *engine.Registry) *Handler {
 	return &Handler{
 		sessionMgr:    sessionMgr,
 		agentRegistry: registry,
@@ -42,7 +42,7 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 // @Description Get a list of all supported agent types (Claude Code, Codex, OpenCode)
 // @Tags Agents
 // @Produce json
-// @Success 200 {object} Response{data=[]agent.Info}
+// @Success 200 {object} Response{data=[]engine.Info}
 // @Router /agents [get]
 func (h *Handler) ListAgents(c *gin.Context) {
 	agents := h.agentRegistry.List()

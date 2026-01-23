@@ -15,58 +15,6 @@ var (
 	ErrAlreadyExists = errors.New("record already exists")
 )
 
-// ProfileRepository handles profile database operations
-type ProfileRepository struct {
-	db *gorm.DB
-}
-
-// NewProfileRepository creates a new ProfileRepository
-func NewProfileRepository() *ProfileRepository {
-	return &ProfileRepository{db: DB}
-}
-
-// Create creates a new profile
-func (r *ProfileRepository) Create(model *ProfileModel) error {
-	if model.ID == "" {
-		model.ID = uuid.New().String()
-	}
-	return r.db.Create(model).Error
-}
-
-// Get retrieves a profile by ID
-func (r *ProfileRepository) Get(id string) (*ProfileModel, error) {
-	var model ProfileModel
-	err := r.db.Where("id = ?", id).First(&model).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
-	}
-	return &model, err
-}
-
-// List retrieves all profiles with optional filters
-func (r *ProfileRepository) List(filters map[string]interface{}) ([]ProfileModel, error) {
-	var models []ProfileModel
-	query := r.db.Model(&ProfileModel{})
-
-	for key, value := range filters {
-		query = query.Where(key+" = ?", value)
-	}
-
-	err := query.Order("created_at DESC").Find(&models).Error
-	return models, err
-}
-
-// Update updates a profile
-func (r *ProfileRepository) Update(model *ProfileModel) error {
-	model.UpdatedAt = time.Now()
-	return r.db.Save(model).Error
-}
-
-// Delete deletes a profile
-func (r *ProfileRepository) Delete(id string) error {
-	return r.db.Delete(&ProfileModel{}, "id = ?", id).Error
-}
-
 // MCPServerRepository handles MCP server database operations
 type MCPServerRepository struct {
 	db *gorm.DB
@@ -177,52 +125,6 @@ func (r *SkillRepository) Update(model *SkillModel) error {
 // Delete deletes a skill
 func (r *SkillRepository) Delete(id string) error {
 	return r.db.Delete(&SkillModel{}, "id = ?", id).Error
-}
-
-// CredentialRepository handles credential database operations
-type CredentialRepository struct {
-	db *gorm.DB
-}
-
-// NewCredentialRepository creates a new CredentialRepository
-func NewCredentialRepository() *CredentialRepository {
-	return &CredentialRepository{db: DB}
-}
-
-// Create creates a new credential
-func (r *CredentialRepository) Create(model *CredentialModel) error {
-	if model.ID == "" {
-		model.ID = uuid.New().String()
-	}
-	return r.db.Create(model).Error
-}
-
-// Get retrieves a credential by ID
-func (r *CredentialRepository) Get(id string) (*CredentialModel, error) {
-	var model CredentialModel
-	err := r.db.Where("id = ?", id).First(&model).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
-	}
-	return &model, err
-}
-
-// List retrieves all credentials
-func (r *CredentialRepository) List() ([]CredentialModel, error) {
-	var models []CredentialModel
-	err := r.db.Order("name ASC").Find(&models).Error
-	return models, err
-}
-
-// Update updates a credential
-func (r *CredentialRepository) Update(model *CredentialModel) error {
-	model.UpdatedAt = time.Now()
-	return r.db.Save(model).Error
-}
-
-// Delete deletes a credential
-func (r *CredentialRepository) Delete(id string) error {
-	return r.db.Delete(&CredentialModel{}, "id = ?", id).Error
 }
 
 // SessionRepository handles session database operations

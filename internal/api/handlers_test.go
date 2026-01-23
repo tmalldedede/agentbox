@@ -10,12 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/engine"
 
 	// Import agent adapters to register them
-	_ "github.com/tmalldedede/agentbox/internal/agent/claude"
-	_ "github.com/tmalldedede/agentbox/internal/agent/codex"
-	_ "github.com/tmalldedede/agentbox/internal/agent/opencode"
+	_ "github.com/tmalldedede/agentbox/internal/engine/claude"
+	_ "github.com/tmalldedede/agentbox/internal/engine/codex"
+	_ "github.com/tmalldedede/agentbox/internal/engine/opencode"
 )
 
 func init() {
@@ -24,7 +24,7 @@ func init() {
 
 // setupTestRouter creates a test router with handler
 func setupTestRouter() (*gin.Engine, *Handler) {
-	registry := agent.DefaultRegistry()
+	registry := engine.DefaultRegistry()
 	handler := NewHandler(nil, registry) // sessionMgr can be nil for some tests
 
 	router := gin.New()

@@ -5,43 +5,98 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tmalldedede/agentbox/internal/apperr"
+	"github.com/tmalldedede/agentbox/internal/config"
 )
 
-const (
-	// DefaultUploadDir 默认上传目录
-	DefaultUploadDir = "/tmp/agentbox/uploads"
-	// MaxUploadSize 最大上传大小 100MB
-	MaxUploadSize = 100 * 1024 * 1024
-)
-
-// UploadedFile 已上传的文件信息
+// UploadedFile 已上传的文件信息（API 响应）
 type UploadedFile struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Size       int64     `json:"size"`
-	MimeType   string    `json:"mime_type"`
-	UploadedAt time.Time `json:"uploaded_at"`
-	ExpiresAt  time.Time `json:"expires_at,omitempty"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Size       int64       `json:"size"`
+	MimeType   string      `json:"mime_type"`
+	TaskID     string      `json:"task_id,omitempty"`
+	Purpose    FilePurpose `json:"purpose"`
+	UploadedAt time.Time   `json:"uploaded_at"`
+	ExpiresAt  time.Time   `json:"expires_at,omitempty"`
 }
 
 // PublicFileHandler 独立文件上传处理器
 type PublicFileHandler struct {
-	uploadDir string
+	uploadDir      string
+	retentionHours int
+	maxFileSize    int64
+	store          FileStore
+	cleanupStop    chan struct{}
 }
 
 // NewPublicFileHandler 创建独立文件处理器
-func NewPublicFileHandler() *PublicFileHandler {
-	// 确保上传目录存在
-	os.MkdirAll(DefaultUploadDir, 0755)
+func NewPublicFileHandler(cfg config.FilesConfig, store FileStore) *PublicFileHandler {
+	os.MkdirAll(cfg.UploadDir, 0755)
 	return &PublicFileHandler{
-		uploadDir: DefaultUploadDir,
+		uploadDir:      cfg.UploadDir,
+		retentionHours: cfg.RetentionHours,
+		maxFileSize:    cfg.MaxFileSize,
+		store:          store,
+		cleanupStop:    make(chan struct{}),
+	}
+}
+
+// StartCleanup 启动过期文件清理 goroutine
+func (h *PublicFileHandler) StartCleanup(interval time.Duration) {
+	if h.retentionHours <= 0 {
+		return // 0 表示永不过期
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				h.cleanupExpiredFiles()
+			case <-h.cleanupStop:
+				return
+			}
+		}
+	}()
+}
+
+// Stop 停止清理 goroutine
+func (h *PublicFileHandler) Stop() {
+	close(h.cleanupStop)
+}
+
+// cleanupExpiredFiles 删除过期且未被 task 引用的文件
+func (h *PublicFileHandler) cleanupExpiredFiles() {
+	expired, err := h.store.ListExpired(time.Now())
+	if err != nil {
+		log.Error("file cleanup: failed to list expired", "error", err)
+		return
+	}
+
+	removed := 0
+	for _, record := range expired {
+		// 有关联 task 的文件不删除
+		if record.TaskID != "" {
+			continue
+		}
+
+		// 删除磁盘文件
+		fileDir := filepath.Join(h.uploadDir, record.ID)
+		os.RemoveAll(fileDir)
+
+		// 更新数据库状态
+		h.store.UpdateStatus(record.ID, FileStatusExpired)
+		removed++
+	}
+
+	if removed > 0 {
+		log.Info("file cleanup completed", "removed", removed, "retention_hours", h.retentionHours)
 	}
 }
 
@@ -60,35 +115,16 @@ func (h *PublicFileHandler) RegisterRoutes(r *gin.RouterGroup) {
 // List 列出已上传的文件
 // GET /api/v1/files
 func (h *PublicFileHandler) List(c *gin.Context) {
-	entries, err := os.ReadDir(h.uploadDir)
+	records, err := h.store.List(&FileListFilter{Status: FileStatusActive})
 	if err != nil {
-		if os.IsNotExist(err) {
-			Success(c, []UploadedFile{})
-			return
-		}
-		HandleError(c, apperr.Wrap(err, "failed to read upload directory"))
+		HandleError(c, apperr.Wrap(err, "failed to list files"))
 		return
 	}
 
-	files := make([]UploadedFile, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		// 每个目录是一个上传的文件
-		fileID := entry.Name()
-		uploadedFile, err := h.getFileInfo(fileID)
-		if err != nil {
-			continue
-		}
-		files = append(files, *uploadedFile)
+	files := make([]UploadedFile, 0, len(records))
+	for _, r := range records {
+		files = append(files, recordToUploadedFile(r))
 	}
-
-	// 按上传时间倒序
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].UploadedAt.After(files[j].UploadedAt)
-	})
 
 	Success(c, files)
 }
@@ -96,7 +132,6 @@ func (h *PublicFileHandler) List(c *gin.Context) {
 // Upload 上传文件
 // POST /api/v1/files
 func (h *PublicFileHandler) Upload(c *gin.Context) {
-	// 获取上传的文件
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		BadRequest(c, "file is required")
@@ -105,8 +140,8 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 	defer file.Close()
 
 	// 检查文件大小
-	if header.Size > MaxUploadSize {
-		BadRequest(c, fmt.Sprintf("file too large: %d bytes (max %d)", header.Size, MaxUploadSize))
+	if h.maxFileSize > 0 && header.Size > h.maxFileSize {
+		BadRequest(c, fmt.Sprintf("file too large: %d bytes (max %d)", header.Size, h.maxFileSize))
 		return
 	}
 
@@ -120,7 +155,7 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// 保存文件
+	// 保存文件到磁盘
 	filePath := filepath.Join(fileDir, header.Filename)
 	dst, err := os.Create(filePath)
 	if err != nil {
@@ -137,22 +172,39 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// 保存元数据
-	mimeType := header.Header.Get("Content-Type")
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
+	// 检测 MIME 类型
+	mimeType := getMimeType(header.Filename)
+	if mimeType == "application/octet-stream" {
+		if ct := header.Header.Get("Content-Type"); ct != "" && ct != "application/octet-stream" {
+			mimeType = ct
+		}
 	}
 
-	uploadedFile := &UploadedFile{
-		ID:         fileID,
-		Name:       header.Filename,
-		Size:       written,
-		MimeType:   mimeType,
-		UploadedAt: time.Now(),
-		ExpiresAt:  time.Now().Add(24 * time.Hour), // 默认 24 小时后过期
+	now := time.Now()
+	var expiresAt time.Time
+	if h.retentionHours > 0 {
+		expiresAt = now.Add(time.Duration(h.retentionHours) * time.Hour)
 	}
 
-	Created(c, uploadedFile)
+	// 写入数据库
+	record := &FileRecord{
+		ID:        fileID,
+		Name:      header.Filename,
+		Size:      written,
+		MimeType:  mimeType,
+		Path:      filePath,
+		Purpose:   FilePurposeGeneral,
+		Status:    FileStatusActive,
+		CreatedAt: now,
+		ExpiresAt: expiresAt,
+	}
+	if err := h.store.Create(record); err != nil {
+		os.RemoveAll(fileDir)
+		HandleError(c, apperr.Wrap(err, "failed to save file record"))
+		return
+	}
+
+	Created(c, recordToUploadedFile(record))
 }
 
 // Get 获取文件信息
@@ -160,13 +212,18 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 func (h *PublicFileHandler) Get(c *gin.Context) {
 	fileID := c.Param("id")
 
-	uploadedFile, err := h.getFileInfo(fileID)
+	record, err := h.store.Get(fileID)
 	if err != nil {
 		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
-	Success(c, uploadedFile)
+	if record.Status != FileStatusActive {
+		HandleError(c, apperr.NotFound("file"))
+		return
+	}
+
+	Success(c, recordToUploadedFile(record))
 }
 
 // Delete 删除文件
@@ -174,14 +231,19 @@ func (h *PublicFileHandler) Get(c *gin.Context) {
 func (h *PublicFileHandler) Delete(c *gin.Context) {
 	fileID := c.Param("id")
 
-	fileDir := filepath.Join(h.uploadDir, fileID)
-	if _, err := os.Stat(fileDir); os.IsNotExist(err) {
+	record, err := h.store.Get(fileID)
+	if err != nil {
 		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
-	if err := os.RemoveAll(fileDir); err != nil {
-		HandleError(c, apperr.Wrap(err, "failed to delete file"))
+	// 删除磁盘文件
+	fileDir := filepath.Join(h.uploadDir, fileID)
+	os.RemoveAll(fileDir)
+
+	// 从数据库删除
+	if err := h.store.Delete(record.ID); err != nil {
+		HandleError(c, apperr.Wrap(err, "failed to delete file record"))
 		return
 	}
 
@@ -193,84 +255,57 @@ func (h *PublicFileHandler) Delete(c *gin.Context) {
 func (h *PublicFileHandler) Download(c *gin.Context) {
 	fileID := c.Param("id")
 
-	fileDir := filepath.Join(h.uploadDir, fileID)
-	if _, err := os.Stat(fileDir); os.IsNotExist(err) {
+	record, err := h.store.Get(fileID)
+	if err != nil || record.Status != FileStatusActive {
 		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
-	// 找到目录中的文件
-	entries, err := os.ReadDir(fileDir)
-	if err != nil || len(entries) == 0 {
+	// 验证磁盘文件存在
+	if _, err := os.Stat(record.Path); os.IsNotExist(err) {
 		HandleError(c, apperr.NotFound("file"))
 		return
 	}
 
-	// 获取第一个文件
-	var fileName string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			fileName = entry.Name()
-			break
-		}
-	}
-
-	if fileName == "" {
-		HandleError(c, apperr.NotFound("file"))
-		return
-	}
-
-	filePath := filepath.Join(fileDir, fileName)
-
-	// 设置响应头
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
-	c.File(filePath)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", record.Name))
+	c.File(record.Path)
 }
 
-// getFileInfo 获取文件信息
-func (h *PublicFileHandler) getFileInfo(fileID string) (*UploadedFile, error) {
-	// 安全检查：防止路径遍历
-	if strings.Contains(fileID, "/") || strings.Contains(fileID, "\\") || strings.Contains(fileID, "..") {
-		return nil, fmt.Errorf("invalid file ID")
-	}
+// GetUploadDir 返回上传目录（供 Task Manager 使用）
+func (h *PublicFileHandler) GetUploadDir() string {
+	return h.uploadDir
+}
 
-	fileDir := filepath.Join(h.uploadDir, fileID)
-	dirInfo, err := os.Stat(fileDir)
+// BindFileToTask 将文件关联到 Task
+func (h *PublicFileHandler) BindFileToTask(fileID, taskID string, purpose FilePurpose) error {
+	return h.store.BindTask(fileID, taskID, purpose)
+}
+
+// ListByTask 列出 Task 关联的文件
+func (h *PublicFileHandler) ListByTask(taskID string) ([]UploadedFile, error) {
+	records, err := h.store.ListByTask(taskID)
 	if err != nil {
 		return nil, err
 	}
-
-	if !dirInfo.IsDir() {
-		return nil, fmt.Errorf("not a directory")
+	files := make([]UploadedFile, 0, len(records))
+	for _, r := range records {
+		files = append(files, recordToUploadedFile(r))
 	}
+	return files, nil
+}
 
-	// 找到目录中的文件
-	entries, err := os.ReadDir(fileDir)
-	if err != nil {
-		return nil, err
+// recordToUploadedFile 将数据库记录转为 API 响应
+func recordToUploadedFile(r *FileRecord) UploadedFile {
+	return UploadedFile{
+		ID:         r.ID,
+		Name:       r.Name,
+		Size:       r.Size,
+		MimeType:   r.MimeType,
+		TaskID:     r.TaskID,
+		Purpose:    r.Purpose,
+		UploadedAt: r.CreatedAt,
+		ExpiresAt:  r.ExpiresAt,
 	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
-		return &UploadedFile{
-			ID:         fileID,
-			Name:       entry.Name(),
-			Size:       info.Size(),
-			MimeType:   getMimeType(entry.Name()),
-			UploadedAt: dirInfo.ModTime(),
-			ExpiresAt:  dirInfo.ModTime().Add(24 * time.Hour),
-		}, nil
-	}
-
-	return nil, fmt.Errorf("no file in directory")
 }
 
 // getMimeType 根据文件扩展名获取 MIME 类型

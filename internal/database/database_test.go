@@ -39,81 +39,11 @@ func TestInitialize(t *testing.T) {
 	}
 
 	// Verify tables were created
-	tables := []string{"profiles", "mcp_servers", "skills", "credentials", "sessions", "tasks", "executions", "webhooks", "images", "history"}
+	tables := []string{"mcp_servers", "skills", "sessions", "tasks", "executions", "webhooks", "images", "history"}
 	for _, table := range tables {
 		if !DB.Migrator().HasTable(table) {
 			t.Errorf("table %s was not created", table)
 		}
-	}
-}
-
-func TestProfileRepository(t *testing.T) {
-	// Setup test database
-	tmpDir, _ := os.MkdirTemp("", "agentbox-test-*")
-	defer os.RemoveAll(tmpDir)
-
-	cfg := Config{
-		Driver:   "sqlite",
-		DSN:      filepath.Join(tmpDir, "test.db"),
-		LogLevel: "silent",
-	}
-	Initialize(cfg)
-	defer Close()
-
-	repo := NewProfileRepository()
-
-	// Test Create
-	profile := &ProfileModel{
-		BaseModel:   BaseModel{ID: "test-profile"},
-		Name:        "Test Profile",
-		Description: "A test profile",
-		Adapter:     "claude-code",
-	}
-
-	err := repo.Create(profile)
-	if err != nil {
-		t.Fatalf("failed to create profile: %v", err)
-	}
-
-	// Test Get
-	got, err := repo.Get("test-profile")
-	if err != nil {
-		t.Fatalf("failed to get profile: %v", err)
-	}
-	if got.Name != "Test Profile" {
-		t.Errorf("expected name 'Test Profile', got '%s'", got.Name)
-	}
-
-	// Test List
-	profiles, err := repo.List(nil)
-	if err != nil {
-		t.Fatalf("failed to list profiles: %v", err)
-	}
-	if len(profiles) != 1 {
-		t.Errorf("expected 1 profile, got %d", len(profiles))
-	}
-
-	// Test Update
-	got.Description = "Updated description"
-	err = repo.Update(got)
-	if err != nil {
-		t.Fatalf("failed to update profile: %v", err)
-	}
-
-	updated, _ := repo.Get("test-profile")
-	if updated.Description != "Updated description" {
-		t.Errorf("expected description 'Updated description', got '%s'", updated.Description)
-	}
-
-	// Test Delete
-	err = repo.Delete("test-profile")
-	if err != nil {
-		t.Fatalf("failed to delete profile: %v", err)
-	}
-
-	_, err = repo.Get("test-profile")
-	if err != ErrNotFound {
-		t.Error("expected ErrNotFound after delete")
 	}
 }
 
@@ -241,13 +171,6 @@ func TestSeedBuiltInData(t *testing.T) {
 		t.Fatalf("failed to seed built-in data: %v", err)
 	}
 
-	// Verify profiles were seeded
-	var profileCount int64
-	DB.Model(&ProfileModel{}).Where("is_built_in = ?", true).Count(&profileCount)
-	if profileCount < 3 {
-		t.Errorf("expected at least 3 built-in profiles, got %d", profileCount)
-	}
-
 	// Verify MCP servers were seeded
 	var mcpCount int64
 	DB.Model(&MCPServerModel{}).Where("is_built_in = ?", true).Count(&mcpCount)
@@ -261,9 +184,9 @@ func TestSeedBuiltInData(t *testing.T) {
 		t.Fatalf("second seed failed: %v", err)
 	}
 
-	var newProfileCount int64
-	DB.Model(&ProfileModel{}).Where("is_built_in = ?", true).Count(&newProfileCount)
-	if newProfileCount != profileCount {
-		t.Errorf("seed is not idempotent: count changed from %d to %d", profileCount, newProfileCount)
+	var newMCPCount int64
+	DB.Model(&MCPServerModel{}).Where("is_built_in = ?", true).Count(&newMCPCount)
+	if newMCPCount != mcpCount {
+		t.Errorf("seed is not idempotent: count changed from %d to %d", mcpCount, newMCPCount)
 	}
 }

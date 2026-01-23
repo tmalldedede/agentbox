@@ -69,115 +69,6 @@ func TestEnginesEndpoint(t *testing.T) {
 	}
 }
 
-// TestProfilesEndpoint tests profile CRUD operations
-func TestProfilesEndpoint(t *testing.T) {
-	router := gin.New()
-
-	// In-memory store for testing
-	profiles := make(map[string]map[string]interface{})
-
-	// List profiles
-	router.GET("/api/v1/profiles", func(c *gin.Context) {
-		list := make([]map[string]interface{}, 0)
-		for _, p := range profiles {
-			list = append(list, p)
-		}
-		c.JSON(http.StatusOK, gin.H{"profiles": list})
-	})
-
-	// Create profile
-	router.POST("/api/v1/profiles", func(c *gin.Context) {
-		var body map[string]interface{}
-		if err := c.BindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		id := body["id"].(string)
-		profiles[id] = body
-		c.JSON(http.StatusCreated, body)
-	})
-
-	// Get profile
-	router.GET("/api/v1/profiles/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		if p, ok := profiles[id]; ok {
-			c.JSON(http.StatusOK, p)
-		} else {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-		}
-	})
-
-	// Delete profile
-	router.DELETE("/api/v1/profiles/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		if _, ok := profiles[id]; ok {
-			delete(profiles, id)
-			c.Status(http.StatusNoContent)
-		} else {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-		}
-	})
-
-	// Test Create
-	createBody := map[string]interface{}{
-		"id":      "test-profile",
-		"name":    "Test Profile",
-		"adapter": "claude-code",
-	}
-	bodyBytes, _ := json.Marshal(createBody)
-	req, _ := http.NewRequest("POST", "/api/v1/profiles", bytes.NewBuffer(bodyBytes))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusCreated {
-		t.Errorf("Create: expected status 201, got %d", w.Code)
-	}
-
-	// Test Get
-	req, _ = http.NewRequest("GET", "/api/v1/profiles/test-profile", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Get: expected status 200, got %d", w.Code)
-	}
-
-	// Test List
-	req, _ = http.NewRequest("GET", "/api/v1/profiles", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("List: expected status 200, got %d", w.Code)
-	}
-
-	var listResponse map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &listResponse)
-	profilesList := listResponse["profiles"].([]interface{})
-	if len(profilesList) != 1 {
-		t.Errorf("List: expected 1 profile, got %d", len(profilesList))
-	}
-
-	// Test Delete
-	req, _ = http.NewRequest("DELETE", "/api/v1/profiles/test-profile", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Delete: expected status 204, got %d", w.Code)
-	}
-
-	// Test Get after delete (should 404)
-	req, _ = http.NewRequest("GET", "/api/v1/profiles/test-profile", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Get after delete: expected status 404, got %d", w.Code)
-	}
-}
-
 // TestMCPServersEndpoint tests MCP server CRUD operations
 func TestMCPServersEndpoint(t *testing.T) {
 	router := gin.New()
@@ -320,14 +211,14 @@ func TestSkillsEndpoint(t *testing.T) {
 func TestErrorHandling(t *testing.T) {
 	router := gin.New()
 
-	router.GET("/api/v1/profiles/:id", func(c *gin.Context) {
+	router.GET("/api/v1/agents/:id", func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "not found",
-			"message": "Profile not found",
+			"message": "Agent not found",
 		})
 	})
 
-	router.POST("/api/v1/profiles", func(c *gin.Context) {
+	router.POST("/api/v1/agents", func(c *gin.Context) {
 		var body map[string]interface{}
 		if err := c.BindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -346,7 +237,7 @@ func TestErrorHandling(t *testing.T) {
 	})
 
 	// Test 404
-	req, _ := http.NewRequest("GET", "/api/v1/profiles/nonexistent", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/agents/nonexistent", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -355,7 +246,7 @@ func TestErrorHandling(t *testing.T) {
 	}
 
 	// Test 400 - invalid JSON
-	req, _ = http.NewRequest("POST", "/api/v1/profiles", bytes.NewBufferString("invalid json"))
+	req, _ = http.NewRequest("POST", "/api/v1/agents", bytes.NewBufferString("invalid json"))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -367,7 +258,7 @@ func TestErrorHandling(t *testing.T) {
 	// Test 400 - validation error
 	body := map[string]interface{}{"adapter": "claude-code"}
 	bodyBytes, _ := json.Marshal(body)
-	req, _ = http.NewRequest("POST", "/api/v1/profiles", bytes.NewBuffer(bodyBytes))
+	req, _ = http.NewRequest("POST", "/api/v1/agents", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)

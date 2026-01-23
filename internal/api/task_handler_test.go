@@ -12,7 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tmalldedede/agentbox/internal/profile"
+	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/task"
 )
 
@@ -21,18 +22,28 @@ func setupTaskTestRouter(t *testing.T) (*gin.Engine, *TaskHandler, *task.Manager
 	tempDir, err := os.MkdirTemp("", "task_test")
 	require.NoError(t, err)
 
-	// Create profile manager
-	profileMgr, err := profile.NewManager(filepath.Join(tempDir, "profiles"))
-	require.NoError(t, err)
+	// Create provider manager with a test provider
+	providerDataDir := filepath.Join(tempDir, "providers")
+	providerMgr := provider.NewManager(providerDataDir, "test-key-32bytes-for-aes256!!")
+	providerMgr.Create(&provider.Provider{
+		ID:   "test-provider",
+		Name: "Test Provider",
+		Agents: []string{"claude-code"},
+	})
 
-	// Create a test profile (must be public for tasks)
-	testProfile := &profile.Profile{
-		ID:       "test-profile",
-		Name:     "Test Profile",
-		Adapter:  "claude-code",
-		IsPublic: true,
+	// Create agent manager with a test agent
+	agentDataDir := filepath.Join(tempDir, "agents")
+	agentMgr := agent.NewManager(agentDataDir, providerMgr, nil, nil, nil)
+
+	// Create a test agent
+	testAgent := &agent.Agent{
+		ID:         "test-agent",
+		Name:       "Test Agent",
+		Adapter:    "claude-code",
+		ProviderID: "test-provider",
+		Status:     "active",
 	}
-	err = profileMgr.Create(testProfile)
+	err = agentMgr.Create(testAgent)
 	require.NoError(t, err)
 
 	// Create task store (in-memory SQLite)
@@ -41,7 +52,7 @@ func setupTaskTestRouter(t *testing.T) (*gin.Engine, *TaskHandler, *task.Manager
 	require.NoError(t, err)
 
 	// Create task manager (without starting the scheduler)
-	taskMgr := task.NewManager(store, profileMgr, nil, nil)
+	taskMgr := task.NewManager(store, agentMgr, nil, nil)
 
 	handler := NewTaskHandler(taskMgr)
 
@@ -79,8 +90,8 @@ func TestTaskCreate(t *testing.T) {
 	router, _, _, tempDir := setupTaskTestRouter(t)
 	defer os.RemoveAll(tempDir)
 
-	createReq := CreateTaskRequest{
-		ProfileID: "test-profile",
+	createReq := CreateTaskAPIRequest{
+		AgentID: "test-agent",
 		Prompt:    "Hello, write a test",
 	}
 
@@ -102,7 +113,7 @@ func TestTaskCreate(t *testing.T) {
 	taskData, ok := resp.Data.(map[string]interface{})
 	require.True(t, ok)
 	assert.NotEmpty(t, taskData["id"])
-	assert.Equal(t, "test-profile", taskData["profile_id"])
+	assert.Equal(t, "test-agent", taskData["agent_id"])
 	assert.Equal(t, "Hello, write a test", taskData["prompt"])
 	// Task is immediately queued after creation
 	assert.Equal(t, "queued", taskData["status"])
@@ -112,8 +123,8 @@ func TestTaskCreateWithMetadata(t *testing.T) {
 	router, _, _, tempDir := setupTaskTestRouter(t)
 	defer os.RemoveAll(tempDir)
 
-	createReq := CreateTaskRequest{
-		ProfileID: "test-profile",
+	createReq := CreateTaskAPIRequest{
+		AgentID: "test-agent",
 		Prompt:    "Test with metadata",
 		Metadata: map[string]string{
 			"user_id": "user-123",
@@ -149,7 +160,7 @@ func TestTaskGet(t *testing.T) {
 
 	// Create a task first
 	createdTask, err := taskMgr.CreateTask(&task.CreateTaskRequest{
-		ProfileID: "test-profile",
+		AgentID: "test-agent",
 		Prompt:    "Get test task",
 	})
 	require.NoError(t, err)
@@ -195,13 +206,13 @@ func TestTaskCancel(t *testing.T) {
 
 	// Create a task first
 	createdTask, err := taskMgr.CreateTask(&task.CreateTaskRequest{
-		ProfileID: "test-profile",
+		AgentID: "test-agent",
 		Prompt:    "Task to cancel",
 	})
 	require.NoError(t, err)
 
 	// Cancel the task
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tasks/"+createdTask.ID, nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+createdTask.ID+"/cancel", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -223,7 +234,7 @@ func TestTaskGetOutput(t *testing.T) {
 
 	// Create a task first
 	createdTask, err := taskMgr.CreateTask(&task.CreateTaskRequest{
-		ProfileID: "test-profile",
+		AgentID: "test-agent",
 		Prompt:    "Task for output",
 	})
 	require.NoError(t, err)
@@ -246,36 +257,6 @@ func TestTaskGetOutput(t *testing.T) {
 	assert.Contains(t, data, "message")
 }
 
-func TestTaskGetLogs(t *testing.T) {
-	router, _, taskMgr, tempDir := setupTaskTestRouter(t)
-	defer os.RemoveAll(tempDir)
-
-	// Create a task first
-	createdTask, err := taskMgr.CreateTask(&task.CreateTaskRequest{
-		ProfileID: "test-profile",
-		Prompt:    "Task for logs",
-	})
-	require.NoError(t, err)
-
-	// Get logs
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+createdTask.ID+"/logs", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var resp Response
-	err = json.Unmarshal(w.Body.Bytes(), &resp)
-	require.NoError(t, err)
-
-	data, ok := resp.Data.(map[string]interface{})
-	require.True(t, ok)
-	assert.Contains(t, data, "task_id")
-	assert.Contains(t, data, "status")
-	assert.Contains(t, data, "logs")
-}
-
 func TestTaskListWithFilter(t *testing.T) {
 	router, _, taskMgr, tempDir := setupTaskTestRouter(t)
 	defer os.RemoveAll(tempDir)
@@ -283,7 +264,7 @@ func TestTaskListWithFilter(t *testing.T) {
 	// Create some tasks
 	for i := 0; i < 3; i++ {
 		_, err := taskMgr.CreateTask(&task.CreateTaskRequest{
-			ProfileID: "test-profile",
+			AgentID: "test-agent",
 			Prompt:    "Test task",
 		})
 		require.NoError(t, err)
@@ -323,7 +304,7 @@ func TestTaskValidation(t *testing.T) {
 		statusCode int
 	}{
 		{
-			name: "missing profile_id",
+			name: "missing agent_id",
 			request: map[string]string{
 				"prompt": "Test",
 			},
@@ -332,15 +313,15 @@ func TestTaskValidation(t *testing.T) {
 		{
 			name: "missing prompt",
 			request: map[string]string{
-				"profile_id": "test-profile",
+				"agent_id": "test-agent",
 			},
 			statusCode: http.StatusBadRequest,
 		},
 		{
-			name: "non-existent profile",
+			name: "non-existent agent",
 			request: map[string]string{
-				"profile_id": "nonexistent-profile",
-				"prompt":     "Test",
+				"agent_id": "nonexistent-agent",
+				"prompt":   "Test",
 			},
 			statusCode: http.StatusBadRequest,
 		},

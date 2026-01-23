@@ -6,17 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
-	"github.com/tmalldedede/agentbox/internal/profile"
+	"github.com/tmalldedede/agentbox/internal/engine"
 )
 
 const (
 	// AgentName Agent 名称
 	AgentName = "codex"
 
-	// DefaultImage 默认镜像
-	DefaultImage = "agentbox/agent:latest"
+	// DefaultImage 默认镜像 (v2: codex 0.87+, resume 支持 --json)
+	DefaultImage = "agentbox/agent:v2"
 )
 
 // Adapter Codex 适配器
@@ -59,7 +58,7 @@ func (a *Adapter) Image() string {
 }
 
 // PrepareContainer 准备容器配置
-func (a *Adapter) PrepareContainer(session *agent.SessionInfo) *container.CreateConfig {
+func (a *Adapter) PrepareContainer(session *engine.SessionInfo) *container.CreateConfig {
 	// 构建环境变量
 	env := make(map[string]string)
 	for k, v := range session.Env {
@@ -83,7 +82,7 @@ func (a *Adapter) PrepareContainer(session *agent.SessionInfo) *container.Create
 			MemoryLimit: 4 * 1024 * 1024 * 1024, // 4GB
 		},
 		NetworkMode: "bridge",      // Codex 需要网络访问 API
-		Privileged:  true,          // Codex landlock 需要特权模式
+		Privileged:  false,         // 由 Runtime 配置决定是否开启特权模式
 		Labels: map[string]string{
 			"agentbox.managed":    "true",
 			"agentbox.agent":      AgentName,
@@ -92,44 +91,44 @@ func (a *Adapter) PrepareContainer(session *agent.SessionInfo) *container.Create
 	}
 }
 
-// PrepareContainerWithProfile 使用 Profile 准备容器配置
-func (a *Adapter) PrepareContainerWithProfile(session *agent.SessionInfo, p *profile.Profile) *container.CreateConfig {
+// PrepareContainerWithConfig 使用 AgentConfig 准备容器配置
+func (a *Adapter) PrepareContainerWithConfig(session *engine.SessionInfo, cfg *engine.AgentConfig) *container.CreateConfig {
 	config := a.PrepareContainer(session)
 
-	// 应用 Profile 资源限制
-	if p.Resources.CPUs > 0 {
-		config.Resources.CPULimit = p.Resources.CPUs
+	// 应用资源限制
+	if cfg.Resources.CPUs > 0 {
+		config.Resources.CPULimit = cfg.Resources.CPUs
 	}
-	if p.Resources.MemoryMB > 0 {
-		config.Resources.MemoryLimit = int64(p.Resources.MemoryMB) * 1024 * 1024
+	if cfg.Resources.MemoryMB > 0 {
+		config.Resources.MemoryLimit = int64(cfg.Resources.MemoryMB) * 1024 * 1024
 	}
 
-	// 添加 Profile 标签
-	config.Labels["agentbox.profile.id"] = p.ID
-	config.Labels["agentbox.profile.name"] = p.Name
+	// 添加标签
+	config.Labels["agentbox.agent.id"] = cfg.ID
+	config.Labels["agentbox.agent.name"] = cfg.Name
 
 	return config
 }
 
 // GenerateConfigTOML 生成 Codex 的 config.toml 内容
 // 参考 Codex 源码: codex-rs/core/src/config.rs
-func (a *Adapter) GenerateConfigTOML(p *profile.Profile) string {
+func (a *Adapter) GenerateConfigTOML(cfg *engine.AgentConfig) string {
 	var sb strings.Builder
 
 	// ===== 基础配置 =====
 	// model_provider - 模型提供商
-	if p.Model.Provider != "" {
-		sb.WriteString(fmt.Sprintf("model_provider = \"%s\"\n", p.Model.Provider))
+	if cfg.Model.Provider != "" {
+		sb.WriteString(fmt.Sprintf("model_provider = \"%s\"\n", cfg.Model.Provider))
 	}
 
 	// model - 默认模型
-	if p.Model.Name != "" {
-		sb.WriteString(fmt.Sprintf("model = \"%s\"\n", p.Model.Name))
+	if cfg.Model.Name != "" {
+		sb.WriteString(fmt.Sprintf("model = \"%s\"\n", cfg.Model.Name))
 	}
 
 	// model_reasoning_effort - 推理强度 (low/medium/high)
-	if p.Model.ReasoningEffort != "" {
-		sb.WriteString(fmt.Sprintf("model_reasoning_effort = \"%s\"\n", p.Model.ReasoningEffort))
+	if cfg.Model.ReasoningEffort != "" {
+		sb.WriteString(fmt.Sprintf("model_reasoning_effort = \"%s\"\n", cfg.Model.ReasoningEffort))
 	}
 
 	// disable_response_storage - 禁用响应存储 (隐私)
@@ -137,26 +136,21 @@ func (a *Adapter) GenerateConfigTOML(p *profile.Profile) string {
 
 	// sandbox_mode - 沙箱模式
 	// Docker 容器环境不支持 landlock，必须使用 danger-full-access 禁用沙箱
-	// 参考: codex-rs/core/src/sandboxing/mod.rs - SandboxType::None
 	sb.WriteString("sandbox_mode = \"danger-full-access\"\n")
 
 	sb.WriteString("\n")
 
 	// ===== Provider 配置 =====
-	// 如果有自定义 Provider，生成 [model_providers.xxx] 配置块
-	if p.Model.Provider != "" && p.Model.BaseURL != "" {
-		providerName := strings.ToLower(p.Model.Provider)
+	if cfg.Model.Provider != "" && cfg.Model.BaseURL != "" {
+		providerName := strings.ToLower(cfg.Model.Provider)
 
 		sb.WriteString(fmt.Sprintf("[model_providers.%s]\n", providerName))
-		sb.WriteString(fmt.Sprintf("name = \"%s\"\n", p.Model.Provider))
-		sb.WriteString(fmt.Sprintf("base_url = \"%s\"\n", p.Model.BaseURL))
+		sb.WriteString(fmt.Sprintf("name = \"%s\"\n", cfg.Model.Provider))
+		sb.WriteString(fmt.Sprintf("base_url = \"%s\"\n", cfg.Model.BaseURL))
 
 		// wire_api - API 协议类型 (chat/responses)
-		// - "responses": OpenAI 官方新版 Responses API
-		// - "chat": OpenAI 兼容的 Chat Completions API（第三方 Provider 使用）
-		wireAPI := p.Model.WireAPI
+		wireAPI := cfg.Model.WireAPI
 		if wireAPI == "" {
-			// 只有官方 OpenAI 使用 responses API，其他第三方都用 chat API
 			if providerName == "openai" {
 				wireAPI = "responses"
 			} else {
@@ -165,9 +159,7 @@ func (a *Adapter) GenerateConfigTOML(p *profile.Profile) string {
 		}
 		sb.WriteString(fmt.Sprintf("wire_api = \"%s\"\n", wireAPI))
 
-		// requires_openai_auth - 是否需要 OpenAI OAuth 认证
-		// - true: 需要 OpenAI OAuth 登录，凭证存储在 auth.json
-		// - false: API Key 从 env_key 环境变量获取（第三方 Provider 使用）
+		// requires_openai_auth
 		if providerName == "openai" {
 			sb.WriteString("requires_openai_auth = true\n")
 		} else {
@@ -194,11 +186,11 @@ func (a *Adapter) GenerateAuthJSON(apiKey string) string {
 // GetConfigFiles 返回需要挂载到容器的配置文件
 // 返回: map[容器内路径]文件内容
 // 注意: 使用 ~ 前缀表示需要在运行时展开为用户 home 目录
-func (a *Adapter) GetConfigFiles(p *profile.Profile, apiKey string) map[string]string {
+func (a *Adapter) GetConfigFiles(cfg *engine.AgentConfig, apiKey string) map[string]string {
 	files := make(map[string]string)
 
 	// ~/.codex/config.toml
-	configTOML := a.GenerateConfigTOML(p)
+	configTOML := a.GenerateConfigTOML(cfg)
 	if configTOML != "" {
 		files["~/.codex/config.toml"] = configTOML
 	}
@@ -206,7 +198,7 @@ func (a *Adapter) GetConfigFiles(p *profile.Profile, apiKey string) map[string]s
 	// ~/.codex/auth.json
 	// 只有官方 OpenAI 需要 auth.json（requires_openai_auth = true）
 	// 第三方 Provider 通过环境变量 OPENAI_API_KEY 传入（requires_openai_auth = false）
-	providerName := strings.ToLower(p.Model.Provider)
+	providerName := strings.ToLower(cfg.Model.Provider)
 	if apiKey != "" && providerName == "openai" {
 		files["~/.codex/auth.json"] = a.GenerateAuthJSON(apiKey)
 	}
@@ -215,84 +207,94 @@ func (a *Adapter) GetConfigFiles(p *profile.Profile, apiKey string) map[string]s
 }
 
 // PrepareExec 准备执行命令
-func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
-	// 使用 exec 子命令执行非交互式任务
-	// --dangerously-bypass-approvals-and-sandbox 绕过审批和沙箱（Docker 容器不支持 landlock）
-	// --skip-git-repo-check 跳过 git 仓库检查（容器内可能没有 .git 目录）
-	// --json 输出 JSONL 格式，便于解析
-	args := []string{
-		"codex",
-		"exec",
-		req.Prompt,
+func (a *Adapter) PrepareExec(req *engine.ExecOptions) []string {
+	if req.ThreadID != "" {
+		// 多轮对话：codex 0.87+ 的 resume 支持 --json
+		args := []string{"codex", "exec", "resume", req.ThreadID, req.Prompt,
+			"--dangerously-bypass-approvals-and-sandbox",
+			"--skip-git-repo-check",
+			"--json",
+		}
+		return args
+	}
+
+	// 首轮：完整参数
+	args := []string{"codex", "exec", req.Prompt,
 		"--dangerously-bypass-approvals-and-sandbox",
 		"--skip-git-repo-check",
 		"--json",
 	}
-
 	return args
 }
 
-// PrepareExecWithProfile 使用 Profile 准备执行命令
-// 根据 Profile 配置生成完整的 codex CLI 命令
-func (a *Adapter) PrepareExecWithProfile(req *agent.ExecOptions, p *profile.Profile) []string {
-	// Codex 使用 exec 子命令执行非交互式任务
-	// --dangerously-bypass-approvals-and-sandbox 绕过审批和沙箱（Docker 容器不支持 landlock）
-	// --skip-git-repo-check 跳过 git 仓库检查（容器内可能没有 .git 目录）
-	// --json 输出 JSONL 格式，便于解析
-	args := []string{
-		"codex", "exec", req.Prompt,
+// PrepareExecWithConfig 使用 AgentConfig 准备执行命令
+func (a *Adapter) PrepareExecWithConfig(req *engine.ExecOptions, cfg *engine.AgentConfig) []string {
+	if req.ThreadID != "" {
+		// 多轮对话：codex 0.87+ 的 resume 支持 --json、--model 等
+		args := []string{"codex", "exec", "resume", req.ThreadID, req.Prompt,
+			"--dangerously-bypass-approvals-and-sandbox",
+			"--skip-git-repo-check",
+			"--json",
+		}
+		if cfg.Model.Name != "" {
+			args = append(args, "--model", cfg.Model.Name)
+		}
+		return args
+	}
+
+	args := []string{"codex", "exec"}
+
+	// 首轮：完整参数
+	args = append(args, req.Prompt,
 		"--dangerously-bypass-approvals-and-sandbox",
 		"--skip-git-repo-check",
 		"--json",
-	}
+	)
 
 	// ===== 模型配置 =====
-	if p.Model.Name != "" {
-		args = append(args, "--model", p.Model.Name)
+	if cfg.Model.Name != "" {
+		args = append(args, "--model", cfg.Model.Name)
 	}
 
 	// ===== 推理强度 (Codex 特有) =====
-	if p.Model.ReasoningEffort != "" {
-		args = append(args, "--reasoning-effort", p.Model.ReasoningEffort)
+	if cfg.Model.ReasoningEffort != "" {
+		args = append(args, "--reasoning-effort", cfg.Model.ReasoningEffort)
 	}
 
-	// 注意: 沙箱模式和审批策略已通过 --dangerously-bypass-approvals-and-sandbox 禁用
-	// Docker 容器环境不支持 landlock，必须使用此参数
-
 	// ===== 目录访问 =====
-	for _, dir := range p.Permissions.AdditionalDirs {
+	for _, dir := range cfg.Permissions.AdditionalDirs {
 		args = append(args, "--add-dir", dir)
 	}
 
 	// ===== 指令配置 =====
-	if p.BaseInstructions != "" {
-		args = append(args, "--base-instructions", p.BaseInstructions)
+	if cfg.BaseInstructions != "" {
+		args = append(args, "--base-instructions", cfg.BaseInstructions)
 	}
-	if p.DeveloperInstructions != "" {
-		args = append(args, "--developer-instructions", p.DeveloperInstructions)
+	if cfg.DeveloperInstructions != "" {
+		args = append(args, "--developer-instructions", cfg.DeveloperInstructions)
 	}
 
 	// ===== 功能开关 =====
-	if p.Features.WebSearch {
+	if cfg.Features.WebSearch {
 		args = append(args, "--search")
 	}
 
 	// ===== 资源限制 =====
-	if p.Resources.MaxTokens > 0 {
-		args = append(args, "--max-tokens", fmt.Sprintf("%d", p.Resources.MaxTokens))
+	if cfg.Resources.MaxTokens > 0 {
+		args = append(args, "--max-tokens", fmt.Sprintf("%d", cfg.Resources.MaxTokens))
 	}
-	if p.Resources.Timeout > 0 {
-		args = append(args, "--timeout", p.Resources.Timeout.String())
+	if cfg.Resources.Timeout > 0 {
+		args = append(args, "--timeout", cfg.Resources.Timeout.String())
 	}
 
 	// ===== 配置覆盖 =====
-	for key, value := range p.ConfigOverrides {
+	for key, value := range cfg.ConfigOverrides {
 		args = append(args, "--config", fmt.Sprintf("%s=%s", key, value))
 	}
 
 	// ===== 输出配置 =====
-	if p.OutputSchema != "" {
-		args = append(args, "--output-schema", p.OutputSchema)
+	if cfg.OutputSchema != "" {
+		args = append(args, "--output-schema", cfg.OutputSchema)
 	}
 
 	return args
@@ -303,33 +305,33 @@ func (a *Adapter) RequiredEnvVars() []string {
 	return []string{"OPENAI_API_KEY"}
 }
 
-// ValidateProfile 验证 Profile 是否与此适配器兼容
-func (a *Adapter) ValidateProfile(p *profile.Profile) error {
-	if p.Adapter != profile.AdapterCodex {
-		return fmt.Errorf("profile adapter %q is not compatible with Codex adapter", p.Adapter)
+// ValidateConfig 验证 AgentConfig 是否与此适配器兼容
+func (a *Adapter) ValidateConfig(cfg *engine.AgentConfig) error {
+	if cfg.Adapter != engine.AdapterCodex {
+		return fmt.Errorf("adapter %q is not compatible with Codex adapter", cfg.Adapter)
 	}
 
 	// 验证沙箱模式
 	validSandboxModes := map[string]bool{
-		"":                                  true,
-		profile.SandboxModeReadOnly:         true,
-		profile.SandboxModeWorkspaceWrite:   true,
-		profile.SandboxModeDangerFullAccess: true,
+		"":                                true,
+		engine.SandboxModeReadOnly:         true,
+		engine.SandboxModeWorkspaceWrite:   true,
+		engine.SandboxModeDangerFullAccess: true,
 	}
-	if !validSandboxModes[p.Permissions.SandboxMode] {
-		return fmt.Errorf("invalid sandbox mode %q for Codex", p.Permissions.SandboxMode)
+	if !validSandboxModes[cfg.Permissions.SandboxMode] {
+		return fmt.Errorf("invalid sandbox mode %q for Codex", cfg.Permissions.SandboxMode)
 	}
 
 	// 验证审批策略
 	validApprovalPolicies := map[string]bool{
-		"":                             true,
-		profile.ApprovalPolicyUntrusted: true,
-		profile.ApprovalPolicyOnFailure: true,
-		profile.ApprovalPolicyOnRequest: true,
-		profile.ApprovalPolicyNever:     true,
+		"":                              true,
+		engine.ApprovalPolicyUntrusted:  true,
+		engine.ApprovalPolicyOnFailure:  true,
+		engine.ApprovalPolicyOnRequest:  true,
+		engine.ApprovalPolicyNever:      true,
 	}
-	if !validApprovalPolicies[p.Permissions.ApprovalPolicy] {
-		return fmt.Errorf("invalid approval policy %q for Codex", p.Permissions.ApprovalPolicy)
+	if !validApprovalPolicies[cfg.Permissions.ApprovalPolicy] {
+		return fmt.Errorf("invalid approval policy %q for Codex", cfg.Permissions.ApprovalPolicy)
 	}
 
 	// 验证推理强度
@@ -339,21 +341,21 @@ func (a *Adapter) ValidateProfile(p *profile.Profile) error {
 		"medium": true,
 		"high":   true,
 	}
-	if !validReasoningEfforts[p.Model.ReasoningEffort] {
-		return fmt.Errorf("invalid reasoning effort %q for Codex", p.Model.ReasoningEffort)
+	if !validReasoningEfforts[cfg.Model.ReasoningEffort] {
+		return fmt.Errorf("invalid reasoning effort %q for Codex", cfg.Model.ReasoningEffort)
 	}
 
-	// Claude Code 专有字段不应该在 Codex Profile 中设置
-	if p.Permissions.Mode != "" {
+	// Claude Code 专有字段不应该在 Codex 配置中设置
+	if cfg.Permissions.Mode != "" {
 		return fmt.Errorf("permission_mode is a Claude Code-specific option, not valid for Codex")
 	}
-	if p.Permissions.SkipAll {
+	if cfg.Permissions.SkipAll {
 		return fmt.Errorf("skip_all is a Claude Code-specific option, not valid for Codex")
 	}
-	if p.SystemPrompt != "" {
+	if cfg.SystemPrompt != "" {
 		return fmt.Errorf("system_prompt is a Claude Code-specific option, use base_instructions for Codex")
 	}
-	if len(p.CustomAgents) > 0 {
+	if len(cfg.CustomAgents) > 0 {
 		return fmt.Errorf("custom_agents is a Claude Code-specific option, not valid for Codex")
 	}
 
@@ -383,17 +385,18 @@ func (a *Adapter) SupportedFeatures() []string {
 // codex.Run() 在宿主机进程中执行，而不是容器内，无法使用容器的环境变量和配置
 // 改为使用 CLI 执行 + --json 输出格式，在 execViaCLI 中解析 JSONL 输出
 //
-// func (a *Adapter) Execute(ctx context.Context, opts *agent.ExecOptions) (*agent.ExecResult, error) {
+// func (a *Adapter) Execute(ctx context.Context, opts *engine.ExecOptions) (*engine.ExecResult, error) {
 //     ... 保留代码供将来本地执行场景使用 ...
 // }
 
 // CodexEvent Codex CLI --json 输出的事件结构
 type CodexEvent struct {
-	Type    string          `json:"type"`              // 事件类型: thread.started, turn.completed, item.completed, error
-	Usage   *CodexUsage     `json:"usage,omitempty"`   // Token 使用统计 (turn.completed)
-	Item    json.RawMessage `json:"item,omitempty"`    // 事件内容 (item.completed)
-	Error   *CodexError     `json:"error,omitempty"`   // 错误信息 (error, turn.failed)
-	Message string          `json:"message,omitempty"` // 错误消息 (error)
+	Type     string          `json:"type"`               // 事件类型: thread.started, turn.completed, item.completed, error
+	ThreadID string          `json:"thread_id,omitempty"` // Thread ID (thread.started)
+	Usage    *CodexUsage     `json:"usage,omitempty"`    // Token 使用统计 (turn.completed)
+	Item     json.RawMessage `json:"item,omitempty"`     // 事件内容 (item.completed)
+	Error    *CodexError     `json:"error,omitempty"`    // 错误信息 (error, turn.failed)
+	Message  string          `json:"message,omitempty"`  // 错误消息 (error)
 }
 
 // CodexUsage Token 使用统计
@@ -417,11 +420,12 @@ type CodexItem struct {
 
 // ParseJSONLOutput 实现 JSONOutputParser 接口
 // 解析 Codex CLI --json 输出的 JSONL 格式
-func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*agent.ExecResult, error) {
+func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*engine.ExecResult, error) {
 	var (
 		message  string
-		events   []agent.ExecEvent
-		usage    *agent.TokenUsage
+		threadID string
+		events   []engine.ExecEvent
+		usage    *engine.TokenUsage
 		exitCode int
 		execErr  string
 	)
@@ -446,7 +450,7 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*agent.Ex
 
 		// 如果需要包含事件，记录原始 JSON
 		if includeEvents {
-			events = append(events, agent.ExecEvent{
+			events = append(events, engine.ExecEvent{
 				Type: event.Type,
 				Raw:  json.RawMessage(line),
 			})
@@ -454,10 +458,16 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*agent.Ex
 
 		// 处理不同事件类型
 		switch event.Type {
+		case "thread.started":
+			// 提取 thread_id 用于多轮对话 resume
+			if event.ThreadID != "" {
+				threadID = event.ThreadID
+			}
+
 		case "turn.completed":
 			// 获取 token 使用统计
 			if event.Usage != nil {
-				usage = &agent.TokenUsage{
+				usage = &engine.TokenUsage{
 					InputTokens:       event.Usage.InputTokens,
 					CachedInputTokens: event.Usage.CachedInputTokens,
 					OutputTokens:      event.Usage.OutputTokens,
@@ -496,11 +506,18 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*agent.Ex
 		return nil, fmt.Errorf("failed to scan output: %w", err)
 	}
 
-	result := &agent.ExecResult{
+	// 如果没有解析到任何 JSON 事件，说明是纯文本输出（resume 模式）
+	// 此时将原始输出（去除 Docker 流头）作为 message
+	if message == "" && threadID == "" && len(events) == 0 && execErr == "" {
+		message = strings.TrimSpace(stripDockerStreamHeaders(output))
+	}
+
+	result := &engine.ExecResult{
 		Message:  message,
 		ExitCode: exitCode,
 		Usage:    usage,
 		Error:    execErr,
+		ThreadID: threadID,
 	}
 
 	if includeEvents {
@@ -510,7 +527,31 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*agent.Ex
 	return result, nil
 }
 
+// stripDockerStreamHeaders 从 Docker 多路复用流中提取纯文本
+func stripDockerStreamHeaders(raw string) string {
+	data := []byte(raw)
+	var result []byte
+
+	for len(data) >= 8 {
+		streamType := data[0]
+		size := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+		data = data[8:]
+		if size <= 0 || size > len(data) {
+			return raw
+		}
+		if streamType == 0x01 {
+			result = append(result, data[:size]...)
+		}
+		data = data[size:]
+	}
+
+	if len(result) == 0 && len(raw) > 0 {
+		return raw
+	}
+	return string(result)
+}
+
 // init 自动注册到默认注册表
 func init() {
-	agent.Register(New())
+	engine.Register(New())
 }

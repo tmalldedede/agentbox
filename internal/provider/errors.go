@@ -14,4 +14,13 @@ var (
 
 	// ErrProviderNotFound is returned when provider is not found
 	ErrProviderNotFound = errors.New("provider not found")
+
+	// ErrKeyNotConfigured is returned when API key is not set
+	ErrKeyNotConfigured = errors.New("API key not configured for this provider")
+
+	// ErrEncryptionFailed is returned when encryption fails
+	ErrEncryptionFailed = errors.New("encryption failed")
+
+	// ErrDecryptionFailed is returned when decryption fails
+	ErrDecryptionFailed = errors.New("decryption failed")
 )

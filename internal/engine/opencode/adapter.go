@@ -3,17 +3,16 @@ package opencode
 import (
 	"fmt"
 
-	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
-	"github.com/tmalldedede/agentbox/internal/profile"
+	"github.com/tmalldedede/agentbox/internal/engine"
 )
 
 const (
 	// AgentName Agent 名称
 	AgentName = "opencode"
 
-	// DefaultImage 默认镜像
-	DefaultImage = "agentbox/agent:latest"
+	// DefaultImage 默认镜像 (v2: codex 0.87+, claude-code 2.1+)
+	DefaultImage = "agentbox/agent:v2"
 )
 
 // Adapter OpenCode 适配器
@@ -56,7 +55,7 @@ func (a *Adapter) Image() string {
 }
 
 // PrepareContainer 准备容器配置
-func (a *Adapter) PrepareContainer(session *agent.SessionInfo) *container.CreateConfig {
+func (a *Adapter) PrepareContainer(session *engine.SessionInfo) *container.CreateConfig {
 	// 构建环境变量
 	env := make(map[string]string)
 	for k, v := range session.Env {
@@ -88,28 +87,28 @@ func (a *Adapter) PrepareContainer(session *agent.SessionInfo) *container.Create
 	}
 }
 
-// PrepareContainerWithProfile 使用 Profile 准备容器配置
-func (a *Adapter) PrepareContainerWithProfile(session *agent.SessionInfo, p *profile.Profile) *container.CreateConfig {
+// PrepareContainerWithConfig 使用 AgentConfig 准备容器配置
+func (a *Adapter) PrepareContainerWithConfig(session *engine.SessionInfo, cfg *engine.AgentConfig) *container.CreateConfig {
 	config := a.PrepareContainer(session)
 
-	// 应用 Profile 资源限制
-	if p.Resources.CPUs > 0 {
-		config.Resources.CPULimit = p.Resources.CPUs
+	// 应用资源限制
+	if cfg.Resources.CPUs > 0 {
+		config.Resources.CPULimit = cfg.Resources.CPUs
 	}
-	if p.Resources.MemoryMB > 0 {
-		config.Resources.MemoryLimit = int64(p.Resources.MemoryMB) * 1024 * 1024
+	if cfg.Resources.MemoryMB > 0 {
+		config.Resources.MemoryLimit = int64(cfg.Resources.MemoryMB) * 1024 * 1024
 	}
 
-	// 添加 Profile 标签
-	config.Labels["agentbox.profile.id"] = p.ID
-	config.Labels["agentbox.profile.name"] = p.Name
+	// 添加标签
+	config.Labels["agentbox.agent.id"] = cfg.ID
+	config.Labels["agentbox.agent.name"] = cfg.Name
 
 	return config
 }
 
 // PrepareExec 准备执行命令
 // OpenCode CLI 使用 `opencode run [message..]` 格式
-func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
+func (a *Adapter) PrepareExec(req *engine.ExecOptions) []string {
 	args := []string{
 		"opencode",
 		"run",           // 子命令
@@ -120,40 +119,34 @@ func (a *Adapter) PrepareExec(req *agent.ExecOptions) []string {
 	return args
 }
 
-// PrepareExecWithProfile 使用 Profile 准备执行命令
-// OpenCode CLI 使用 `opencode run [message..] [options]` 格式
-// 支持的选项参考: opencode run --help
-func (a *Adapter) PrepareExecWithProfile(req *agent.ExecOptions, p *profile.Profile) []string {
+// PrepareExecWithConfig 使用 AgentConfig 准备执行命令
+func (a *Adapter) PrepareExecWithConfig(req *engine.ExecOptions, cfg *engine.AgentConfig) []string {
 	// 基础命令: opencode run "prompt"
 	args := []string{"opencode", "run", req.Prompt}
 
 	// ===== 输出格式 =====
-	// --format: default (formatted) 或 json (raw JSON events)
-	if p.OutputFormat == "json" || p.OutputFormat == "" {
+	if cfg.OutputFormat == "json" || cfg.OutputFormat == "" {
 		args = append(args, "--format", "json")
 	} else {
 		args = append(args, "--format", "default")
 	}
 
 	// ===== 模型配置 =====
-	// --model, -m: provider/model 格式 (如 anthropic/claude-sonnet-4-20250514)
-	if p.Model.Name != "" {
-		// 如果指定了 provider，使用 provider/model 格式
-		if p.Model.Provider != "" {
-			args = append(args, "--model", p.Model.Provider+"/"+p.Model.Name)
+	if cfg.Model.Name != "" {
+		if cfg.Model.Provider != "" {
+			args = append(args, "--model", cfg.Model.Provider+"/"+cfg.Model.Name)
 		} else {
-			args = append(args, "--model", p.Model.Name)
+			args = append(args, "--model", cfg.Model.Name)
 		}
 	}
 
 	// ===== Agent 配置 =====
-	// --agent: 指定使用的 OpenCode agent（可通过 ConfigOverrides 传递）
-	if agent, ok := p.ConfigOverrides["agent"]; ok && agent != "" {
+	if agent, ok := cfg.ConfigOverrides["agent"]; ok && agent != "" {
 		args = append(args, "--agent", agent)
 	}
 
 	// ===== 调试模式 =====
-	if p.Debug.Verbose {
+	if cfg.Debug.Verbose {
 		args = append(args, "--print-logs")
 	}
 
@@ -173,10 +166,10 @@ func (a *Adapter) RequiredEnvVars() []string {
 	}
 }
 
-// ValidateProfile 验证 Profile 是否与此适配器兼容
-func (a *Adapter) ValidateProfile(p *profile.Profile) error {
-	if p.Adapter != profile.AdapterOpenCode {
-		return fmt.Errorf("profile adapter %q is not compatible with OpenCode adapter", p.Adapter)
+// ValidateConfig 验证 AgentConfig 是否与此适配器兼容
+func (a *Adapter) ValidateConfig(cfg *engine.AgentConfig) error {
+	if cfg.Adapter != engine.AdapterOpenCode {
+		return fmt.Errorf("adapter %q is not compatible with OpenCode adapter", cfg.Adapter)
 	}
 
 	// 验证输出格式
@@ -185,32 +178,32 @@ func (a *Adapter) ValidateProfile(p *profile.Profile) error {
 		"text": true,
 		"json": true,
 	}
-	if !validOutputFormats[p.OutputFormat] {
-		return fmt.Errorf("invalid output format %q for OpenCode, must be 'text' or 'json'", p.OutputFormat)
+	if !validOutputFormats[cfg.OutputFormat] {
+		return fmt.Errorf("invalid output format %q for OpenCode, must be 'text' or 'json'", cfg.OutputFormat)
 	}
 
-	// Claude Code 专有字段不应该在 OpenCode Profile 中设置
-	if p.Permissions.Mode != "" {
+	// Claude Code 专有字段不应该在 OpenCode 配置中设置
+	if cfg.Permissions.Mode != "" {
 		return fmt.Errorf("permission_mode is a Claude Code-specific option, not valid for OpenCode")
 	}
-	if p.Permissions.SkipAll {
+	if cfg.Permissions.SkipAll {
 		return fmt.Errorf("skip_all is a Claude Code-specific option, not valid for OpenCode")
 	}
-	if len(p.MCPServers) > 0 {
+	if len(cfg.MCPServers) > 0 {
 		return fmt.Errorf("mcp_servers is a Claude Code-specific option, not valid for OpenCode")
 	}
-	if len(p.CustomAgents) > 0 {
+	if len(cfg.CustomAgents) > 0 {
 		return fmt.Errorf("custom_agents is a Claude Code-specific option, not valid for OpenCode")
 	}
 
-	// Codex 专有字段不应该在 OpenCode Profile 中设置
-	if p.Permissions.SandboxMode != "" {
+	// Codex 专有字段不应该在 OpenCode 配置中设置
+	if cfg.Permissions.SandboxMode != "" {
 		return fmt.Errorf("sandbox_mode is a Codex-specific option, not valid for OpenCode")
 	}
-	if p.Permissions.ApprovalPolicy != "" {
+	if cfg.Permissions.ApprovalPolicy != "" {
 		return fmt.Errorf("approval_policy is a Codex-specific option, not valid for OpenCode")
 	}
-	if p.Permissions.FullAuto {
+	if cfg.Permissions.FullAuto {
 		return fmt.Errorf("full_auto is a Codex-specific option, not valid for OpenCode")
 	}
 
@@ -230,5 +223,5 @@ func (a *Adapter) SupportedFeatures() []string {
 
 // init 自动注册到默认注册表
 func init() {
-	agent.Register(New())
+	engine.Register(New())
 }

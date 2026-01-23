@@ -2,15 +2,18 @@
 // Provider represents a pre-configured API endpoint (official, compatible, or aggregator).
 package provider
 
+import "time"
+
 // Provider represents an API provider configuration
 type Provider struct {
 	// Basic info
-	ID          string `json:"id"`                    // e.g., "deepseek", "openrouter"
-	Name        string `json:"name"`                  // e.g., "DeepSeek"
-	Description string `json:"description,omitempty"` // Provider description
+	ID          string `json:"id"`                      // e.g., "deepseek", "openrouter"
+	Name        string `json:"name"`                    // e.g., "DeepSeek"
+	Description string `json:"description,omitempty"`   // Provider description
+	TemplateID  string `json:"template_id,omitempty"`   // Which template this was created from
 
-	// Agent compatibility
-	Agent string `json:"agent"` // "claude-code" | "codex" | "opencode" | "all"
+	// Agent compatibility (which adapters this provider supports)
+	Agents []string `json:"agents"` // subset of: "claude-code", "codex", "opencode"
 
 	// Category
 	Category ProviderCategory `json:"category"` // official | cn_official | aggregator | third_party
@@ -39,6 +42,22 @@ type Provider struct {
 	IsPartner  bool `json:"is_partner,omitempty"`   // Partner provider (featured)
 	RequiresAK bool `json:"requires_ak,omitempty"`  // Requires API key
 	IsEnabled  bool `json:"is_enabled"`             // Is enabled
+
+	// API Key management (merged from Credential)
+	APIKeyMasked    string     `json:"api_key_masked,omitempty"`    // Masked display
+	IsConfigured    bool       `json:"is_configured"`               // Whether key is configured
+	IsValid         bool       `json:"is_valid"`                    // Whether key is validated
+	LastValidatedAt *time.Time `json:"last_validated_at,omitempty"` // Last validation time
+}
+
+// ProviderKeyData 存储 Provider 的 API Key 数据（持久化用）
+type ProviderKeyData struct {
+	ProviderID      string     `json:"provider_id"`
+	EncryptedKey    string     `json:"encrypted_key"`
+	KeyMasked       string     `json:"key_masked"`
+	IsValid         bool       `json:"is_valid"`
+	LastValidatedAt *time.Time `json:"last_validated_at,omitempty"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // ProviderCategory defines the category of a provider
@@ -58,13 +77,15 @@ const (
 	CategoryThirdParty ProviderCategory = "third_party"
 )
 
-// Agent constants
+// Agent (adapter) constants
 const (
 	AgentClaudeCode = "claude-code"
 	AgentCodex      = "codex"
 	AgentOpenCode   = "opencode"
-	AgentAll        = "all"
 )
+
+// AllAgents is the list of all supported agents
+var AllAgents = []string{AgentClaudeCode, AgentCodex, AgentOpenCode}
 
 // Validate validates the Provider configuration
 func (p *Provider) Validate() error {
@@ -74,7 +95,7 @@ func (p *Provider) Validate() error {
 	if p.Name == "" {
 		return ErrProviderNameRequired
 	}
-	if p.Agent == "" {
+	if len(p.Agents) == 0 {
 		return ErrProviderAgentRequired
 	}
 	return nil
@@ -82,10 +103,12 @@ func (p *Provider) Validate() error {
 
 // SupportsAgent checks if the provider supports the given agent
 func (p *Provider) SupportsAgent(agent string) bool {
-	if p.Agent == AgentAll {
-		return true
+	for _, a := range p.Agents {
+		if a == agent {
+			return true
+		}
 	}
-	return p.Agent == agent
+	return false
 }
 
 // GetEnvVars returns environment variables for this provider with the given API key
@@ -105,12 +128,19 @@ func (p *Provider) GetEnvVars(apiKey string) map[string]string {
 	// Set base URL if provided
 	if p.BaseURL != "" {
 		// For Claude Code compatible providers
-		if p.Agent == AgentClaudeCode || p.Agent == AgentAll {
+		if p.SupportsAgent(AgentClaudeCode) {
 			env["ANTHROPIC_BASE_URL"] = p.BaseURL
 		}
 		// For Codex/OpenAI compatible providers
-		if p.Agent == AgentCodex || p.Agent == AgentAll {
+		if p.SupportsAgent(AgentCodex) {
 			env["OPENAI_BASE_URL"] = p.BaseURL
+		}
+	}
+
+	// Ensure OPENAI_API_KEY is set for Codex-compatible providers
+	if apiKey != "" && p.SupportsAgent(AgentCodex) {
+		if _, exists := env["OPENAI_API_KEY"]; !exists {
+			env["OPENAI_API_KEY"] = apiKey
 		}
 	}
 

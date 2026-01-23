@@ -10,6 +10,14 @@ import (
 	_ "modernc.org/sqlite" // SQLite 驱动（纯 Go，无需 CGO）
 )
 
+// TaskStats 任务统计
+type TaskStats struct {
+	Total     int            `json:"total"`
+	ByStatus  map[Status]int `json:"by_status"`
+	ByAgent   map[string]int `json:"by_agent"`
+	AvgDuration float64      `json:"avg_duration_seconds"` // 已完成任务平均耗时
+}
+
 // Store 任务存储接口
 type Store interface {
 	// Create 创建任务
@@ -24,6 +32,10 @@ type Store interface {
 	List(filter *ListFilter) ([]*Task, error)
 	// Count 统计任务数量
 	Count(filter *ListFilter) (int, error)
+	// Stats 获取任务统计
+	Stats() (*TaskStats, error)
+	// Cleanup 清理旧任务
+	Cleanup(before time.Time, statuses []Status) (int, error)
 	// Close 关闭存储
 	Close() error
 }
@@ -31,7 +43,8 @@ type Store interface {
 // ListFilter 列表过滤器
 type ListFilter struct {
 	Status    []Status // 按状态过滤
-	ProfileID string   // 按 Profile 过滤
+	AgentID   string   // 按 Agent 过滤
+	Search    string   // 搜索 prompt 关键字
 	Limit     int      // 限制数量
 	Offset    int      // 偏移量
 	OrderBy   string   // 排序字段：created_at, started_at, completed_at
@@ -67,19 +80,30 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 
 // migrate 数据库迁移
 func (s *SQLiteStore) migrate() error {
+	// 检查旧表 schema 是否兼容，不兼容则重建
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name='attachments_json'`).Scan(&count)
+	if err == nil && count == 0 {
+		// 旧表 schema 不兼容（缺少 attachments_json 等新字段），重建
+		s.db.Exec("DROP TABLE IF EXISTS tasks")
+	}
+
 	schema := `
 	CREATE TABLE IF NOT EXISTS tasks (
 		id TEXT PRIMARY KEY,
-		profile_id TEXT NOT NULL,
-		profile_name TEXT,
+		agent_id TEXT NOT NULL,
+		agent_name TEXT,
 		agent_type TEXT,
 		prompt TEXT NOT NULL,
-		input_json TEXT,
-		output_config_json TEXT,
+		attachments_json TEXT,
+		output_files_json TEXT,
+		turns_json TEXT,
+		turn_count INTEGER DEFAULT 0,
 		webhook_url TEXT,
 		timeout INTEGER DEFAULT 0,
 		status TEXT NOT NULL DEFAULT 'pending',
 		session_id TEXT,
+		thread_id TEXT,
 		error_message TEXT,
 		result_json TEXT,
 		metadata_json TEXT,
@@ -90,34 +114,43 @@ func (s *SQLiteStore) migrate() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-	CREATE INDEX IF NOT EXISTS idx_tasks_profile_id ON tasks(profile_id);
+	CREATE INDEX IF NOT EXISTS idx_tasks_agent_id ON tasks(agent_id);
 	CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 	`
 
-	_, err := s.db.Exec(schema)
-	return err
+	_, err = s.db.Exec(schema)
+	if err != nil {
+		return err
+	}
+
+	// 增量迁移：添加 thread_id 列（已有表兼容）
+	s.db.Exec("ALTER TABLE tasks ADD COLUMN thread_id TEXT")
+	return nil
 }
 
 // Create 创建任务
 func (s *SQLiteStore) Create(task *Task) error {
-	inputJSON, _ := json.Marshal(task.Input)
-	outputConfigJSON, _ := json.Marshal(task.Output)
+	attachmentsJSON, _ := json.Marshal(task.Attachments)
+	outputFilesJSON, _ := json.Marshal(task.OutputFiles)
+	turnsJSON, _ := json.Marshal(task.Turns)
 	resultJSON, _ := json.Marshal(task.Result)
 	metadataJSON, _ := json.Marshal(task.Metadata)
 
 	query := `
 	INSERT INTO tasks (
-		id, profile_id, profile_name, agent_type, prompt,
-		input_json, output_config_json, webhook_url, timeout,
-		status, session_id, error_message, result_json, metadata_json,
+		id, agent_id, agent_name, agent_type, prompt,
+		attachments_json, output_files_json, turns_json, turn_count,
+		webhook_url, timeout,
+		status, session_id, thread_id, error_message, result_json, metadata_json,
 		created_at, queued_at, started_at, completed_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := s.db.Exec(query,
-		task.ID, task.ProfileID, task.ProfileName, task.AgentType, task.Prompt,
-		string(inputJSON), string(outputConfigJSON), task.WebhookURL, task.Timeout,
-		string(task.Status), task.SessionID, task.ErrorMessage, string(resultJSON), string(metadataJSON),
+		task.ID, task.AgentID, task.AgentName, task.AgentType, task.Prompt,
+		string(attachmentsJSON), string(outputFilesJSON), string(turnsJSON), task.TurnCount,
+		task.WebhookURL, task.Timeout,
+		string(task.Status), task.SessionID, task.ThreadID, task.ErrorMessage, string(resultJSON), string(metadataJSON),
 		task.CreatedAt, nullTime(task.QueuedAt), nullTime(task.StartedAt), nullTime(task.CompletedAt),
 	)
 	if err != nil {
@@ -132,9 +165,10 @@ func (s *SQLiteStore) Create(task *Task) error {
 // Get 获取任务
 func (s *SQLiteStore) Get(id string) (*Task, error) {
 	query := `
-	SELECT id, profile_id, profile_name, agent_type, prompt,
-		input_json, output_config_json, webhook_url, timeout,
-		status, session_id, error_message, result_json, metadata_json,
+	SELECT id, agent_id, agent_name, agent_type, prompt,
+		attachments_json, output_files_json, turns_json, turn_count,
+		webhook_url, timeout,
+		status, session_id, thread_id, error_message, result_json, metadata_json,
 		created_at, queued_at, started_at, completed_at
 	FROM tasks WHERE id = ?
 	`
@@ -145,24 +179,27 @@ func (s *SQLiteStore) Get(id string) (*Task, error) {
 
 // Update 更新任务
 func (s *SQLiteStore) Update(task *Task) error {
-	inputJSON, _ := json.Marshal(task.Input)
-	outputConfigJSON, _ := json.Marshal(task.Output)
+	attachmentsJSON, _ := json.Marshal(task.Attachments)
+	outputFilesJSON, _ := json.Marshal(task.OutputFiles)
+	turnsJSON, _ := json.Marshal(task.Turns)
 	resultJSON, _ := json.Marshal(task.Result)
 	metadataJSON, _ := json.Marshal(task.Metadata)
 
 	query := `
 	UPDATE tasks SET
-		profile_id = ?, profile_name = ?, agent_type = ?, prompt = ?,
-		input_json = ?, output_config_json = ?, webhook_url = ?, timeout = ?,
-		status = ?, session_id = ?, error_message = ?, result_json = ?, metadata_json = ?,
+		agent_id = ?, agent_name = ?, agent_type = ?, prompt = ?,
+		attachments_json = ?, output_files_json = ?, turns_json = ?, turn_count = ?,
+		webhook_url = ?, timeout = ?,
+		status = ?, session_id = ?, thread_id = ?, error_message = ?, result_json = ?, metadata_json = ?,
 		queued_at = ?, started_at = ?, completed_at = ?
 	WHERE id = ?
 	`
 
 	result, err := s.db.Exec(query,
-		task.ProfileID, task.ProfileName, task.AgentType, task.Prompt,
-		string(inputJSON), string(outputConfigJSON), task.WebhookURL, task.Timeout,
-		string(task.Status), task.SessionID, task.ErrorMessage, string(resultJSON), string(metadataJSON),
+		task.AgentID, task.AgentName, task.AgentType, task.Prompt,
+		string(attachmentsJSON), string(outputFilesJSON), string(turnsJSON), task.TurnCount,
+		task.WebhookURL, task.Timeout,
+		string(task.Status), task.SessionID, task.ThreadID, task.ErrorMessage, string(resultJSON), string(metadataJSON),
 		nullTime(task.QueuedAt), nullTime(task.StartedAt), nullTime(task.CompletedAt),
 		task.ID,
 	)
@@ -230,6 +267,83 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
+// Stats 获取任务统计
+func (s *SQLiteStore) Stats() (*TaskStats, error) {
+	stats := &TaskStats{
+		ByStatus: make(map[Status]int),
+		ByAgent:  make(map[string]int),
+	}
+
+	// 按状态统计
+	rows, err := s.db.Query("SELECT status, COUNT(*) FROM tasks GROUP BY status")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		stats.ByStatus[Status(status)] = count
+		stats.Total += count
+	}
+
+	// 按 Agent 统计（Top 10）
+	rows2, err := s.db.Query("SELECT COALESCE(agent_name, agent_id), COUNT(*) FROM tasks GROUP BY agent_id ORDER BY COUNT(*) DESC LIMIT 10")
+	if err != nil {
+		return nil, err
+	}
+	defer rows2.Close()
+	for rows2.Next() {
+		var agentName string
+		var count int
+		if err := rows2.Scan(&agentName, &count); err != nil {
+			return nil, err
+		}
+		stats.ByAgent[agentName] = count
+	}
+
+	// 平均执行时长（已完成任务）
+	var avgDuration sql.NullFloat64
+	err = s.db.QueryRow(`
+		SELECT AVG(JULIANDAY(completed_at) - JULIANDAY(started_at)) * 86400
+		FROM tasks WHERE status = 'completed' AND started_at IS NOT NULL AND completed_at IS NOT NULL
+	`).Scan(&avgDuration)
+	if err == nil && avgDuration.Valid {
+		stats.AvgDuration = avgDuration.Float64
+	}
+
+	return stats, nil
+}
+
+// Cleanup 清理旧任务
+func (s *SQLiteStore) Cleanup(before time.Time, statuses []Status) (int, error) {
+	var args []interface{}
+	query := "DELETE FROM tasks WHERE created_at < ?"
+	args = append(args, before)
+
+	if len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, st := range statuses {
+			placeholders[i] = "?"
+			args = append(args, string(st))
+		}
+		query += fmt.Sprintf(" AND status IN (%s)", strings.Join(placeholders, ","))
+	}
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(affected), nil
+}
+
 // buildListQuery 构建列表查询
 func (s *SQLiteStore) buildListQuery(filter *ListFilter, countOnly bool) (string, []interface{}) {
 	var query string
@@ -240,9 +354,10 @@ func (s *SQLiteStore) buildListQuery(filter *ListFilter, countOnly bool) (string
 		query = "SELECT COUNT(*) FROM tasks"
 	} else {
 		query = `
-		SELECT id, profile_id, profile_name, agent_type, prompt,
-			input_json, output_config_json, webhook_url, timeout,
-			status, session_id, error_message, result_json, metadata_json,
+		SELECT id, agent_id, agent_name, agent_type, prompt,
+			attachments_json, output_files_json, turns_json, turn_count,
+			webhook_url, timeout,
+			status, session_id, thread_id, error_message, result_json, metadata_json,
 			created_at, queued_at, started_at, completed_at
 		FROM tasks
 		`
@@ -259,10 +374,16 @@ func (s *SQLiteStore) buildListQuery(filter *ListFilter, countOnly bool) (string
 			conditions = append(conditions, fmt.Sprintf("status IN (%s)", strings.Join(placeholders, ",")))
 		}
 
-		// Profile 过滤
-		if filter.ProfileID != "" {
-			conditions = append(conditions, "profile_id = ?")
-			args = append(args, filter.ProfileID)
+		// Agent 过滤
+		if filter.AgentID != "" {
+			conditions = append(conditions, "agent_id = ?")
+			args = append(args, filter.AgentID)
+		}
+
+		// 搜索 prompt 关键字
+		if filter.Search != "" {
+			conditions = append(conditions, "prompt LIKE ?")
+			args = append(args, "%"+filter.Search+"%")
 		}
 	}
 
@@ -301,14 +422,17 @@ func (s *SQLiteStore) buildListQuery(filter *ListFilter, countOnly bool) (string
 // scanTask 扫描单行结果
 func (s *SQLiteStore) scanTask(row *sql.Row) (*Task, error) {
 	var task Task
-	var inputJSON, outputConfigJSON, resultJSON, metadataJSON sql.NullString
+	var agentName sql.NullString
+	var threadID sql.NullString
+	var attachmentsJSON, outputFilesJSON, turnsJSON, resultJSON, metadataJSON sql.NullString
 	var queuedAt, startedAt, completedAt sql.NullTime
 	var status string
 
 	err := row.Scan(
-		&task.ID, &task.ProfileID, &task.ProfileName, &task.AgentType, &task.Prompt,
-		&inputJSON, &outputConfigJSON, &task.WebhookURL, &task.Timeout,
-		&status, &task.SessionID, &task.ErrorMessage, &resultJSON, &metadataJSON,
+		&task.ID, &task.AgentID, &agentName, &task.AgentType, &task.Prompt,
+		&attachmentsJSON, &outputFilesJSON, &turnsJSON, &task.TurnCount,
+		&task.WebhookURL, &task.Timeout,
+		&status, &task.SessionID, &threadID, &task.ErrorMessage, &resultJSON, &metadataJSON,
 		&task.CreatedAt, &queuedAt, &startedAt, &completedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -318,14 +442,23 @@ func (s *SQLiteStore) scanTask(row *sql.Row) (*Task, error) {
 		return nil, err
 	}
 
+	if agentName.Valid {
+		task.AgentName = agentName.String
+	}
+	if threadID.Valid {
+		task.ThreadID = threadID.String
+	}
 	task.Status = Status(status)
 
 	// 解析 JSON 字段
-	if inputJSON.Valid && inputJSON.String != "" && inputJSON.String != "null" {
-		json.Unmarshal([]byte(inputJSON.String), &task.Input)
+	if attachmentsJSON.Valid && attachmentsJSON.String != "" && attachmentsJSON.String != "null" {
+		json.Unmarshal([]byte(attachmentsJSON.String), &task.Attachments)
 	}
-	if outputConfigJSON.Valid && outputConfigJSON.String != "" && outputConfigJSON.String != "null" {
-		json.Unmarshal([]byte(outputConfigJSON.String), &task.Output)
+	if outputFilesJSON.Valid && outputFilesJSON.String != "" && outputFilesJSON.String != "null" {
+		json.Unmarshal([]byte(outputFilesJSON.String), &task.OutputFiles)
+	}
+	if turnsJSON.Valid && turnsJSON.String != "" && turnsJSON.String != "null" {
+		json.Unmarshal([]byte(turnsJSON.String), &task.Turns)
 	}
 	if resultJSON.Valid && resultJSON.String != "" && resultJSON.String != "null" {
 		json.Unmarshal([]byte(resultJSON.String), &task.Result)
@@ -351,28 +484,40 @@ func (s *SQLiteStore) scanTask(row *sql.Row) (*Task, error) {
 // scanTaskRows 扫描多行结果
 func (s *SQLiteStore) scanTaskRows(rows *sql.Rows) (*Task, error) {
 	var task Task
-	var inputJSON, outputConfigJSON, resultJSON, metadataJSON sql.NullString
+	var agentName sql.NullString
+	var threadID sql.NullString
+	var attachmentsJSON, outputFilesJSON, turnsJSON, resultJSON, metadataJSON sql.NullString
 	var queuedAt, startedAt, completedAt sql.NullTime
 	var status string
 
 	err := rows.Scan(
-		&task.ID, &task.ProfileID, &task.ProfileName, &task.AgentType, &task.Prompt,
-		&inputJSON, &outputConfigJSON, &task.WebhookURL, &task.Timeout,
-		&status, &task.SessionID, &task.ErrorMessage, &resultJSON, &metadataJSON,
+		&task.ID, &task.AgentID, &agentName, &task.AgentType, &task.Prompt,
+		&attachmentsJSON, &outputFilesJSON, &turnsJSON, &task.TurnCount,
+		&task.WebhookURL, &task.Timeout,
+		&status, &task.SessionID, &threadID, &task.ErrorMessage, &resultJSON, &metadataJSON,
 		&task.CreatedAt, &queuedAt, &startedAt, &completedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	if agentName.Valid {
+		task.AgentName = agentName.String
+	}
+	if threadID.Valid {
+		task.ThreadID = threadID.String
+	}
 	task.Status = Status(status)
 
 	// 解析 JSON 字段
-	if inputJSON.Valid && inputJSON.String != "" && inputJSON.String != "null" {
-		json.Unmarshal([]byte(inputJSON.String), &task.Input)
+	if attachmentsJSON.Valid && attachmentsJSON.String != "" && attachmentsJSON.String != "null" {
+		json.Unmarshal([]byte(attachmentsJSON.String), &task.Attachments)
 	}
-	if outputConfigJSON.Valid && outputConfigJSON.String != "" && outputConfigJSON.String != "null" {
-		json.Unmarshal([]byte(outputConfigJSON.String), &task.Output)
+	if outputFilesJSON.Valid && outputFilesJSON.String != "" && outputFilesJSON.String != "null" {
+		json.Unmarshal([]byte(outputFilesJSON.String), &task.OutputFiles)
+	}
+	if turnsJSON.Valid && turnsJSON.String != "" && turnsJSON.String != "null" {
+		json.Unmarshal([]byte(turnsJSON.String), &task.Turns)
 	}
 	if resultJSON.Valid && resultJSON.String != "" && resultJSON.String != "null" {
 		json.Unmarshal([]byte(resultJSON.String), &task.Result)

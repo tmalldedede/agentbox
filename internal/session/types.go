@@ -8,8 +8,8 @@ import (
 // Session 会话
 type Session struct {
 	ID          string            `json:"id"`
-	Agent       string            `json:"agent"`
-	ProfileID   string            `json:"profile_id,omitempty"`
+	AgentID     string            `json:"agent_id"`      // 引用 Agent
+	Agent       string            `json:"agent"`         // 引擎适配器名 (claude-code/codex/opencode)
 	Status      Status            `json:"status"`
 	Workspace   string            `json:"workspace"`
 	ContainerID string            `json:"container_id,omitempty"`
@@ -37,11 +37,11 @@ type Config struct {
 
 // CreateRequest 创建会话请求
 type CreateRequest struct {
-	Agent     string            `json:"agent" binding:"required"`
-	ProfileID string            `json:"profile_id,omitempty"`
+	AgentID   string            `json:"agent_id"`                     // 通过 AgentID 自动解析所有配置
+	Agent     string            `json:"agent,omitempty"`              // 引擎适配器名（AgentID 为空时必填）
 	Workspace string            `json:"workspace" binding:"required"`
-	Env       map[string]string `json:"env"`
-	Config    *Config           `json:"config"`
+	Env       map[string]string `json:"env,omitempty"`
+	Config    *Config           `json:"config,omitempty"`
 }
 
 // Execution 执行记录
@@ -75,6 +75,7 @@ type ExecRequest struct {
 	AllowedTools    []string `json:"allowed_tools,omitempty"`    // 允许的工具列表
 	DisallowedTools []string `json:"disallowed_tools,omitempty"` // 禁用的工具列表
 	IncludeEvents   bool     `json:"include_events,omitempty"`   // 是否返回完整事件列表
+	ThreadID        string   `json:"thread_id,omitempty"`        // 多轮对话 Thread ID (resume)
 }
 
 // ExecResponse 执行响应
@@ -86,6 +87,7 @@ type ExecResponse struct {
 	Usage       *TokenUsage  `json:"usage,omitempty"`        // Token 使用统计
 	ExitCode    int          `json:"exit_code"`
 	Error       string       `json:"error,omitempty"`
+	ThreadID    string       `json:"thread_id,omitempty"`    // 多轮对话 Thread ID
 }
 
 // TokenUsage Token 使用统计

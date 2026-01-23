@@ -9,20 +9,19 @@ import (
 	"time"
 
 	"github.com/tmalldedede/agentbox/internal/agent"
-	_ "github.com/tmalldedede/agentbox/internal/agent/claude"   // 注册 Claude Code 适配器
-	_ "github.com/tmalldedede/agentbox/internal/agent/codex"    // 注册 Codex 适配器
-	_ "github.com/tmalldedede/agentbox/internal/agent/opencode" // 注册 OpenCode 适配器
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
-	"github.com/tmalldedede/agentbox/internal/credential"
+	"github.com/tmalldedede/agentbox/internal/engine"
+	_ "github.com/tmalldedede/agentbox/internal/engine/claude"   // 注册 Claude Code 适配器
+	_ "github.com/tmalldedede/agentbox/internal/engine/codex"    // 注册 Codex 适配器
+	_ "github.com/tmalldedede/agentbox/internal/engine/opencode" // 注册 OpenCode 适配器
 	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/logger"
 	"github.com/tmalldedede/agentbox/internal/mcp"
-	"github.com/tmalldedede/agentbox/internal/profile"
 	"github.com/tmalldedede/agentbox/internal/provider"
+	"github.com/tmalldedede/agentbox/internal/runtime"
 	"github.com/tmalldedede/agentbox/internal/session"
 	"github.com/tmalldedede/agentbox/internal/skill"
-	"github.com/tmalldedede/agentbox/internal/smartagent"
 	"github.com/tmalldedede/agentbox/internal/task"
 	"github.com/tmalldedede/agentbox/internal/webhook"
 )
@@ -41,20 +40,20 @@ type App struct {
 
 	// 核心组件
 	Container     container.Manager
-	AgentRegistry *agent.Registry
+	AgentRegistry *engine.Registry
 	Session       *session.Manager
 	Task          *task.Manager
+	GC            *container.GarbageCollector
 
 	// 配置管理
-	Profile    *profile.Manager
-	Provider   *provider.Manager
-	MCP        *mcp.Manager
-	Skill      *skill.Manager
-	Credential *credential.Manager
-	Webhook    *webhook.Manager
+	Provider *provider.Manager
+	Runtime  *runtime.Manager
+	MCP      *mcp.Manager
+	Skill    *skill.Manager
+	Webhook  *webhook.Manager
 
 	// 智能体管理
-	SmartAgent *smartagent.Manager
+	Agent *agent.Manager
 
 	// 执行历史
 	History *history.Manager
@@ -96,28 +95,35 @@ func (a *App) initialize() error {
 	log.Info("Docker connection OK")
 
 	// 2. 获取 Agent 注册表
-	a.AgentRegistry = agent.DefaultRegistry()
+	a.AgentRegistry = engine.DefaultRegistry()
 	log.Info("registered agents", "agents", a.AgentRegistry.Names())
 
 	// 3. 初始化 Session 管理器
 	sessionStore := session.NewMemoryStore()
 	a.Session = session.NewManager(sessionStore, a.Container, a.AgentRegistry, a.Config.Container.WorkspaceBase)
 
-	// 4. 初始化 Profile 管理器
-	profileDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "profiles")
-	a.Profile, err = profile.NewManager(profileDataDir)
-	if err != nil {
-		return fmt.Errorf("failed to initialize Profile manager: %w", err)
+	// 3.5. 初始化 GC (依赖 Session Manager)
+	a.GC = container.NewGarbageCollector(a.Container, a.Session, container.GCConfig{
+		Interval:     a.Config.Container.GCInterval,
+		ContainerTTL: a.Config.Container.ContainerTTL,
+		IdleTimeout:  a.Config.Container.IdleTimeout,
+	})
+
+	// 获取加密密钥
+	encryptionKey := os.Getenv("AGENTBOX_ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		encryptionKey = "agentbox-default-encryption-key-32b" // 默认密钥，仅用于开发
 	}
-	log.Info("loaded profiles", "count", len(a.Profile.List()))
 
-	// 设置 Profile Manager 到 Session Manager
-	a.Session.SetProfileManager(a.Profile)
-
-	// 5. 初始化 Provider 管理器
+	// 4. 初始化 Provider 管理器
 	providerDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "providers")
-	a.Provider = provider.NewManager(providerDataDir)
+	a.Provider = provider.NewManager(providerDataDir, encryptionKey)
 	log.Info("loaded providers", "count", len(a.Provider.List()), "builtin", len(provider.GetBuiltinProviders()))
+
+	// 5.5. 初始化 Runtime 管理器
+	runtimeDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "runtimes")
+	a.Runtime = runtime.NewManager(runtimeDataDir)
+	log.Info("loaded runtimes", "count", len(a.Runtime.List()))
 
 	// 6. 初始化 MCP Server 管理器
 	mcpDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "mcp-servers")
@@ -135,25 +141,25 @@ func (a *App) initialize() error {
 	}
 	log.Info("loaded skills", "count", len(a.Skill.List()))
 
-	// 8. 初始化 Credential 管理器
-	credentialDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "credentials")
-	encryptionKey := os.Getenv("AGENTBOX_ENCRYPTION_KEY")
-	if encryptionKey == "" {
-		encryptionKey = "agentbox-default-encryption-key-32b" // 默认密钥，仅用于开发
-	}
-	a.Credential, err = credential.NewManager(credentialDataDir, encryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to initialize Credential manager: %w", err)
-	}
-	log.Info("loaded credentials", "count", len(a.Credential.List()))
-
-	// 设置 Credential Manager 到 Session Manager
-	a.Session.SetCredentialManager(a.Credential)
-
-	// 设置 Skill Manager 到 Session Manager
+	// 8. 设置 Skill Manager 到 Session Manager
 	a.Session.SetSkillManager(a.Skill)
 
-	// 9. 初始化 Task Store (SQLite)
+	// 9. 初始化 Agent Manager（Task Manager 依赖它）
+	agentDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "agents")
+	a.Agent = agent.NewManager(agentDataDir, a.Provider, a.Runtime, a.Skill, a.MCP)
+	log.Info("loaded agents", "count", len(a.Agent.List()))
+
+	// 设置 Agent Manager 到 Session Manager
+	a.Session.SetAgentManager(a.Agent)
+
+	// 10. 解析文件上传目录
+	if a.Config.Files.UploadDir == "" {
+		a.Config.Files.UploadDir = filepath.Join(a.Config.Container.WorkspaceBase, "uploads")
+	}
+	os.MkdirAll(a.Config.Files.UploadDir, 0755)
+	log.Info("file upload directory", "path", a.Config.Files.UploadDir)
+
+	// 11. 初始化 Task Store (SQLite)
 	taskDBPath := filepath.Join(a.Config.Container.WorkspaceBase, "agentbox.db")
 	a.taskStore, err = task.NewSQLiteStore(taskDBPath)
 	if err != nil {
@@ -161,10 +167,10 @@ func (a *App) initialize() error {
 	}
 	log.Info("task database initialized", "path", taskDBPath)
 
-	// 10. 初始化 Task Manager
-	a.Task = task.NewManager(a.taskStore, a.Profile, a.Session, nil)
+	// 12. 初始化 Task Manager
+	a.Task = task.NewManager(a.taskStore, a.Agent, a.Session, &task.ManagerConfig{})
 
-	// 11. 初始化 Webhook Manager
+	// 12. 初始化 Webhook Manager
 	webhookDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "webhooks")
 	a.Webhook, err = webhook.NewManager(webhookDataDir)
 	if err != nil {
@@ -172,11 +178,6 @@ func (a *App) initialize() error {
 	}
 	webhooks, _ := a.Webhook.List()
 	log.Info("loaded webhooks", "count", len(webhooks))
-
-	// 12. 初始化 SmartAgent Manager
-	smartAgentDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "agents")
-	a.SmartAgent = smartagent.NewManager(smartAgentDataDir, a.Profile)
-	log.Info("loaded smart agents", "count", len(a.SmartAgent.List()))
 
 	// 13. 初始化 History Manager
 	historyStore := history.NewMemoryStore()
@@ -189,6 +190,7 @@ func (a *App) initialize() error {
 // Start 启动后台服务
 func (a *App) Start() {
 	a.Task.Start()
+	a.GC.Start()
 	log.Info("app started")
 }
 
@@ -197,6 +199,10 @@ func (a *App) Close() error {
 	log.Info("closing app...")
 
 	// 按初始化的逆序关闭
+	if a.GC != nil {
+		a.GC.Stop()
+	}
+
 	if a.Task != nil {
 		a.Task.Stop()
 	}

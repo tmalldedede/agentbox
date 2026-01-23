@@ -11,10 +11,8 @@ func AutoMigrate() error {
 	migLog.Info("running database migrations...")
 
 	models := []interface{}{
-		&ProfileModel{},
 		&MCPServerModel{},
 		&SkillModel{},
-		&CredentialModel{},
 		&SessionModel{},
 		&TaskModel{},
 		&ExecutionModel{},
@@ -33,69 +31,16 @@ func AutoMigrate() error {
 	return nil
 }
 
-// SeedBuiltInData seeds built-in profiles, MCP servers, and skills
+// SeedBuiltInData seeds built-in MCP servers and skills
 func SeedBuiltInData() error {
 	migLog.Info("seeding built-in data...")
 
-	// Check if already seeded
+	// Check if already seeded (use MCP servers as indicator)
 	var count int64
-	DB.Model(&ProfileModel{}).Where("is_built_in = ?", true).Count(&count)
+	DB.Model(&MCPServerModel{}).Where("is_built_in = ?", true).Count(&count)
 	if count > 0 {
 		migLog.Debug("built-in data already exists, skipping seed")
 		return nil
-	}
-
-	// Seed built-in profiles
-	builtInProfiles := []ProfileModel{
-		{
-			BaseModel:   BaseModel{ID: "claude-code-default"},
-			Name:        "Claude Code Default",
-			Description: "Default Claude Code profile with standard settings",
-			Adapter:     "claude-code",
-			IsBuiltIn:   true,
-			IsPublic:    true,
-		},
-		{
-			BaseModel:   BaseModel{ID: "claude-code-auto"},
-			Name:        "Claude Code Auto",
-			Description: "Claude Code with auto-accept edits mode",
-			Adapter:     "claude-code",
-			Permissions: `{"mode":"acceptEdits"}`,
-			IsBuiltIn:   true,
-			IsPublic:    true,
-		},
-		{
-			BaseModel:   BaseModel{ID: "codex-default"},
-			Name:        "Codex Default",
-			Description: "Default Codex profile with standard settings",
-			Adapter:     "codex",
-			IsBuiltIn:   true,
-			IsPublic:    true,
-		},
-		{
-			BaseModel:   BaseModel{ID: "codex-full-auto"},
-			Name:        "Codex Full Auto",
-			Description: "Codex with full auto mode and danger full access",
-			Adapter:     "codex",
-			Permissions: `{"sandbox_mode":"danger-full-access","approval_policy":"never","full_auto":true}`,
-			IsBuiltIn:   true,
-			IsPublic:    true,
-		},
-		{
-			BaseModel:   BaseModel{ID: "security-research"},
-			Name:        "Security Research",
-			Description: "Profile optimized for security research with cybersec tools",
-			Adapter:     "claude-code",
-			Permissions: `{"mode":"bypassPermissions"}`,
-			IsBuiltIn:   true,
-			IsPublic:    true,
-		},
-	}
-
-	for _, p := range builtInProfiles {
-		if err := DB.Create(&p).Error; err != nil {
-			migLog.Warn("failed to create built-in profile", "id", p.ID, "error", err)
-		}
 	}
 
 	// Seed built-in MCP servers

@@ -33,7 +33,7 @@ func (h *HistoryHandler) RegisterRoutes(r *gin.RouterGroup) {
 // @Produce json
 // @Param source_type query string false "Filter by source type (session/agent)"
 // @Param source_id query string false "Filter by source ID"
-// @Param profile_id query string false "Filter by profile ID"
+// @Param agent_id query string false "Filter by agent ID"
 // @Param engine query string false "Filter by engine"
 // @Param status query string false "Filter by status"
 // @Param limit query int false "Limit results (default 50)"
@@ -114,7 +114,7 @@ func (h *HistoryHandler) Delete(c *gin.Context) {
 // @Tags History
 // @Produce json
 // @Param source_type query string false "Filter by source type"
-// @Param profile_id query string false "Filter by profile ID"
+// @Param agent_id query string false "Filter by agent ID"
 // @Param engine query string false "Filter by engine"
 // @Success 200 {object} Response{data=history.Stats}
 // @Router /history/stats [get]

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -23,51 +25,45 @@ func (h *TaskHandler) RegisterRoutes(r *gin.RouterGroup) {
 	{
 		tasks.POST("", h.Create)
 		tasks.GET("", h.List)
+		tasks.GET("/stats", h.Stats)
+		tasks.POST("/cleanup", h.Cleanup)
 		tasks.GET("/:id", h.Get)
-		tasks.DELETE("/:id", h.Cancel)
+		tasks.DELETE("/:id", h.Delete)
+		tasks.POST("/:id/cancel", h.Cancel)
+		tasks.POST("/:id/retry", h.Retry)
+		tasks.GET("/:id/events", h.StreamEvents)
 		tasks.GET("/:id/output", h.GetOutput)
-		tasks.GET("/:id/logs", h.GetLogs)
 	}
 }
 
-// CreateTaskRequest 创建任务请求
-type CreateTaskRequest struct {
-	ProfileID  string            `json:"profile_id" binding:"required"`
-	SessionID  string            `json:"session_id,omitempty"` // 可选：使用已存在的 Session
-	Prompt     string            `json:"prompt" binding:"required"`
-	Input      *task.Input       `json:"input,omitempty"`
-	Output     *task.OutputConfig `json:"output,omitempty"`
-	WebhookURL string            `json:"webhook_url,omitempty"`
-	Timeout    int               `json:"timeout,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+// CreateTaskAPIRequest 创建任务 API 请求（简化版，对齐 Manus）
+type CreateTaskAPIRequest struct {
+	AgentID     string            `json:"agent_id,omitempty"`    // 首次创建时必填
+	Prompt      string            `json:"prompt" binding:"required"`
+	TaskID      string            `json:"task_id,omitempty"`     // 多轮时传入
+	Attachments []string          `json:"attachments,omitempty"` // file IDs
+	WebhookURL  string            `json:"webhook_url,omitempty"`
+	Timeout     int               `json:"timeout,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-// Create godoc
-// @Summary Create a task
-// @Description Create a new async task for batch processing with a specified profile
-// @Tags Tasks
-// @Accept json
-// @Produce json
-// @Param task body CreateTaskRequest true "Task configuration"
-// @Success 201 {object} Response{data=task.Task}
-// @Failure 400 {object} Response
-// @Router /tasks [post]
+// Create 创建任务或追加多轮
+// POST /api/v1/tasks
 func (h *TaskHandler) Create(c *gin.Context) {
-	var req CreateTaskRequest
+	var req CreateTaskAPIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		BadRequest(c, err.Error())
 		return
 	}
 
 	t, err := h.manager.CreateTask(&task.CreateTaskRequest{
-		ProfileID:  req.ProfileID,
-		SessionID:  req.SessionID,
-		Prompt:     req.Prompt,
-		Input:      req.Input,
-		Output:     req.Output,
-		WebhookURL: req.WebhookURL,
-		Timeout:    req.Timeout,
-		Metadata:   req.Metadata,
+		AgentID:     req.AgentID,
+		Prompt:      req.Prompt,
+		TaskID:      req.TaskID,
+		Attachments: req.Attachments,
+		WebhookURL:  req.WebhookURL,
+		Timeout:     req.Timeout,
+		Metadata:    req.Metadata,
 	})
 	if err != nil {
 		HandleError(c, err)
@@ -83,33 +79,25 @@ type ListTasksResponse struct {
 	Total int          `json:"total"`
 }
 
-// List godoc
-// @Summary List tasks
-// @Description Get a list of all tasks with optional filtering and pagination
-// @Tags Tasks
-// @Produce json
-// @Param status query string false "Filter by status" Enums(pending, queued, running, completed, failed, cancelled)
-// @Param profile_id query string false "Filter by Profile ID"
-// @Param limit query int false "Number of results to return" default(20)
-// @Param offset query int false "Offset for pagination" default(0)
-// @Success 200 {object} Response{data=ListTasksResponse}
-// @Router /tasks [get]
+// List 列出任务
+// GET /api/v1/tasks
 func (h *TaskHandler) List(c *gin.Context) {
 	filter := &task.ListFilter{
 		OrderDesc: true,
 	}
 
-	// 状态过滤
 	if status := c.Query("status"); status != "" {
 		filter.Status = []task.Status{task.Status(status)}
 	}
 
-	// Profile 过滤
-	if profileID := c.Query("profile_id"); profileID != "" {
-		filter.ProfileID = profileID
+	if agentID := c.Query("agent_id"); agentID != "" {
+		filter.AgentID = agentID
 	}
 
-	// 分页
+	if search := c.Query("search"); search != "" {
+		filter.Search = search
+	}
+
 	if limit := c.Query("limit"); limit != "" {
 		if l, err := strconv.Atoi(limit); err == nil && l > 0 {
 			filter.Limit = l
@@ -130,28 +118,22 @@ func (h *TaskHandler) List(c *gin.Context) {
 		return
 	}
 
-	// 获取总数（不带分页）
+	// 使用 Count 高效获取总数
 	countFilter := &task.ListFilter{
-		Status:    filter.Status,
-		ProfileID: filter.ProfileID,
+		Status:  filter.Status,
+		AgentID: filter.AgentID,
+		Search:  filter.Search,
 	}
-	total, _ := h.manager.ListTasks(countFilter)
+	total, _ := h.manager.CountTasks(countFilter)
 
 	Success(c, ListTasksResponse{
 		Tasks: tasks,
-		Total: len(total),
+		Total: total,
 	})
 }
 
-// Get godoc
-// @Summary Get a task
-// @Description Get detailed information about a specific task
-// @Tags Tasks
-// @Produce json
-// @Param id path string true "Task ID"
-// @Success 200 {object} Response{data=task.Task}
-// @Failure 404 {object} Response
-// @Router /tasks/{id} [get]
+// Get 获取任务详情
+// GET /api/v1/tasks/:id
 func (h *TaskHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
@@ -164,16 +146,8 @@ func (h *TaskHandler) Get(c *gin.Context) {
 	Success(c, t)
 }
 
-// Cancel godoc
-// @Summary Cancel a task
-// @Description Cancel a pending or running task
-// @Tags Tasks
-// @Produce json
-// @Param id path string true "Task ID"
-// @Success 200 {object} Response{data=task.Task}
-// @Failure 400 {object} Response
-// @Failure 404 {object} Response
-// @Router /tasks/{id} [delete]
+// Cancel 取消任务
+// POST /api/v1/tasks/:id/cancel
 func (h *TaskHandler) Cancel(c *gin.Context) {
 	id := c.Param("id")
 
@@ -182,20 +156,152 @@ func (h *TaskHandler) Cancel(c *gin.Context) {
 		return
 	}
 
-	// 返回更新后的任务
 	t, _ := h.manager.GetTask(id)
 	Success(c, t)
 }
 
-// GetOutput godoc
-// @Summary Get task output
-// @Description Get the result/output of a completed task
-// @Tags Tasks
-// @Produce json
-// @Param id path string true "Task ID"
-// @Success 200 {object} Response{data=task.Result}
-// @Failure 404 {object} Response
-// @Router /tasks/{id}/output [get]
+// Delete 删除任务
+// DELETE /api/v1/tasks/:id
+func (h *TaskHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.manager.DeleteTask(id); err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, gin.H{"deleted": true})
+}
+
+// Retry 重试任务
+// POST /api/v1/tasks/:id/retry
+func (h *TaskHandler) Retry(c *gin.Context) {
+	id := c.Param("id")
+
+	t, err := h.manager.RetryTask(id)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	Created(c, t)
+}
+
+// Stats 获取任务统计
+// GET /api/v1/tasks/stats
+func (h *TaskHandler) Stats(c *gin.Context) {
+	stats, err := h.manager.GetStats()
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, stats)
+}
+
+// CleanupRequest 清理请求
+type CleanupRequest struct {
+	BeforeDays int           `json:"before_days"` // 清理多少天前的任务
+	Statuses   []task.Status `json:"statuses"`    // 要清理的状态，默认 completed/failed/cancelled
+}
+
+// Cleanup 清理旧任务
+// POST /api/v1/tasks/cleanup
+func (h *TaskHandler) Cleanup(c *gin.Context) {
+	var req CleanupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// 允许空 body，使用默认值
+		req.BeforeDays = 7
+	}
+
+	count, err := h.manager.CleanupTasks(req.BeforeDays, req.Statuses)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, gin.H{"deleted": count})
+}
+
+// StreamEvents SSE 实时事件流
+// GET /api/v1/tasks/:id/events
+func (h *TaskHandler) StreamEvents(c *gin.Context) {
+	taskID := c.Param("id")
+
+	// 验证 task 存在
+	t, err := h.manager.GetTask(taskID)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	// 如果任务已经完成，直接返回最终事件
+	if t.Status.IsTerminal() {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+
+		eventType := "task.completed"
+		if t.Status == task.StatusFailed {
+			eventType = "task.failed"
+		} else if t.Status == task.StatusCancelled {
+			eventType = "task.cancelled"
+		}
+
+		data, _ := json.Marshal(map[string]interface{}{
+			"task_id": t.ID,
+			"status":  t.Status,
+			"result":  t.Result,
+		})
+		c.Writer.WriteString(fmt.Sprintf("event: %s\ndata: %s\n\n", eventType, string(data)))
+		c.Writer.Flush()
+		return
+	}
+
+	// 设置 SSE headers
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	// 订阅事件
+	eventCh := h.manager.SubscribeEvents(taskID)
+	defer h.manager.UnsubscribeEvents(taskID, eventCh)
+
+	// 发送初始状态
+	initData, _ := json.Marshal(map[string]interface{}{
+		"task_id":    t.ID,
+		"status":    t.Status,
+		"turn_count": t.TurnCount,
+	})
+	c.Writer.WriteString(fmt.Sprintf("event: task.status\ndata: %s\n\n", string(initData)))
+	c.Writer.Flush()
+
+	// 转发事件
+	clientGone := c.Request.Context().Done()
+	for {
+		select {
+		case <-clientGone:
+			return
+		case event, ok := <-eventCh:
+			if !ok {
+				return
+			}
+
+			data, _ := json.Marshal(event.Data)
+			c.Writer.WriteString(fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, string(data)))
+			c.Writer.Flush()
+
+			// 终态事件后关闭连接
+			if event.Type == "task.completed" || event.Type == "task.failed" || event.Type == "task.cancelled" {
+				return
+			}
+		}
+	}
+}
+
+// GetOutput 获取任务输出
+// GET /api/v1/tasks/:id/output
 func (h *TaskHandler) GetOutput(c *gin.Context) {
 	id := c.Param("id")
 
@@ -214,35 +320,4 @@ func (h *TaskHandler) GetOutput(c *gin.Context) {
 	}
 
 	Success(c, t.Result)
-}
-
-// GetLogs godoc
-// @Summary Get task logs
-// @Description Get execution logs for a task
-// @Tags Tasks
-// @Produce json
-// @Param id path string true "Task ID"
-// @Success 200 {object} Response{data=object{task_id=string,status=string,logs=string}}
-// @Failure 404 {object} Response
-// @Router /tasks/{id}/logs [get]
-func (h *TaskHandler) GetLogs(c *gin.Context) {
-	id := c.Param("id")
-
-	t, err := h.manager.GetTask(id)
-	if err != nil {
-		HandleError(c, err)
-		return
-	}
-
-	// TODO: 从 Session 获取详细日志
-	logs := ""
-	if t.Result != nil && t.Result.Logs != "" {
-		logs = t.Result.Logs
-	}
-
-	Success(c, map[string]interface{}{
-		"task_id": t.ID,
-		"status":  t.Status,
-		"logs":    logs,
-	})
 }

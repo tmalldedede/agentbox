@@ -14,14 +14,16 @@ import (
 type SystemHandler struct {
 	containerMgr container.Manager
 	sessionMgr   *session.Manager
+	gc           *container.GarbageCollector
 	startTime    time.Time
 }
 
 // NewSystemHandler 创建 SystemHandler
-func NewSystemHandler(containerMgr container.Manager, sessionMgr *session.Manager) *SystemHandler {
+func NewSystemHandler(containerMgr container.Manager, sessionMgr *session.Manager, gc *container.GarbageCollector) *SystemHandler {
 	return &SystemHandler{
 		containerMgr: containerMgr,
 		sessionMgr:   sessionMgr,
+		gc:           gc,
 		startTime:    time.Now(),
 	}
 }
@@ -34,6 +36,10 @@ func (h *SystemHandler) RegisterRoutes(r *gin.RouterGroup) {
 		system.GET("/stats", h.Stats)
 		system.POST("/cleanup/containers", h.CleanupContainers)
 		system.POST("/cleanup/images", h.CleanupImages)
+		system.GET("/gc/stats", h.GCStats)
+		system.POST("/gc/trigger", h.TriggerGC)
+		system.POST("/gc/preview", h.PreviewGC)
+		system.PUT("/gc/config", h.UpdateGCConfig)
 	}
 }
 
@@ -338,6 +344,144 @@ func (h *SystemHandler) CleanupImages(c *gin.Context) {
 			resp.SpaceFreed += img.Size
 		}
 	}
+
+	Success(c, resp)
+}
+
+// GCStatsResponse GC 状态响应
+type GCStatsResponse struct {
+	Running           bool      `json:"running"`
+	LastRunAt         time.Time `json:"last_run_at"`
+	NextRunAt         time.Time `json:"next_run_at"`
+	ContainersRemoved int       `json:"containers_removed"`
+	TotalRuns         int       `json:"total_runs"`
+	Errors            []string  `json:"errors"`
+	Config            struct {
+		IntervalSeconds    int `json:"interval_seconds"`
+		ContainerTTLSeconds int `json:"container_ttl_seconds"`
+		IdleTimeoutSeconds int `json:"idle_timeout_seconds"`
+	} `json:"config"`
+}
+
+// GCStats 获取 GC 状态
+// GET /api/v1/admin/system/gc/stats
+func (h *SystemHandler) GCStats(c *gin.Context) {
+	stats := h.gc.Stats()
+
+	resp := GCStatsResponse{
+		Running:           stats.Running,
+		LastRunAt:         stats.LastRunAt,
+		NextRunAt:         stats.NextRunAt,
+		ContainersRemoved: stats.ContainersRemoved,
+		TotalRuns:         stats.TotalRuns,
+		Errors:            stats.Errors,
+	}
+	resp.Config.IntervalSeconds = int(stats.Config.Interval.Seconds())
+	resp.Config.ContainerTTLSeconds = int(stats.Config.ContainerTTL.Seconds())
+	resp.Config.IdleTimeoutSeconds = int(stats.Config.IdleTimeout.Seconds())
+
+	Success(c, resp)
+}
+
+// TriggerGCResponse 手动触发 GC 响应
+type TriggerGCResponse struct {
+	Removed int `json:"removed"`
+}
+
+// TriggerGC 手动触发一次 GC
+// POST /api/v1/admin/system/gc/trigger
+func (h *SystemHandler) TriggerGC(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	statsBefore := h.gc.Stats()
+
+	if err := h.gc.RunOnce(ctx); err != nil {
+		HandleError(c, apperr.Wrap(err, "gc trigger failed"))
+		return
+	}
+
+	statsAfter := h.gc.Stats()
+	removed := statsAfter.ContainersRemoved - statsBefore.ContainersRemoved
+
+	Success(c, TriggerGCResponse{Removed: removed})
+}
+
+// PreviewGC 预览 GC 候选容器（不实际删除）
+// POST /api/v1/admin/system/gc/preview
+func (h *SystemHandler) PreviewGC(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	candidates, err := h.gc.Preview(ctx)
+	if err != nil {
+		HandleError(c, apperr.Wrap(err, "gc preview failed"))
+		return
+	}
+
+	if candidates == nil {
+		candidates = make([]container.GCCandidate, 0)
+	}
+
+	Success(c, candidates)
+}
+
+// UpdateGCConfigRequest 更新 GC 配置请求
+type UpdateGCConfigRequest struct {
+	IntervalSeconds    *int `json:"interval_seconds"`
+	ContainerTTLSeconds *int `json:"container_ttl_seconds"`
+	IdleTimeoutSeconds *int `json:"idle_timeout_seconds"`
+}
+
+// UpdateGCConfig 热更新 GC 配置
+// PUT /api/v1/admin/system/gc/config
+func (h *SystemHandler) UpdateGCConfig(c *gin.Context) {
+	var req UpdateGCConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	// 获取当前配置
+	stats := h.gc.Stats()
+	newConfig := stats.Config
+
+	// 应用修改
+	if req.IntervalSeconds != nil {
+		if *req.IntervalSeconds < 10 {
+			BadRequest(c, "interval_seconds must be >= 10")
+			return
+		}
+		newConfig.Interval = time.Duration(*req.IntervalSeconds) * time.Second
+	}
+	if req.ContainerTTLSeconds != nil {
+		if *req.ContainerTTLSeconds < 60 {
+			BadRequest(c, "container_ttl_seconds must be >= 60")
+			return
+		}
+		newConfig.ContainerTTL = time.Duration(*req.ContainerTTLSeconds) * time.Second
+	}
+	if req.IdleTimeoutSeconds != nil {
+		if *req.IdleTimeoutSeconds < 30 {
+			BadRequest(c, "idle_timeout_seconds must be >= 30")
+			return
+		}
+		newConfig.IdleTimeout = time.Duration(*req.IdleTimeoutSeconds) * time.Second
+	}
+
+	h.gc.UpdateConfig(newConfig)
+
+	// 返回更新后的状态
+	updatedStats := h.gc.Stats()
+	resp := GCStatsResponse{
+		Running:           updatedStats.Running,
+		LastRunAt:         updatedStats.LastRunAt,
+		NextRunAt:         updatedStats.NextRunAt,
+		ContainersRemoved: updatedStats.ContainersRemoved,
+		TotalRuns:         updatedStats.TotalRuns,
+		Errors:            updatedStats.Errors,
+	}
+	resp.Config.IntervalSeconds = int(updatedStats.Config.Interval.Seconds())
+	resp.Config.ContainerTTLSeconds = int(updatedStats.Config.ContainerTTL.Seconds())
+	resp.Config.IdleTimeoutSeconds = int(updatedStats.Config.IdleTimeout.Seconds())
 
 	Success(c, resp)
 }
