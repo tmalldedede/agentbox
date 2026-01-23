@@ -1,141 +1,104 @@
-import type { DashboardRecentTask } from '@/types'
+import { GitPullRequest, Circle, CheckCircle2, XCircle, Clock, MoreHorizontal } from 'lucide-react'
 
-interface Props {
-  tasks: DashboardRecentTask[]
-  stats?: {
-    total: number
-    today: number
-    by_status: Record<string, number>
-    avg_duration_seconds: number
-    success_rate: number
-  }
+type TaskStatus = 'running' | 'queued' | 'completed' | 'failed'
+
+export interface PipelineTask {
+  id: string
+  prompt: string
+  status: TaskStatus
+  adapter: string
+  agent: string
+  progress: number
+  elapsed: string
 }
 
-function getStatusIcon(status: string) {
-  switch (status) {
-    case 'running':
-      return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 6v6l4 2" />
-        </svg>
-      )
-    case 'queued':
-    case 'pending':
-      return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" />
-        </svg>
-      )
-    case 'completed':
-      return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
-      )
-    case 'failed':
-      return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      )
-    case 'cancelled':
-      return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M4.93 4.93l14.14 14.14" />
-        </svg>
-      )
-    default:
-      return null
-  }
+const STATUS_CONFIG: Record<TaskStatus, { icon: any; color: string; bg: string; border: string }> = {
+  running: { icon: Circle, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  queued: { icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+  completed: { icon: CheckCircle2, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
+  failed: { icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
 }
 
-function getAdapterTag(adapter: string) {
-  const colors: Record<string, { bg: string; color: string }> = {
-    'claude-code': { bg: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa' },
-    'codex': { bg: 'rgba(16, 185, 129, 0.15)', color: '#6ee7b7' },
-    'opencode': { bg: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd' },
-  }
-  const c = colors[adapter] || { bg: 'rgba(100, 116, 139, 0.15)', color: '#94a3b8' }
-  const label = adapter === 'claude-code' ? 'CC' : adapter === 'codex' ? 'CX' : 'OC'
-  return (
-    <span className="cc-task-agent-tag" style={{ background: c.bg, color: c.color }}>
-      {label}
-    </span>
-  )
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return ''
-  if (seconds < 60) return `${seconds.toFixed(0)}s`
-  return `${(seconds / 60).toFixed(1)}m`
-}
-
-function formatTimeAgo(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diff = (now - then) / 1000
-
-  if (diff < 60) return `${Math.floor(diff)}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
-}
-
-export function TaskPipeline({ tasks, stats }: Props) {
-  const running = stats?.by_status?.running ?? 0
-  const queued = (stats?.by_status?.queued ?? 0) + (stats?.by_status?.pending ?? 0)
-
-  // Sort: running first, then queued, then recently completed/failed
-  const sortedTasks = [...tasks].sort((a, b) => {
-    const priority: Record<string, number> = { running: 0, queued: 1, pending: 2, completed: 3, failed: 4, cancelled: 5 }
-    return (priority[a.status] ?? 9) - (priority[b.status] ?? 9)
-  })
+export function TaskPipeline({ tasks }: { tasks: PipelineTask[] }) {
+  const runningCount = tasks.filter(t => t.status === 'running').length
 
   return (
-    <div className="cc-panel cc-animate-in" style={{ animationDelay: '0.25s' }}>
-      <div className="cc-panel-header">
-        <span className="cc-panel-title">Task Pipeline</span>
-        <span className="cc-panel-badge">
-          {queued > 0 && <span style={{ color: '#fbbf24' }}>{queued} queued</span>}
-          {running > 0 && <span style={{ color: '#60a5fa' }}>{running} running</span>}
-        </span>
+    <div className="flex h-full flex-col rounded-xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
+      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <GitPullRequest className="text-yellow-400" size={16} />
+          <h3 className="font-semibold text-zinc-100">Task Pipeline</h3>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
+          <span className="relative flex h-2 w-2">
+             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+             <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+          </span>
+          {runningCount} Running
+        </div>
       </div>
-      <div className="cc-panel-content">
-        {sortedTasks.length === 0 ? (
-          <div className="cc-empty">
-            <div className="cc-empty-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="3" width="18" height="18" rx="3" />
-                <path d="M9 12h6M12 9v6" />
-              </svg>
-            </div>
-            <span>No tasks in pipeline</span>
-          </div>
-        ) : (
-          sortedTasks.slice(0, 15).map(task => (
-            <div key={task.id} className="cc-task-item">
-              <div className={`cc-task-icon cc-task-icon-${task.status}`}>
-                {getStatusIcon(task.status)}
-              </div>
-              <div className="cc-task-info">
-                <div className="cc-task-prompt">{task.prompt}</div>
-                <div className="cc-task-meta">
-                  {getAdapterTag(task.adapter)}
-                  <span>{task.agent_name || task.agent_id}</span>
-                  {task.duration_seconds > 0 && (
-                    <span>{formatDuration(task.duration_seconds)}</span>
+
+      <div className="flex flex-1 flex-col overflow-y-auto custom-scrollbar p-0">
+        {tasks.map((task, idx) => {
+          const config = STATUS_CONFIG[task.status]
+          const StatusIcon = config.icon
+
+          return (
+            <div key={task.id} className="relative pl-6 pr-4 py-3 group hover:bg-zinc-800/30 transition-colors">
+              {/* Vertical Timeline Line */}
+              {idx !== tasks.length - 1 && (
+                <div className="absolute left-[29px] top-8 bottom-[-12px] w-px bg-zinc-800 group-hover:bg-zinc-700 transition-colors" />
+              )}
+              
+              <div className="flex items-start gap-3">
+                {/* Icon Wrapper */}
+                <div className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-lg border ${config.bg} ${config.border} ${config.color} shrink-0`}>
+                  <StatusIcon size={14} />
+                </div>
+
+                {/* Content */}
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-sm font-medium text-zinc-200 truncate leading-tight group-hover:text-white transition-colors">
+                      {task.prompt}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono text-zinc-500 bg-zinc-800/50 px-1.5 py-0.5 rounded">
+                      {task.elapsed}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                     <div className="flex items-center gap-1.5">
+                       <div className={`h-1.5 w-1.5 rounded-full ${task.status === 'running' ? 'bg-blue-500 animate-pulse' : 'bg-zinc-600'}`} />
+                       <span className={`capitalize ${config.color} text-[11px] font-medium`}>{task.status}</span>
+                     </div>
+                     <span className="text-zinc-700">|</span>
+                     <span className="text-[11px] truncate max-w-[120px]">
+                       Agent: <span className="text-zinc-400">{task.agent}</span>
+                     </span>
+                  </div>
+
+                  {/* Progress Bar (Only for Running) */}
+                  {task.status === 'running' && (
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-500 relative overflow-hidden"
+                        style={{ width: `${task.progress}%`, transition: 'width 0.8s ease-out' }}
+                      >
+                         <div className="absolute inset-0 bg-white/20 animate-[shimmer_1.5s_infinite]" />
+                      </div>
+                    </div>
                   )}
-                  <span>{formatTimeAgo(task.created_at)}</span>
                 </div>
               </div>
-              <span className={`cc-task-status-badge cc-badge-${task.status}`}>
-                {task.status}
-              </span>
             </div>
-          ))
+          )
+        })}
+        {tasks.length === 0 && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-zinc-600">
+            <MoreHorizontal size={24} />
+            <span className="text-xs">No tasks in pipeline</span>
+          </div>
         )}
       </div>
     </div>
