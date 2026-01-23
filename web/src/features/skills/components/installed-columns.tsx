@@ -2,9 +2,9 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table'
-import { Lock, Power, PowerOff } from 'lucide-react'
+import { Lock, Power, PowerOff, TrendingUp } from 'lucide-react'
 import type { Skill } from '@/types'
-import { categoryOptions, categoryColorMap } from '../data/data'
+import { categoryOptions, categoryColorMap, getSkillStats } from '../data/data'
 import { InstalledRowActions } from './installed-row-actions'
 
 export const installedColumns: ColumnDef<Skill>[] = [
@@ -52,6 +52,63 @@ export const installedColumns: ColumnDef<Skill>[] = [
     enableSorting: false,
   },
   {
+    id: 'usage',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Usage' />
+    ),
+    cell: ({ row }) => {
+      const stats = getSkillStats(row.original)
+      return (
+        <div className='flex items-center gap-2'>
+          <div className='flex flex-col'>
+            <span className='text-sm font-semibold tabular-nums'>{stats.usageCount}</span>
+            <span className='text-[10px] text-muted-foreground flex items-center gap-0.5'>
+              <TrendingUp className='h-2.5 w-2.5 text-emerald-500' />
+              {stats.lastUsed}
+            </span>
+          </div>
+        </div>
+      )
+    },
+    sortingFn: (a, b) => {
+      const sa = getSkillStats(a.original)
+      const sb = getSkillStats(b.original)
+      return sa.usageCount - sb.usageCount
+    },
+  },
+  {
+    id: 'successRate',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Success' />
+    ),
+    cell: ({ row }) => {
+      const stats = getSkillStats(row.original)
+      const color = stats.successRate >= 95
+        ? 'text-emerald-600 dark:text-emerald-400'
+        : stats.successRate >= 90
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-red-600 dark:text-red-400'
+      return (
+        <div className='flex items-center gap-2'>
+          <div className='h-1.5 w-16 overflow-hidden rounded-full bg-muted'>
+            <div
+              className={cn('h-full rounded-full', stats.successRate >= 95 ? 'bg-emerald-500' : stats.successRate >= 90 ? 'bg-amber-500' : 'bg-red-500')}
+              style={{ width: `${stats.successRate}%` }}
+            />
+          </div>
+          <span className={cn('text-xs font-medium tabular-nums', color)}>
+            {stats.successRate}%
+          </span>
+        </div>
+      )
+    },
+    sortingFn: (a, b) => {
+      const sa = getSkillStats(a.original)
+      const sb = getSkillStats(b.original)
+      return sa.successRate - sb.successRate
+    },
+  },
+  {
     id: 'status',
     accessorFn: (row) => row.is_enabled ? 'enabled' : 'disabled',
     header: ({ column }) => (
@@ -72,27 +129,6 @@ export const installedColumns: ColumnDef<Skill>[] = [
       )
     },
     filterFn: (row, id, value) => value.includes(row.getValue(id)),
-    enableSorting: false,
-  },
-  {
-    accessorKey: 'tags',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Tags' />
-    ),
-    cell: ({ row }) => {
-      const tags = row.original.tags
-      if (!tags?.length) return <span className='text-muted-foreground text-xs'>-</span>
-      return (
-        <div className='flex flex-wrap gap-1'>
-          {tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant='outline' className='text-xs'>{tag}</Badge>
-          ))}
-          {tags.length > 3 && (
-            <Badge variant='outline' className='text-xs'>+{tags.length - 3}</Badge>
-          )}
-        </div>
-      )
-    },
     enableSorting: false,
   },
   {

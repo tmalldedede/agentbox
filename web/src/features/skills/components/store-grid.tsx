@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Loader2, Check, Terminal } from 'lucide-react'
+import { Download, Loader2, Check, Terminal, Star, ArrowDownToLine } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select'
 import type { RemoteSkill, SkillCategory } from '@/types'
 import { useInstallSkill } from '@/hooks'
-import { categoryOptions, categoryBgColors } from '../data/data'
+import { categoryOptions, categoryBgColors, getRemoteSkillStats } from '../data/data'
 
 type Props = {
   data: RemoteSkill[]
@@ -75,6 +75,9 @@ export function StoreGrid({ data, isLoading }: Props) {
             ))}
           </SelectContent>
         </Select>
+        <div className='ml-auto text-sm text-muted-foreground'>
+          {filtered.length} skills available
+        </div>
       </div>
 
       <Separator className='mb-4' />
@@ -89,20 +92,21 @@ export function StoreGrid({ data, isLoading }: Props) {
           {filtered.map((skill) => {
             const bgColor = categoryBgColors[skill.category as SkillCategory] || categoryBgColors.other
             const catIcon = categoryOptions.find((c) => c.value === skill.category)
+            const mockStats = getRemoteSkillStats(skill.id)
 
             return (
               <li
                 key={`${skill.source_id}-${skill.id}`}
-                className='rounded-lg border p-4 hover:shadow-md transition-shadow'
+                className='group rounded-xl border bg-card p-5 hover:shadow-lg hover:border-primary/20 transition-all'
               >
                 {/* Top: icon + install button */}
                 <div className='mb-4 flex items-center justify-between'>
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${bgColor}`}>
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${bgColor} transition-transform group-hover:scale-110`}>
                     {catIcon?.icon && <catIcon.icon className='h-5 w-5' />}
                   </div>
                   {skill.is_installed ? (
-                    <Button variant='outline' size='sm' disabled className='gap-1'>
-                      <Check className='h-3.5 w-3.5' />
+                    <Button variant='outline' size='sm' disabled className='gap-1.5'>
+                      <Check className='h-3.5 w-3.5 text-emerald-500' />
                       Installed
                     </Button>
                   ) : (
@@ -110,7 +114,7 @@ export function StoreGrid({ data, isLoading }: Props) {
                       size='sm'
                       onClick={() => handleInstall(skill)}
                       disabled={installingId === skill.id}
-                      className='gap-1'
+                      className='gap-1.5'
                     >
                       {installingId === skill.id ? (
                         <Loader2 className='h-3.5 w-3.5 animate-spin' />
@@ -124,7 +128,7 @@ export function StoreGrid({ data, isLoading }: Props) {
 
                 {/* Name + command */}
                 <div className='mb-2'>
-                  <h3 className='font-semibold'>{skill.name}</h3>
+                  <h3 className='font-semibold text-base'>{skill.name}</h3>
                   <div className='flex items-center gap-1.5 mt-0.5'>
                     <Terminal className='h-3 w-3 text-muted-foreground' />
                     <code className='text-xs text-emerald-600 dark:text-emerald-400 font-mono'>
@@ -134,26 +138,36 @@ export function StoreGrid({ data, isLoading }: Props) {
                 </div>
 
                 {/* Description */}
-                <p className='text-sm text-muted-foreground line-clamp-2 mb-3'>
+                <p className='text-sm text-muted-foreground line-clamp-2 mb-4'>
                   {skill.description || 'No description'}
                 </p>
 
-                {/* Meta */}
-                <div className='flex items-center gap-2 flex-wrap'>
-                  <Badge variant='outline' className='text-xs capitalize'>
+                {/* Stats Row */}
+                <div className='flex items-center gap-4 mb-3 text-xs text-muted-foreground'>
+                  <span className='flex items-center gap-1'>
+                    <Star className='h-3 w-3 text-amber-500 fill-amber-500' />
+                    <span className='font-medium text-foreground'>{mockStats.stars}</span>
+                  </span>
+                  <span className='flex items-center gap-1'>
+                    <ArrowDownToLine className='h-3 w-3' />
+                    <span className='font-medium text-foreground'>{mockStats.downloads.toLocaleString()}</span>
+                  </span>
+                  {skill.version && (
+                    <span className='ml-auto font-mono'>v{skill.version}</span>
+                  )}
+                </div>
+
+                {/* Meta badges */}
+                <div className='flex items-center gap-1.5 flex-wrap'>
+                  <Badge variant='outline' className='text-[10px] capitalize'>
                     {skill.category}
                   </Badge>
                   {skill.author && (
-                    <Badge variant='secondary' className='text-xs'>
+                    <Badge variant='secondary' className='text-[10px]'>
                       {skill.author}
                     </Badge>
                   )}
-                  {skill.version && (
-                    <Badge variant='secondary' className='text-xs'>
-                      v{skill.version}
-                    </Badge>
-                  )}
-                  <Badge variant='secondary' className='text-xs'>
+                  <Badge variant='secondary' className='text-[10px]'>
                     {skill.source_name}
                   </Badge>
                 </div>
