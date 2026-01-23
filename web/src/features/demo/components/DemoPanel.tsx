@@ -11,7 +11,7 @@ interface DemoTask {
   id: string
   name: string
   description: string
-  profile: string
+  agent_id: string
   prompt: string
   icon: string
 }
@@ -21,7 +21,7 @@ const DEMO_TASKS: DemoTask[] = [
     id: 'code-review',
     name: 'Code Review',
     description: 'Analyze code quality and suggest improvements',
-    profile: 'claude-code-default',
+    agent_id: 'claude-code-default',
     prompt: 'Review the code in this repository. Identify potential bugs, security issues, and suggest improvements for code quality and maintainability.',
     icon: '🔍',
   },
@@ -29,7 +29,7 @@ const DEMO_TASKS: DemoTask[] = [
     id: 'doc-generator',
     name: 'Documentation Generator',
     description: 'Generate comprehensive documentation',
-    profile: 'claude-code-default',
+    agent_id: 'claude-code-default',
     prompt: 'Analyze this codebase and generate comprehensive documentation including: 1) Project overview, 2) Architecture diagram in mermaid, 3) API reference, 4) Getting started guide.',
     icon: '📚',
   },
@@ -37,7 +37,7 @@ const DEMO_TASKS: DemoTask[] = [
     id: 'security-scan',
     name: 'Security Scan',
     description: 'Perform security vulnerability analysis',
-    profile: 'security-research',
+    agent_id: 'security-research',
     prompt: 'Perform a security audit of this codebase. Check for: 1) OWASP Top 10 vulnerabilities, 2) Hardcoded secrets, 3) Insecure dependencies, 4) Authentication/authorization issues. Provide a detailed report.',
     icon: '🔒',
   },
@@ -45,7 +45,7 @@ const DEMO_TASKS: DemoTask[] = [
     id: 'test-generator',
     name: 'Test Generator',
     description: 'Generate unit tests for the codebase',
-    profile: 'claude-code-auto',
+    agent_id: 'claude-code-auto',
     prompt: 'Analyze the codebase and generate comprehensive unit tests. Focus on: 1) Critical business logic, 2) Edge cases, 3) Error handling. Use the existing test framework if present.',
     icon: '🧪',
   },
@@ -64,10 +64,9 @@ export function DemoPanel() {
     setResult(null)
 
     try {
-      // Create a session
+      // Create a session using agent_id
       const session = await api.createSession({
-        agent: 'claude-code',
-        profile_id: demo.profile,
+        agent_id: demo.agent_id,
         workspace: '/tmp/demo',
       })
 
@@ -111,7 +110,7 @@ export function DemoPanel() {
             Experience AgentBox with pre-configured demo tasks
           </p>
         </div>
-        <Button variant="outline" onClick={() => navigate({ to: '/profiles' })}>
+        <Button variant="outline" onClick={() => navigate({ to: '/agents' })}>
           Create Your Own
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
@@ -143,7 +142,7 @@ export function DemoPanel() {
               </p>
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-xs bg-secondary px-2 py-1 rounded">
-                  {demo.profile}
+                  {demo.agent_id}
                 </span>
                 <Button
                   size="sm"

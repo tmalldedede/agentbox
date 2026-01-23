@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Terminal, Loader2, ChevronRight, Layers, Globe, ChevronDown } from 'lucide-react'
-import type { Agent, CreateSessionRequest, Profile } from '@/types'
+import { Terminal, Loader2, ChevronDown } from 'lucide-react'
+import type { Agent, CreateSessionRequest } from '@/types'
 import { useLanguage } from '@/contexts/LanguageContext'
-import { useProfiles, useCreateSession } from '@/hooks'
+import { useCreateSession } from '@/hooks'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -30,46 +30,29 @@ import { InlineError } from '@/components/ErrorAlert'
 
 interface Props {
   agents: Agent[]
-  profiles?: Profile[]
-  defaultAgent?: string
+  defaultAgentId?: string
   onClose: () => void
   onCreated: () => void
 }
 
 export default function CreateSessionModal({
   agents,
-  profiles: propProfiles,
-  defaultAgent,
+  defaultAgentId,
   onClose,
   onCreated,
 }: Props) {
   const { t } = useLanguage()
-  const [agent, setAgent] = useState(defaultAgent || agents[0]?.name || '')
-  const [profileId, setProfileId] = useState<string>('')
+  const [agentId, setAgentId] = useState(defaultAgentId || agents[0]?.id || '')
   const [workspace, setWorkspace] = useState('/tmp/myproject')
-  const [apiKey, setApiKey] = useState('')
-  const [baseUrl, setBaseUrl] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [envKey, setEnvKey] = useState('')
+  const [envValue, setEnvValue] = useState('')
 
-  const selectedAgent = agents.find(a => a.name === agent)
-  const envKey = selectedAgent?.required_env[0] || ''
+  const selectedAgent = agents.find(a => a.id === agentId)
 
-  // React Query hooks
-  const { data: queryProfiles = [] } = useProfiles()
   const createSession = useCreateSession()
 
-  // Use prop profiles if provided, otherwise use query profiles
-  const profiles = propProfiles || queryProfiles
-
-  // Filter profiles by selected agent adapter
-  const filteredProfiles = profiles.filter(p => {
-    if (agent === 'claude-code') return p.adapter === 'claude-code'
-    if (agent === 'codex') return p.adapter === 'codex'
-    if (agent === 'opencode') return p.adapter === 'opencode'
-    return true
-  })
-
-  const agentColors: Record<string, string> = {
+  const adapterColors: Record<string, string> = {
     'claude-code': 'bg-purple-500/20 text-purple-400 border-purple-500/50',
     codex: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50',
     opencode: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
@@ -79,25 +62,14 @@ export default function CreateSessionModal({
     e.preventDefault()
 
     const req: CreateSessionRequest = {
-      agent,
+      agent_id: agentId,
       workspace,
     }
 
-    if (profileId) {
-      req.profile_id = profileId
-    }
-
-    // Build env with API key and optional base URL
+    // Build env overrides
     const env: Record<string, string> = {}
-    if (apiKey && envKey) {
-      env[envKey] = apiKey
-    }
-    if (baseUrl.trim()) {
-      if (agent === 'claude-code') {
-        env['ANTHROPIC_BASE_URL'] = baseUrl.trim()
-      } else if (agent === 'codex') {
-        env['OPENAI_BASE_URL'] = baseUrl.trim()
-      }
+    if (envKey.trim() && envValue.trim()) {
+      env[envKey.trim()] = envValue.trim()
     }
     if (Object.keys(env).length > 0) {
       req.env = env
@@ -118,7 +90,7 @@ export default function CreateSessionModal({
             </div>
             <div>
               <DialogTitle>{t('createSession')}</DialogTitle>
-              <DialogDescription>{t('tagline')}</DialogDescription>
+              <DialogDescription>Select an agent and workspace to start a session</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -130,73 +102,35 @@ export default function CreateSessionModal({
             )}
 
             {/* Agent Selection */}
-            <div className="space-y-3">
-              <Label>{t('selectAgent')}</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {agents.map(a => {
-                  const isSelected = agent === a.name
-                  const colors =
-                    agentColors[a.name] || 'bg-blue-500/20 text-blue-400 border-blue-500/50'
-                  const initials = a.name.slice(0, 2).toUpperCase()
-
-                  return (
-                    <button
-                      key={a.name}
-                      type="button"
-                      onClick={() => setAgent(a.name)}
-                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                        isSelected ? colors : 'border-border hover:border-muted-foreground/50'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold ${colors.split(' ').slice(0, 2).join(' ')}`}
-                        >
-                          {initials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={`font-medium ${isSelected ? 'text-foreground' : 'text-foreground/90'}`}
-                          >
-                            {a.display_name}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{a.description}</p>
-                        </div>
+            <div className="space-y-2">
+              <Label>Agent</Label>
+              <Select value={agentId} onValueChange={setAgentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map(a => (
+                    <SelectItem key={a.id} value={a.id}>
+                      <div className="flex items-center gap-2">
+                        {a.icon && <span>{a.icon}</span>}
+                        <span>{a.name}</span>
+                        <span className="text-xs text-muted-foreground">({a.adapter})</span>
                       </div>
-                      {isSelected && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-current rounded-full flex items-center justify-center">
-                          <ChevronRight className="w-3 h-3 text-background" />
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Profile Selection */}
-            {filteredProfiles.length > 0 && (
-              <div className="space-y-2">
-                <Label>Profile (Optional)</Label>
-                <Select value={profileId} onValueChange={setProfileId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="No profile (use defaults)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No profile (use defaults)</SelectItem>
-                    {filteredProfiles.map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name} {p.is_built_in ? '(Built-in)' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedAgent && (
                 <p className="text-xs text-muted-foreground">
-                  <Layers className="w-3 h-3 inline mr-1" />
-                  Profiles provide pre-configured settings for the agent
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${adapterColors[selectedAgent.adapter] || ''}`}>
+                    {selectedAgent.adapter}
+                  </span>
+                  {selectedAgent.description && (
+                    <span className="ml-2">{selectedAgent.description}</span>
+                  )}
                 </p>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Workspace */}
             <div className="space-y-2">
@@ -211,23 +145,6 @@ export default function CreateSessionModal({
               <p className="text-xs text-muted-foreground">Path to mount in container</p>
             </div>
 
-            {/* API Key */}
-            {envKey && (
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">{envKey}</Label>
-                <Input
-                  id="apiKey"
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder={t('apiKeyPlaceholder')}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Required for {selectedAgent?.display_name}
-                </p>
-              </div>
-            )}
-
             {/* Advanced Options */}
             <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
               <div className="border-t border-border pt-4">
@@ -241,27 +158,26 @@ export default function CreateSessionModal({
                 </CollapsibleTrigger>
 
                 <CollapsibleContent className="mt-4 space-y-4">
-                  {/* Base URL */}
+                  {/* Extra Environment Variable */}
                   <div className="space-y-2">
-                    <Label htmlFor="baseUrl">
-                      <Globe className="w-4 h-4 inline mr-1.5" />
-                      API Base URL
-                      <span className="text-muted-foreground font-normal ml-2">(Optional)</span>
-                    </Label>
-                    <Input
-                      id="baseUrl"
-                      type="text"
-                      value={baseUrl}
-                      onChange={e => setBaseUrl(e.target.value)}
-                      placeholder={
-                        agent === 'claude-code'
-                          ? 'https://api.anthropic.com'
-                          : 'https://api.openai.com/v1'
-                      }
-                      className="font-mono text-sm"
-                    />
+                    <Label>Extra Environment Variable (Optional)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={envKey}
+                        onChange={e => setEnvKey(e.target.value)}
+                        placeholder="KEY"
+                        className="flex-1 font-mono text-sm"
+                      />
+                      <Input
+                        value={envValue}
+                        onChange={e => setEnvValue(e.target.value)}
+                        placeholder="value"
+                        type="password"
+                        className="flex-1 font-mono text-sm"
+                      />
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Custom API endpoint for proxies or compatible APIs. Leave empty for default.
+                      Override or add environment variables for this session
                     </p>
                   </div>
                 </CollapsibleContent>
@@ -275,7 +191,7 @@ export default function CreateSessionModal({
             </Button>
             <Button
               type="submit"
-              disabled={createSession.isPending || !agent || !workspace}
+              disabled={createSession.isPending || !agentId || !workspace}
             >
               {createSession.isPending ? (
                 <>

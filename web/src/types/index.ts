@@ -1,7 +1,280 @@
+// Engine Types (底层引擎适配器信息)
+export interface Engine {
+  name: string
+  display_name: string
+  description: string
+  image: string
+  required_env: string[]
+}
+
+// Provider Types
+export type ProviderCategory = 'official' | 'cn_official' | 'aggregator' | 'third_party'
+
+export interface Provider {
+  id: string
+  name: string
+  description?: string
+  template_id?: string
+  agents: AdapterType[]
+  category: ProviderCategory
+  website_url?: string
+  api_key_url?: string
+  docs_url?: string
+  base_url?: string
+  env_config?: Record<string, string>
+  default_model?: string
+  default_models?: string[]
+  icon?: string
+  icon_color?: string
+  is_built_in: boolean
+  is_partner?: boolean
+  requires_ak?: boolean
+  is_enabled: boolean
+  // API Key management
+  api_key_masked?: string
+  is_configured: boolean
+  is_valid: boolean
+  last_validated_at?: string
+}
+
+export interface ProviderStats {
+  total: number
+  configured: number
+  valid: number
+  failed: number
+  not_configured: number
+}
+
+export interface VerifyResult {
+  id: string
+  name: string
+  valid: boolean
+  error?: string
+}
+
+export interface CreateProviderRequest {
+  id: string
+  name: string
+  // Template-based creation
+  template_id?: string
+  api_key?: string
+  models?: string[]
+  // Common
+  base_url?: string
+  // Custom creation
+  description?: string
+  agents?: AdapterType[]
+  category?: ProviderCategory
+  website_url?: string
+  api_key_url?: string
+  docs_url?: string
+  env_config?: Record<string, string>
+  default_model?: string
+  default_models?: string[]
+  icon?: string
+  icon_color?: string
+}
+
+export interface UpdateProviderRequest {
+  name?: string
+  description?: string
+  base_url?: string
+  env_config?: Record<string, string>
+  default_model?: string
+  default_models?: string[]
+}
+
+// AgentRuntime Types
+export interface AgentRuntime {
+  id: string
+  name: string
+  description?: string
+  image: string
+  cpus: number
+  memory_mb: number
+  network: string
+  privileged: boolean
+  is_built_in: boolean
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateRuntimeRequest {
+  id: string
+  name: string
+  description?: string
+  image: string
+  cpus?: number
+  memory_mb?: number
+  network?: string
+  privileged?: boolean
+}
+
+export interface UpdateRuntimeRequest {
+  name?: string
+  description?: string
+  image?: string
+  cpus?: number
+  memory_mb?: number
+  network?: string
+  privileged?: boolean
+}
+
+// Agent Types (合并 Profile + SmartAgent)
+export type AgentStatus = 'active' | 'inactive'
+export type AgentAPIAccess = 'public' | 'api_key' | 'private'
+export type AdapterType = 'claude-code' | 'codex' | 'opencode'
+
+export interface Agent {
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  adapter: AdapterType
+  provider_id: string
+  runtime_id?: string
+  model?: string
+  base_url_override?: string
+  model_config?: ModelConfig
+  skill_ids?: string[]
+  mcp_server_ids?: string[]
+  system_prompt?: string
+  append_system_prompt?: string
+  permissions: PermissionConfig
+  workspace?: string
+  env?: Record<string, string>
+  api_access?: AgentAPIAccess
+  rate_limit?: number
+  webhook_url?: string
+  output_format?: string
+  features?: FeatureConfig
+  config_overrides?: Record<string, string>
+  status: AgentStatus
+  is_built_in: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateAgentRequest {
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  adapter: AdapterType
+  provider_id: string
+  runtime_id?: string
+  model?: string
+  base_url_override?: string
+  model_config?: ModelConfig
+  skill_ids?: string[]
+  mcp_server_ids?: string[]
+  system_prompt?: string
+  append_system_prompt?: string
+  permissions?: PermissionConfig
+  workspace?: string
+  env?: Record<string, string>
+  api_access?: AgentAPIAccess
+  rate_limit?: number
+  webhook_url?: string
+  output_format?: string
+  features?: FeatureConfig
+  config_overrides?: Record<string, string>
+}
+
+export interface UpdateAgentRequest {
+  name?: string
+  description?: string
+  icon?: string
+  adapter?: AdapterType
+  provider_id?: string
+  runtime_id?: string
+  model?: string
+  base_url_override?: string
+  model_config?: ModelConfig
+  skill_ids?: string[]
+  mcp_server_ids?: string[]
+  system_prompt?: string
+  append_system_prompt?: string
+  permissions?: PermissionConfig
+  workspace?: string
+  env?: Record<string, string>
+  api_access?: AgentAPIAccess
+  rate_limit?: number
+  webhook_url?: string
+  output_format?: string
+  features?: FeatureConfig
+  config_overrides?: Record<string, string>
+  status?: AgentStatus
+}
+
+export interface RunAgentRequest {
+  prompt: string
+  workspace?: string
+  input?: {
+    files?: string[]
+    text?: string
+  }
+  options?: {
+    max_turns?: number
+    timeout?: number
+  }
+  metadata?: Record<string, string>
+}
+
+export interface AgentRunResult {
+  run_id: string
+  agent_id: string
+  agent_name: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  output?: string
+  error?: string
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    duration_ms?: number
+    cost_usd?: number
+  }
+  started_at: string
+  ended_at?: string
+}
+
+// Model Config Types
+export interface ModelConfig {
+  name: string
+  provider?: string
+  base_url?: string
+  reasoning_effort?: 'low' | 'medium' | 'high'
+  haiku_model?: string
+  sonnet_model?: string
+  opus_model?: string
+  timeout_ms?: number
+  max_output_tokens?: number
+  disable_traffic?: boolean
+  wire_api?: 'chat' | 'responses'
+}
+
+export interface PermissionConfig {
+  mode?: string
+  allowed_tools?: string[]
+  disallowed_tools?: string[]
+  tools?: string[]
+  skip_all?: boolean
+  sandbox_mode?: 'read-only' | 'workspace-write' | 'danger-full-access'
+  approval_policy?: 'untrusted' | 'on-failure' | 'on-request' | 'never'
+  full_auto?: boolean
+  additional_dirs?: string[]
+}
+
+export interface FeatureConfig {
+  web_search?: boolean
+}
+
+// Session Types
 export interface Session {
   id: string
+  agent_id?: string
   agent: string
-  profile_id?: string
   status: 'creating' | 'running' | 'stopped' | 'error'
   workspace: string
   container_id?: string
@@ -16,35 +289,9 @@ export interface SessionConfig {
   memory_limit: number
 }
 
-export interface Agent {
-  name: string
-  display_name: string
-  description: string
-  image: string
-  required_env: string[]
-}
-
-export interface Execution {
-  id: string
-  session_id: string
-  prompt: string
-  status: 'pending' | 'running' | 'success' | 'failed'
-  output?: string
-  error?: string
-  exit_code: number
-  started_at: string
-  ended_at?: string
-}
-
-export interface ApiResponse<T> {
-  code: number
-  message: string
-  data?: T
-}
-
 export interface CreateSessionRequest {
-  agent: string
-  profile_id?: string
+  agent_id?: string
+  agent?: string
   workspace: string
   env?: Record<string, string>
 }
@@ -55,15 +302,15 @@ export interface ExecRequest {
   timeout?: number
   allowed_tools?: string[]
   disallowed_tools?: string[]
-  include_events?: boolean // 是否返回完整事件列表
+  include_events?: boolean
 }
 
 export interface ExecResponse {
   execution_id: string
-  message: string // Agent 最终回复
-  output: string // 原始输出 (兼容旧版)
-  events?: ExecEvent[] // 完整事件列表 (当 include_events=true)
-  usage?: TokenUsage // Token 使用统计
+  message: string
+  output: string
+  events?: ExecEvent[]
+  usage?: TokenUsage
   exit_code: number
   error?: string
 }
@@ -79,125 +326,16 @@ export interface ExecEvent {
   raw?: unknown
 }
 
-// Profile Types
-export interface Profile {
+export interface Execution {
   id: string
-  name: string
-  description?: string
-  icon?: string
-  tags?: string[]
-  adapter: 'claude-code' | 'codex' | 'opencode'
-  extends?: string
-  credential_id?: string
-  model: ModelConfig
-  mcp_servers?: MCPServerConfig[]
-  skill_ids?: string[]
-  permissions: PermissionConfig
-  resources: ResourceConfig
-  system_prompt?: string
-  append_system_prompt?: string
-  base_instructions?: string
-  developer_instructions?: string
-  features: FeatureConfig
-  config_overrides?: Record<string, string>
-  output_format?: string
-  output_schema?: string
-  debug?: DebugConfig
-  created_at: string
-  updated_at: string
-  created_by?: string
-  is_built_in: boolean
-  is_public: boolean
-}
-
-export interface ModelConfig {
-  // Basic configuration
-  name: string
-  provider?: string
-  base_url?: string  // Custom API endpoint (proxy/compatible API)
-  reasoning_effort?: 'low' | 'medium' | 'high'
-
-  // Model tier configuration (Claude Code)
-  haiku_model?: string   // ANTHROPIC_DEFAULT_HAIKU_MODEL
-  sonnet_model?: string  // ANTHROPIC_DEFAULT_SONNET_MODEL
-  opus_model?: string    // ANTHROPIC_DEFAULT_OPUS_MODEL
-
-  // Advanced configuration
-  timeout_ms?: number        // API_TIMEOUT_MS
-  max_output_tokens?: number // CLAUDE_CODE_MAX_OUTPUT_TOKENS
-  disable_traffic?: boolean  // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
-
-  // Codex specific
-  wire_api?: 'chat' | 'responses'  // Codex config.toml wire_api
-}
-
-export interface MCPServerConfig {
-  name: string
-  command: string
-  args?: string[]
-  env?: Record<string, string>
-  description?: string
-}
-
-export interface PermissionConfig {
-  // Claude Code specific
-  mode?: string
-  allowed_tools?: string[]
-  disallowed_tools?: string[]
-  tools?: string[]
-  skip_all?: boolean
-  // Codex specific
-  sandbox_mode?: 'read-only' | 'workspace-write' | 'danger-full-access'
-  approval_policy?: 'untrusted' | 'on-failure' | 'on-request' | 'never'
-  full_auto?: boolean
-  // Common
-  additional_dirs?: string[]
-}
-
-export interface ResourceConfig {
-  max_budget_usd?: number
-  max_turns?: number
-  max_tokens?: number
-  timeout?: number
-  cpus?: number
-  memory_mb?: number
-  disk_gb?: number
-}
-
-export interface FeatureConfig {
-  web_search?: boolean
-}
-
-export interface DebugConfig {
-  verbose?: boolean
-}
-
-export interface CreateProfileRequest {
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  tags?: string[]
-  adapter: 'claude-code' | 'codex' | 'opencode'
-  extends?: string
-  model: ModelConfig
-  mcp_servers?: MCPServerConfig[]
-  permissions: PermissionConfig
-  resources: ResourceConfig
-  system_prompt?: string
-  append_system_prompt?: string
-  base_instructions?: string
-  developer_instructions?: string
-  features?: FeatureConfig
-  config_overrides?: Record<string, string>
-  output_format?: string
-  output_schema?: string
-  debug?: DebugConfig
-}
-
-export interface CloneProfileRequest {
-  new_id: string
-  new_name: string
+  session_id: string
+  prompt: string
+  status: 'pending' | 'running' | 'success' | 'failed'
+  output?: string
+  error?: string
+  exit_code: number
+  started_at: string
+  ended_at?: string
 }
 
 // MCP Server Types
@@ -365,46 +503,118 @@ export interface AddSourceRequest {
   description?: string
 }
 
-// Credential Types
-export type CredentialType = 'api_key' | 'token' | 'oauth'
-export type CredentialProvider = 'anthropic' | 'openai' | 'github' | 'custom'
-export type CredentialScope = 'global' | 'profile' | 'session'
+// Task Types (Task-Centric, 对齐 Manus)
+export type TaskStatus = 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
-export interface Credential {
-  id: string
+export interface TaskResult {
+  summary?: string
+  text?: string
+  files?: OutputFile[]
+  usage?: {
+    duration_seconds: number
+    input_tokens?: number
+    output_tokens?: number
+    total_tokens?: number
+  }
+  logs?: string
+}
+
+export interface OutputFile {
   name: string
-  type: CredentialType
-  provider: CredentialProvider
-  value_masked?: string
-  scope: CredentialScope
-  profile_id?: string
-  env_var?: string
-  is_valid: boolean
-  last_used_at?: string
-  expires_at?: string
+  path: string
+  size: number
+  mime_type?: string
+  url?: string
+}
+
+export interface Turn {
+  id: string
+  prompt: string
+  result?: TaskResult
+  created_at: string
+}
+
+export interface Task {
+  id: string
+  agent_id: string
+  agent_name?: string
+  agent_type?: string
+  prompt: string
+  attachments?: string[]
+  output_files?: OutputFile[]
+  turns?: Turn[]
+  turn_count: number
+  webhook_url?: string
+  timeout?: number
+  status: TaskStatus
+  session_id?: string
+  result?: TaskResult
+  error_message?: string
+  metadata?: Record<string, string>
+  created_at: string
+  queued_at?: string
+  started_at?: string
+  completed_at?: string
+}
+
+export interface CreateTaskRequest {
+  agent_id?: string
+  prompt: string
+  task_id?: string          // 多轮时传入
+  attachments?: string[]    // file IDs
+  webhook_url?: string
+  timeout?: number
+  metadata?: Record<string, string>
+}
+
+export interface TaskEvent {
+  type: string
+  data?: unknown
+}
+
+export interface TaskStats {
+  total: number
+  by_status: Record<TaskStatus, number>
+  by_agent: Record<string, number>
+  avg_duration_seconds: number
+}
+
+// Webhook Types
+export interface Webhook {
+  id: string
+  url: string
+  secret?: string
+  events: string[]
+  is_active: boolean
   created_at: string
   updated_at: string
 }
 
-export interface CreateCredentialRequest {
-  id: string
-  name: string
-  type?: CredentialType
-  provider: CredentialProvider
-  value: string
-  scope?: CredentialScope
-  profile_id?: string
-  env_var?: string
+export interface CreateWebhookRequest {
+  url: string
+  secret?: string
+  events?: string[]
 }
 
-export interface UpdateCredentialRequest {
-  name?: string
-  type?: CredentialType
-  provider?: CredentialProvider
-  value?: string
-  scope?: CredentialScope
-  profile_id?: string
-  env_var?: string
+export interface UpdateWebhookRequest {
+  url?: string
+  secret?: string
+  events?: string[]
+  is_active?: boolean
+}
+
+// File Types (Public API)
+export type FilePurpose = 'attachment' | 'output' | 'general'
+
+export interface UploadedFile {
+  id: string
+  name: string
+  size: number
+  mime_type: string
+  task_id?: string
+  purpose: FilePurpose
+  uploaded_at: string
+  expires_at?: string
 }
 
 // Image Types
@@ -469,6 +679,35 @@ export interface SystemStats {
   }
 }
 
+export interface GCStats {
+  running: boolean
+  last_run_at: string
+  next_run_at: string
+  containers_removed: number
+  total_runs: number
+  errors: string[]
+  config: {
+    interval_seconds: number
+    container_ttl_seconds: number
+    idle_timeout_seconds: number
+  }
+}
+
+export interface GCCandidate {
+  container_id: string
+  name: string
+  image: string
+  status: string
+  created_at: number
+  reason: string
+}
+
+export interface UpdateGCConfigRequest {
+  interval_seconds?: number
+  container_ttl_seconds?: number
+  idle_timeout_seconds?: number
+}
+
 export interface CleanupContainersResponse {
   removed: string[]
   errors?: string[]
@@ -484,220 +723,7 @@ export interface CleanupImagesResponse {
   errors?: string[]
 }
 
-// Task Types
-export type TaskStatus = 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
-
-export interface TaskInput {
-  files?: string[]
-  urls?: string[]
-  text?: string
-}
-
-export interface TaskOutputConfig {
-  format?: string
-  path?: string
-  include_files?: boolean
-}
-
-export interface TaskResult {
-  summary?: string
-  text?: string
-  files?: string[]
-  usage?: {
-    duration_seconds: number
-    tokens_used?: number
-    cost_usd?: number
-  }
-  logs?: string
-}
-
-export interface Task {
-  id: string
-  profile_id: string
-  profile_name: string
-  agent_type: string
-  prompt: string
-  input?: TaskInput
-  output?: TaskOutputConfig
-  webhook_url?: string
-  timeout?: number
-  status: TaskStatus
-  session_id?: string
-  result?: TaskResult
-  error_message?: string
-  metadata?: Record<string, string>
-  created_at: string
-  queued_at?: string
-  started_at?: string
-  completed_at?: string
-}
-
-export interface CreateTaskRequest {
-  profile_id: string
-  prompt: string
-  input?: TaskInput
-  output?: TaskOutputConfig
-  webhook_url?: string
-  timeout?: number
-  metadata?: Record<string, string>
-}
-
-// Webhook Types
-export interface Webhook {
-  id: string
-  url: string
-  secret?: string
-  events: string[]
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface CreateWebhookRequest {
-  url: string
-  secret?: string
-  events?: string[]
-}
-
-export interface UpdateWebhookRequest {
-  url?: string
-  secret?: string
-  events?: string[]
-  is_active?: boolean
-}
-
-// Provider Types
-export type ProviderCategory = 'official' | 'cn_official' | 'aggregator' | 'third_party'
-export type ProviderAgent = 'claude-code' | 'codex' | 'opencode' | 'all'
-
-export interface Provider {
-  id: string
-  name: string
-  description?: string
-  agent: ProviderAgent
-  category: ProviderCategory
-  website_url?: string
-  api_key_url?: string
-  docs_url?: string
-  base_url?: string
-  env_config?: Record<string, string>
-  default_model?: string
-  default_models?: string[]
-  icon?: string
-  icon_color?: string
-  is_built_in: boolean
-  is_partner?: boolean
-  requires_ak?: boolean
-  is_enabled: boolean
-}
-
-export interface CreateProviderRequest {
-  id: string
-  name: string
-  description?: string
-  agent: ProviderAgent
-  category?: ProviderCategory
-  website_url?: string
-  api_key_url?: string
-  docs_url?: string
-  base_url?: string
-  env_config?: Record<string, string>
-  default_model?: string
-  default_models?: string[]
-  icon?: string
-  icon_color?: string
-}
-
-export interface UpdateProviderRequest {
-  name?: string
-  description?: string
-  base_url?: string
-  env_config?: Record<string, string>
-  default_model?: string
-  default_models?: string[]
-}
-
-// SmartAgent Types (API-exposed agents)
-export type SmartAgentStatus = 'active' | 'inactive' | 'error'
-export type SmartAgentAPIAccess = 'public' | 'api_key' | 'private'
-
-export interface SmartAgent {
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  profile_id: string
-  system_prompt?: string
-  env?: Record<string, string>
-  api_access: SmartAgentAPIAccess
-  rate_limit?: number
-  webhook_url?: string
-  status: SmartAgentStatus
-  created_at: string
-  updated_at: string
-  created_by?: string
-}
-
-export interface CreateSmartAgentRequest {
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  profile_id: string
-  system_prompt?: string
-  env?: Record<string, string>
-  api_access?: SmartAgentAPIAccess
-  rate_limit?: number
-  webhook_url?: string
-}
-
-export interface UpdateSmartAgentRequest {
-  name?: string
-  description?: string
-  icon?: string
-  profile_id?: string
-  system_prompt?: string
-  env?: Record<string, string>
-  api_access?: SmartAgentAPIAccess
-  rate_limit?: number
-  webhook_url?: string
-  status?: SmartAgentStatus
-}
-
-export interface RunSmartAgentRequest {
-  prompt: string
-  workspace?: string
-  input?: {
-    files?: string[]
-    text?: string
-  }
-  options?: {
-    max_turns?: number
-    timeout?: number
-    stream?: boolean
-    async?: boolean
-  }
-  metadata?: Record<string, string>
-}
-
-export interface SmartAgentRunResult {
-  run_id: string
-  agent_id: string
-  agent_name: string
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-  output?: string
-  error?: string
-  usage?: {
-    input_tokens?: number
-    output_tokens?: number
-    duration_ms?: number
-    cost_usd?: number
-  }
-  started_at: string
-  ended_at?: string
-}
-
-// History Types (Unified Execution History)
+// History Types
 export type HistorySourceType = 'session' | 'agent'
 export type HistoryStatus = 'pending' | 'running' | 'completed' | 'failed'
 
@@ -706,8 +732,6 @@ export interface HistoryEntry {
   source_type: HistorySourceType
   source_id: string
   source_name: string
-  profile_id?: string
-  profile_name?: string
   engine?: string
   prompt: string
   status: HistoryStatus
@@ -744,9 +768,90 @@ export interface HistoryListResponse {
 export interface HistoryFilter {
   source_type?: HistorySourceType
   source_id?: string
-  profile_id?: string
+  agent_id?: string
   engine?: string
   status?: HistoryStatus
   limit?: number
   offset?: number
+}
+
+// Dashboard Types (态势感知大屏)
+export interface DashboardAgentDetail {
+  id: string
+  name: string
+  adapter: string
+  model: string
+  status: string
+  running: number
+  queued: number
+  completed: number
+  failed: number
+}
+
+export interface DashboardProviderInfo {
+  id: string
+  name: string
+  status: 'online' | 'offline' | 'degraded'
+  is_configured: boolean
+  is_valid: boolean
+  category: string
+  icon?: string
+  icon_color?: string
+}
+
+export interface DashboardRecentTask {
+  id: string
+  agent_id: string
+  agent_name: string
+  adapter: string
+  prompt: string
+  status: TaskStatus
+  duration_seconds: number
+  created_at: string
+}
+
+export interface DashboardStats {
+  agents: {
+    total: number
+    active: number
+    by_adapter: Record<string, number>
+    details: DashboardAgentDetail[]
+  }
+  tasks: {
+    total: number
+    today: number
+    by_status: Record<string, number>
+    avg_duration_seconds: number
+    success_rate: number
+  }
+  sessions: {
+    total: number
+    running: number
+    creating: number
+    stopped: number
+    error: number
+  }
+  tokens: {
+    total_input: number
+    total_output: number
+    total_tokens: number
+  }
+  containers: {
+    total: number
+    running: number
+    stopped: number
+  }
+  providers: DashboardProviderInfo[]
+  system: {
+    uptime: string
+    started_at: string
+  }
+  recent_tasks: DashboardRecentTask[]
+}
+
+// API Response
+export interface ApiResponse<T> {
+  code: number
+  message: string
+  data?: T
 }

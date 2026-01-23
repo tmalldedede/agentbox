@@ -1,12 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Play, Copy, Check, Loader2, Code, Terminal, Upload, X, FileIcon, Radio } from 'lucide-react'
-
-interface Profile {
-  id: string
-  name: string
-  adapter: string
-  is_public: boolean
-}
+import type { Agent } from '@/types'
 
 interface TaskResult {
   id: string
@@ -19,13 +13,17 @@ interface TaskResult {
 
 interface UploadedFile {
   file: File
-  path: string  // 上传后的路径
+  path: string
   uploaded: boolean
 }
 
-export default function ApiPlayground() {
-  const [profiles, setProfiles] = useState<Profile[]>([])
-  const [selectedProfile, setSelectedProfile] = useState('')
+interface ApiPlaygroundProps {
+  preselectedAgentId?: string
+}
+
+export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps) {
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [selectedAgentId, setSelectedAgentId] = useState('')
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TaskResult | null>(null)
@@ -36,33 +34,37 @@ export default function ApiPlayground() {
   const [uploadProgress, setUploadProgress] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // SSE 实时日志
+  // SSE logs
   const [logs, setLogs] = useState<string[]>([])
   const [sseConnected, setSseConnected] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // 获取 public profiles
+  // Fetch agents with public/api_key access
   useEffect(() => {
-    fetch('/api/v1/profiles')
+    fetch('/api/v1/agents')
       .then(res => res.json())
       .then(data => {
-        const publicProfiles = (data.data || []).filter((p: Profile) => p.is_public)
-        setProfiles(publicProfiles)
-        if (publicProfiles.length > 0) {
-          setSelectedProfile(publicProfiles[0].id)
+        const allAgents = (data.data || []) as Agent[]
+        const publicAgents = allAgents.filter((a: Agent) => a.api_access === 'public' || a.api_access === 'api_key')
+        const displayAgents = publicAgents.length > 0 ? publicAgents : allAgents
+        setAgents(displayAgents)
+        if (preselectedAgentId && allAgents.find(a => a.id === preselectedAgentId)) {
+          setSelectedAgentId(preselectedAgentId)
+        } else if (displayAgents.length > 0) {
+          setSelectedAgentId(displayAgents[0].id)
         }
       })
-      .catch(err => console.error('Failed to fetch profiles:', err))
-  }, [])
+      .catch(err => console.error('Failed to fetch agents:', err))
+  }, [preselectedAgentId])
 
-  // 自动滚动到日志底部
+  // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
-  // 清理 SSE 连接
+  // Cleanup SSE
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
@@ -71,9 +73,8 @@ export default function ApiPlayground() {
     }
   }, [])
 
-  // 连接 SSE 日志流
+  // Connect to SSE log stream
   const connectLogStream = (sessionId: string) => {
-    // 关闭之前的连接
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
     }
@@ -84,7 +85,7 @@ export default function ApiPlayground() {
     es.addEventListener('connected', (event) => {
       setSseConnected(true)
       const data = JSON.parse(event.data)
-      setLogs(prev => [...prev, `[SSE] 已连接到 Session: ${data.session_id}`])
+      setLogs(prev => [...prev, `[SSE] Connected to Session: ${data.session_id}`])
     })
 
     es.onmessage = (event) => {
@@ -105,7 +106,6 @@ export default function ApiPlayground() {
     }
   }
 
-  // 断开 SSE 连接
   const disconnectLogStream = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
@@ -118,148 +118,7 @@ export default function ApiPlayground() {
     }
   }
 
-  // SSE 流式执行 (仅限 Codex)
-  const executeViaSSE = async (sessionId: string, prompt: string): Promise<{ success: boolean; text: string; error?: string }> => {
-    return new Promise((resolve) => {
-      abortControllerRef.current = new AbortController()
-
-      let resultText = ''
-
-      fetch(`/api/v1/sessions/${sessionId}/exec/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-        signal: abortControllerRef.current.signal
-      }).then(async (response) => {
-        if (!response.ok) {
-          const err = await response.text()
-          resolve({ success: false, text: '', error: err })
-          return
-        }
-
-        const reader = response.body?.getReader()
-        if (!reader) {
-          resolve({ success: false, text: '', error: 'No response body' })
-          return
-        }
-
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        setSseConnected(true)
-        setLogs(prev => [...prev, `[SSE] 已连接到执行流`])
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-
-          // 解析 SSE 事件
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || '' // 保留不完整的行
-
-          let eventType = ''
-          let eventData = ''
-
-          for (const line of lines) {
-            if (line.startsWith('event: ')) {
-              eventType = line.slice(7).trim()
-            } else if (line.startsWith('data: ')) {
-              eventData = line.slice(6).trim()
-            } else if (line === '' && eventData) {
-              // 事件结束，处理
-              try {
-                const data = JSON.parse(eventData)
-
-                switch (eventType) {
-                  case 'connected':
-                    setLogs(prev => [...prev, `[SSE] Execution ID: ${data.execution_id}`])
-                    break
-                  case 'execution.started':
-                    setLogs(prev => [...prev, `[SSE] 执行开始: ${data.execution_id}`])
-                    break
-                  case 'execution.completed':
-                    // 执行完成，提取最终文本
-                    if (data.text) {
-                      resultText = data.text // 使用最终文本
-                    }
-                    setLogs(prev => [...prev, `[SSE] 执行完成`])
-                    break
-                  case 'execution.cancelled':
-                    setLogs(prev => [...prev, `[SSE] 执行已取消: ${data.error || ''}`])
-                    break
-                  case 'item.completed':
-                    // Codex item.completed 事件，提取 agent_message 文本
-                    if (data.data) {
-                      try {
-                        const itemData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data
-                        const item = itemData.item || itemData
-                        if (item.type === 'agent_message' && item.text) {
-                          resultText = item.text // 更新为最新的 agent_message
-                          setLogs(prev => [...prev, `[Agent] ${item.text.slice(0, 500)}${item.text.length > 500 ? '...' : ''}`])
-                        } else if (item.type === 'function_call') {
-                          setLogs(prev => [...prev, `[Tool] ${item.name || 'function'}: ${JSON.stringify(item.arguments || {}).slice(0, 100)}...`])
-                        } else if (item.type === 'function_call_output') {
-                          setLogs(prev => [...prev, `[Tool Result] ${(item.output || '').slice(0, 100)}...`])
-                        }
-                      } catch {
-                        // 如果 data.text 直接有值
-                        if (data.text) {
-                          resultText = data.text
-                          setLogs(prev => [...prev, `[Agent] ${data.text.slice(0, 500)}${data.text.length > 500 ? '...' : ''}`])
-                        }
-                      }
-                    } else if (data.text) {
-                      resultText = data.text
-                      setLogs(prev => [...prev, `[Agent] ${data.text.slice(0, 500)}${data.text.length > 500 ? '...' : ''}`])
-                    }
-                    break
-                  case 'turn.completed':
-                    setLogs(prev => [...prev, `[SSE] Turn 完成`])
-                    break
-                  case 'turn.failed':
-                  case 'error':
-                    setLogs(prev => [...prev, `[Error] ${data.error || data.message || 'Unknown error'}`])
-                    break
-                  case 'done':
-                    setLogs(prev => [...prev, `[SSE] 流结束`])
-                    break
-                  default:
-                    // 其他事件类型 - 简化日志
-                    if (eventType.startsWith('thread.') || eventType.startsWith('turn.')) {
-                      setLogs(prev => [...prev, `[${eventType}]`])
-                    } else {
-                      setLogs(prev => [...prev, `[${eventType}] ${JSON.stringify(data).slice(0, 150)}`])
-                    }
-                }
-              } catch (e) {
-                // 非 JSON 数据
-                if (eventData.trim()) {
-                  setLogs(prev => [...prev, eventData])
-                }
-              }
-
-              eventType = ''
-              eventData = ''
-            }
-          }
-        }
-
-        setSseConnected(false)
-        resolve({ success: true, text: resultText })
-      }).catch((err) => {
-        setSseConnected(false)
-        if (err.name === 'AbortError') {
-          resolve({ success: false, text: '', error: '执行已取消' })
-        } else {
-          resolve({ success: false, text: '', error: err.message })
-        }
-      })
-    })
-  }
-
-  // 处理文件选择
+  // File handling
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files).map(file => ({
@@ -269,24 +128,21 @@ export default function ApiPlayground() {
       }))
       setFiles(prev => [...prev, ...newFiles])
     }
-    // 清空 input 以允许重复选择同一文件
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
-  // 移除文件
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  // 上传文件到 Session
   const uploadFilesToSession = async (sessionId: string): Promise<string[]> => {
     const uploadedPaths: string[] = []
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      setUploadProgress(`上传文件 (${i + 1}/${files.length}): ${file.file.name}`)
+      setUploadProgress(`Uploading (${i + 1}/${files.length}): ${file.file.name}`)
 
       const formData = new FormData()
       formData.append('file', file.file)
@@ -297,13 +153,12 @@ export default function ApiPlayground() {
       })
 
       if (!res.ok) {
-        throw new Error(`上传文件失败: ${file.file.name}`)
+        throw new Error(`Failed to upload: ${file.file.name}`)
       }
 
       const data = await res.json()
       uploadedPaths.push(data.data?.path || `/${file.file.name}`)
 
-      // 更新文件状态
       setFiles(prev => prev.map((f, idx) =>
         idx === i ? { ...f, path: data.data?.path || `/${file.file.name}`, uploaded: true } : f
       ))
@@ -313,39 +168,34 @@ export default function ApiPlayground() {
     return uploadedPaths
   }
 
-  // 格式化文件大小
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  // 执行任务
+  // Execute task using Agent Run API
   const handleExecute = async () => {
-    if (!selectedProfile || !prompt.trim()) {
-      setError('请选择 Profile 并输入 Prompt')
+    if (!selectedAgentId || !prompt.trim()) {
+      setError('Please select an Agent and enter a prompt')
       return
     }
 
     setLoading(true)
     setError('')
     setResult(null)
-    setActiveTab('logs') // 切换到日志 tab
-    setLogs([`[System] 开始执行任务...`]) // 立即显示日志
+    setActiveTab('logs')
+    setLogs([`[System] Starting execution...`])
 
-    // 获取当前选中的 profile 信息
-    const currentProfile = profiles.find(p => p.id === selectedProfile)
-    const agentType = currentProfile?.adapter || 'codex'
-    const isCodex = agentType === 'codex'
+    const selectedAgent = agents.find(a => a.id === selectedAgentId)
 
     try {
-      // 1. 创建 Session
+      // 1. Create Session
       const sessionRes = await fetch('/api/v1/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          agent: agentType,
-          profile_id: selectedProfile,
+          agent_id: selectedAgentId,
           workspace: `/tmp/playground-${Date.now()}`
         })
       })
@@ -354,146 +204,117 @@ export default function ApiPlayground() {
         throw new Error(sessionData.message)
       }
       const sessionId = sessionData.data.id
-      setLogs(prev => [...prev, `[System] Session 创建成功: ${sessionId} (Agent: ${agentType})`])
+      setLogs(prev => [...prev, `[System] Session created: ${sessionId} (Agent: ${selectedAgent?.name || selectedAgentId})`])
 
-      // 2. 上传文件（如果有）
+      // 2. Upload files if any
       let uploadedPaths: string[] = []
       if (files.length > 0) {
         uploadedPaths = await uploadFilesToSession(sessionId)
-        setLogs(prev => [...prev, `[System] 文件上传完成: ${uploadedPaths.length} 个文件`])
+        setLogs(prev => [...prev, `[System] Files uploaded: ${uploadedPaths.length}`])
       }
 
-      // 3. 构建 prompt，包含文件信息
+      // 3. Build final prompt
       let finalPrompt = prompt
       if (uploadedPaths.length > 0) {
         const fileList = uploadedPaths.map(p => `/workspace${p}`).join('\n')
-        finalPrompt = `已上传以下文件到工作区:\n${fileList}\n\n${prompt}`
+        finalPrompt = `Uploaded files:\n${fileList}\n\n${prompt}`
       }
 
-      // 4. 根据 Agent 类型选择执行方式
-      if (isCodex) {
-        // Codex: 使用 SSE 流式执行
-        setLogs(prev => [...prev, `[System] 使用 SSE 流式执行 (Codex)`])
+      // 4. Connect log stream and create task
+      connectLogStream(sessionId)
 
-        const startTime = Date.now()
-        const sseResult = await executeViaSSE(sessionId, finalPrompt)
+      const taskRes = await fetch('/api/v1/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_id: selectedAgentId,
+          prompt: finalPrompt,
+          input: uploadedPaths.length > 0 ? { files: uploadedPaths } : undefined
+        })
+      })
+      const taskData = await taskRes.json()
+      if (taskData.code !== 0) {
+        throw new Error(taskData.message)
+      }
+      const taskId = taskData.data.id
+      setLogs(prev => [...prev, `[System] Task created: ${taskId}`])
+
+      // 5. Poll for result
+      let attempts = 0
+      const maxAttempts = 300
+      const startTime = Date.now()
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const statusRes = await fetch(`/api/v1/tasks/${taskId}`)
+        const statusData = await statusRes.json()
 
         const elapsed = Math.floor((Date.now() - startTime) / 1000)
         const mins = Math.floor(elapsed / 60)
         const secs = elapsed % 60
-
-        if (sseResult.success) {
-          setResult({
-            id: `sse-${Date.now()}`,
-            status: 'completed',
-            result: { text: sseResult.text || '执行完成 (无文本输出)' }
-          })
-          setLogs(prev => [...prev, `[System] SSE 执行完成 (耗时 ${mins}:${secs.toString().padStart(2, '0')})`])
-        } else {
-          setResult({
-            id: `sse-${Date.now()}`,
-            status: 'failed',
-            result: { text: sseResult.error || '执行失败' }
-          })
-          setError(sseResult.error || '执行失败')
-        }
-        setActiveTab('result')
-      } else {
-        // 其他 Agent: 使用 Task API 轮询
-        setLogs(prev => [...prev, `[System] 使用 Task API 执行 (${agentType})`])
-
-        // 连接 SSE 日志流 (用于实时查看容器日志)
-        connectLogStream(sessionId)
-
-        // 创建 Task
-        const taskRes = await fetch('/api/v1/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            profile_id: selectedProfile,
-            prompt: finalPrompt,
-            input: uploadedPaths.length > 0 ? { files: uploadedPaths } : undefined
-          })
-        })
-        const taskData = await taskRes.json()
-        if (taskData.code !== 0) {
-          throw new Error(taskData.message)
-        }
-        const taskId = taskData.data.id
-        setLogs(prev => [...prev, `[System] Task 创建成功: ${taskId}`])
-
-        // 轮询等待结果
-        let attempts = 0
-        const maxAttempts = 300 // 最多等待 10 分钟 (300 * 2s)
-        const startTime = Date.now()
-        while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          const statusRes = await fetch(`/api/v1/tasks/${taskId}`)
-          const statusData = await statusRes.json()
-
-          // 更新执行时间
-          const elapsed = Math.floor((Date.now() - startTime) / 1000)
-          const mins = Math.floor(elapsed / 60)
-          const secs = elapsed % 60
-          if (attempts % 5 === 0) { // 每 10 秒显示一次
-            setLogs(prev => [...prev, `[System] 执行中... ${mins}:${secs.toString().padStart(2, '0')}`])
-          }
-
-          if (statusData.data.status === 'completed' || statusData.data.status === 'failed') {
-            setResult(statusData.data)
-            setLogs(prev => [...prev, `[System] Task 完成: ${statusData.data.status} (耗时 ${mins}:${secs.toString().padStart(2, '0')})`])
-            setActiveTab('result') // 完成后切换到结果 tab
-            break
-          }
-          attempts++
+        if (attempts % 5 === 0) {
+          setLogs(prev => [...prev, `[System] Running... ${mins}:${secs.toString().padStart(2, '0')}`])
         }
 
-        if (attempts >= maxAttempts) {
-          setError('任务执行超时 (超过 10 分钟)')
-          setLogs(prev => [...prev, `[Error] 任务执行超时，但可能仍在后台运行。Task ID: ${taskId}`])
+        if (statusData.data.status === 'completed' || statusData.data.status === 'failed') {
+          setResult(statusData.data)
+          setLogs(prev => [...prev, `[System] Task ${statusData.data.status} (${mins}:${secs.toString().padStart(2, '0')})`])
+          setActiveTab('result')
+          break
         }
+        attempts++
       }
-    } catch (err: any) {
-      setError(err.message || '执行失败')
-      setLogs(prev => [...prev, `[Error] ${err.message || '执行失败'}`])
+
+      if (attempts >= maxAttempts) {
+        setError('Task timeout (exceeded 10 minutes)')
+        setLogs(prev => [...prev, `[Error] Task timeout. Task ID: ${taskId}`])
+      }
+    } catch (err: unknown) {
+      const error = err as Error
+      setError(error.message || 'Execution failed')
+      setLogs(prev => [...prev, `[Error] ${error.message || 'Execution failed'}`])
     } finally {
       setLoading(false)
       setUploadProgress('')
-      disconnectLogStream() // 断开 SSE 连接
+      disconnectLogStream()
     }
   }
 
-  // 生成 cURL 命令
+  // Generate cURL command
   const generateCurl = () => {
     const baseUrl = window.location.origin
-    return `# 1. 创建 Session
+    return `# 1. Create Session
 curl -X POST ${baseUrl}/api/v1/sessions \\
   -H "Content-Type: application/json" \\
   -d '{
-    "agent": "${profiles.find(p => p.id === selectedProfile)?.adapter || 'codex'}",
-    "profile_id": "${selectedProfile}",
+    "agent_id": "${selectedAgentId}",
     "workspace": "/tmp/my-task"
   }'
 
-# 返回 session_id，如: "abc123"
+# Returns session_id, e.g.: "abc123"
 
-# 2. 创建 Task
+# 2. Create Task
 curl -X POST ${baseUrl}/api/v1/tasks \\
   -H "Content-Type: application/json" \\
   -d '{
-    "session_id": "SESSION_ID",
-    "profile_id": "${selectedProfile}",
+    "agent_id": "${selectedAgentId}",
     "prompt": "${prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"
   }'
 
-# 返回 task_id，如: "task-xyz789"
+# Returns task_id, e.g.: "task-xyz789"
 
-# 3. 查询结果
-curl ${baseUrl}/api/v1/tasks/TASK_ID`
+# 3. Query Result
+curl ${baseUrl}/api/v1/tasks/TASK_ID
+
+# Alternative: Use Agent Run API directly
+curl -X POST ${baseUrl}/api/v1/agents/${selectedAgentId}/run \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "prompt": "${prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n')}",
+    "workspace": "/tmp/my-task"
+  }'`
   }
 
-  // 生成 Python 代码
+  // Generate Python code
   const generatePython = () => {
     const baseUrl = window.location.origin
     return `import requests
@@ -501,26 +322,32 @@ import time
 
 BASE_URL = "${baseUrl}"
 
-def run_agent(prompt: str, profile_id: str = "${selectedProfile}"):
-    """执行 Agent 任务并返回结果"""
+def run_agent(prompt: str, agent_id: str = "${selectedAgentId}"):
+    """Run an Agent task and return result"""
 
-    # 1. 创建 Session
+    # Option 1: Use Agent Run API (simplest)
+    run_resp = requests.post(f"{BASE_URL}/api/v1/agents/{agent_id}/run", json={
+        "prompt": prompt,
+        "workspace": f"/tmp/task-{int(time.time())}"
+    })
+    return run_resp.json()["data"]
+
+    # Option 2: Session + Task (more control)
+    # 1. Create Session
     session_resp = requests.post(f"{BASE_URL}/api/v1/sessions", json={
-        "agent": "${profiles.find(p => p.id === selectedProfile)?.adapter || 'codex'}",
-        "profile_id": profile_id,
+        "agent_id": agent_id,
         "workspace": f"/tmp/task-{int(time.time())}"
     })
     session_id = session_resp.json()["data"]["id"]
 
-    # 2. 创建 Task
+    # 2. Create Task
     task_resp = requests.post(f"{BASE_URL}/api/v1/tasks", json={
-        "session_id": session_id,
-        "profile_id": profile_id,
+        "agent_id": agent_id,
         "prompt": prompt
     })
     task_id = task_resp.json()["data"]["id"]
 
-    # 3. 等待完成
+    # 3. Wait for completion
     while True:
         status_resp = requests.get(f"{BASE_URL}/api/v1/tasks/{task_id}")
         status = status_resp.json()["data"]["status"]
@@ -528,12 +355,11 @@ def run_agent(prompt: str, profile_id: str = "${selectedProfile}"):
             return status_resp.json()["data"]
         time.sleep(2)
 
-# 使用示例
+# Usage
 result = run_agent("""${prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n')}""")
-print(result["result"]["text"])`
+print(result)`
   }
 
-  // 复制到剪贴板
   const copyToClipboard = (type: 'curl' | 'python') => {
     const text = type === 'curl' ? generateCurl() : generatePython()
     navigator.clipboard.writeText(text)
@@ -541,7 +367,6 @@ print(result["result"]["text"])`
     setTimeout(() => setCopied(null), 2000)
   }
 
-  // 清理结果文本中的控制字符
   const cleanOutput = (text: string) => {
     return text.replace(/[\x00-\x1F\x7F]/g, '').trim()
   }
@@ -551,38 +376,38 @@ print(result["result"]["text"])`
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Playground</h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          在线测试 AgentBox API，快速体验 AI Agent 能力
+          Test the AgentBox API online
         </p>
       </div>
 
-      {/* 配置区域 */}
+      {/* Configuration */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="space-y-4">
-          {/* Profile 选择 */}
+          {/* Agent Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              选择 Profile
+              Select Agent
             </label>
             <select
-              value={selectedProfile}
-              onChange={(e) => setSelectedProfile(e.target.value)}
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
                        bg-white dark:bg-gray-700 text-gray-900 dark:text-white
                        focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              {profiles.length === 0 ? (
-                <option value="">无可用 Profile (需设置 is_public=true)</option>
+              {agents.length === 0 ? (
+                <option value="">No agents available</option>
               ) : (
-                profiles.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.adapter})
+                agents.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.adapter})
                   </option>
                 ))
               )}
             </select>
           </div>
 
-          {/* Prompt 输入 */}
+          {/* Prompt */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Prompt
@@ -590,7 +415,7 @@ print(result["result"]["text"])`
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="输入你想让 AI Agent 执行的任务..."
+              placeholder="Enter the task for the AI Agent..."
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
                        bg-white dark:bg-gray-700 text-gray-900 dark:text-white
@@ -599,13 +424,12 @@ print(result["result"]["text"])`
             />
           </div>
 
-          {/* 文件上传 */}
+          {/* File Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              上传文件 <span className="text-gray-400 font-normal">(可选)</span>
+              Upload Files <span className="text-gray-400 font-normal">(Optional)</span>
             </label>
 
-            {/* 文件列表 */}
             {files.length > 0 && (
               <div className="mb-3 space-y-2">
                 {files.map((file, index) => (
@@ -637,7 +461,6 @@ print(result["result"]["text"])`
               </div>
             )}
 
-            {/* 上传按钮 */}
             <div className="flex items-center gap-3">
               <input
                 ref={fileInputRef}
@@ -656,33 +479,28 @@ print(result["result"]["text"])`
                          transition-colors text-sm"
               >
                 <Upload className="w-4 h-4" />
-                选择文件
+                Select Files
               </button>
               {files.length > 0 && (
                 <span className="text-sm text-gray-500">
-                  已选择 {files.length} 个文件
+                  {files.length} file(s) selected
                 </span>
               )}
             </div>
 
-            {/* 上传进度 */}
             {uploadProgress && (
               <div className="mt-2 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 {uploadProgress}
               </div>
             )}
-
-            <p className="mt-2 text-xs text-gray-400">
-              文件将上传到 Session 工作区，可在 Prompt 中引用 /workspace/文件名
-            </p>
           </div>
 
-          {/* 执行按钮 */}
+          {/* Execute Button */}
           <div className="flex items-center gap-4">
             <button
               onClick={handleExecute}
-              disabled={loading || !selectedProfile || !prompt.trim()}
+              disabled={loading || !selectedAgentId || !prompt.trim()}
               className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg
                        hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed
                        transition-colors font-medium"
@@ -690,24 +508,23 @@ print(result["result"]["text"])`
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  执行中...
+                  Running...
                 </>
               ) : (
                 <>
                   <Play className="w-4 h-4" />
-                  执行
+                  Execute
                 </>
               )}
             </button>
 
             {loading && (
               <span className="text-sm text-gray-500">
-                任务执行中，请稍候...
+                Task running, please wait...
               </span>
             )}
           </div>
 
-          {/* 错误提示 */}
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg">
               {error}
@@ -716,10 +533,10 @@ print(result["result"]["text"])`
         </div>
       </div>
 
-      {/* 结果区域 */}
+      {/* Results */}
       {(result || prompt) && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-          {/* Tab 切换 */}
+          {/* Tabs */}
           <div className="flex border-b border-gray-200 dark:border-gray-700">
             <button
               onClick={() => setActiveTab('result')}
@@ -729,7 +546,7 @@ print(result["result"]["text"])`
                   : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               <Terminal className="w-4 h-4 inline mr-2" />
-              执行结果
+              Result
             </button>
             <button
               onClick={() => setActiveTab('logs')}
@@ -739,7 +556,7 @@ print(result["result"]["text"])`
                   : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               <Radio className="w-4 h-4 inline mr-2" />
-              实时日志
+              Live Logs
               {sseConnected && (
                 <span className="absolute top-2 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               )}
@@ -766,7 +583,7 @@ print(result["result"]["text"])`
             </button>
           </div>
 
-          {/* Tab 内容 */}
+          {/* Tab Content */}
           <div className="p-4">
             {activeTab === 'result' && (
               <div>
@@ -783,17 +600,17 @@ print(result["result"]["text"])`
                       <span className="text-sm text-gray-500">Task ID: {result.id}</span>
                     </div>
                     <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-                      {result.result?.text ? cleanOutput(result.result.text) : '无输出'}
+                      {result.result?.text ? cleanOutput(result.result.text) : 'No output'}
                     </pre>
                   </div>
                 ) : loading ? (
                   <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                     <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
-                    <p>任务执行中，请查看「实时日志」了解进度...</p>
+                    <p>Task running, check Live Logs for progress...</p>
                   </div>
                 ) : (
                   <div className="text-gray-500 text-center py-8">
-                    点击「执行」按钮运行任务
+                    Click Execute to run the task
                   </div>
                 )}
               </div>
@@ -805,15 +622,15 @@ print(result["result"]["text"])`
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
                     <span className="text-sm text-gray-500">
-                      {sseConnected ? 'SSE 已连接' : 'SSE 未连接'}
+                      {sseConnected ? 'SSE Connected' : 'SSE Disconnected'}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400">{logs.length} 条日志</span>
+                  <span className="text-xs text-gray-400">{logs.length} entries</span>
                 </div>
                 <div className="h-80 overflow-y-auto bg-gray-900 rounded-lg p-4 font-mono text-sm">
                   {logs.length === 0 ? (
                     <div className="text-gray-500 text-center py-8">
-                      执行任务后将显示实时日志
+                      Logs will appear here after execution
                     </div>
                   ) : (
                     logs.map((log, index) => (
@@ -868,13 +685,14 @@ print(result["result"]["text"])`
         </div>
       )}
 
-      {/* API 说明 */}
+      {/* API Documentation */}
       <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <h3 className="font-medium text-blue-900 dark:text-blue-300 mb-2">API 调用流程</h3>
+        <h3 className="font-medium text-blue-900 dark:text-blue-300 mb-2">API Usage</h3>
         <ol className="list-decimal list-inside text-sm text-blue-800 dark:text-blue-400 space-y-1">
-          <li><code>POST /api/v1/sessions</code> - 创建会话（启动容器）</li>
-          <li><code>POST /api/v1/tasks</code> - 创建任务</li>
-          <li><code>GET /api/v1/tasks/:id</code> - 查询结果（轮询直到完成）</li>
+          <li><code>POST /api/v1/agents/:id/run</code> - Run agent directly (simplest)</li>
+          <li><code>POST /api/v1/sessions</code> - Create session (for interactive use)</li>
+          <li><code>POST /api/v1/tasks</code> - Create async task</li>
+          <li><code>GET /api/v1/tasks/:id</code> - Query task result</li>
         </ol>
       </div>
     </div>

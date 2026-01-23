@@ -345,8 +345,8 @@ export default function HistoryList() {
                         {entry.engine && (
                           <Badge variant="outline">Engine: {entry.engine}</Badge>
                         )}
-                        {entry.profile_name && (
-                          <Badge variant="outline">Profile: {entry.profile_name}</Badge>
+                        {entry.source_name && (
+                          <Badge variant="outline">Agent: {entry.source_name}</Badge>
                         )}
                         <Badge variant="outline">Source: {entry.source_type}</Badge>
                         <Badge variant="outline">ID: {entry.id.slice(0, 8)}...</Badge>

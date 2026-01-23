@@ -6,7 +6,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
-// import { AppTitle } from './app-title'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
@@ -29,6 +29,9 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter>
+        <div className='flex items-center justify-end px-2'>
+          <ThemeSwitch />
+        </div>
         <NavUser user={sidebarData.user} />
       </SidebarFooter>
       <SidebarRail />

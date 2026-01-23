@@ -18,29 +18,40 @@ import {
   MemoryStick,
   Gauge,
   Zap,
+  Recycle,
+  Play,
 } from 'lucide-react'
-import type { SystemHealth, SystemStats } from '@/types'
+import type { SystemHealth, SystemStats, GCStats, GCCandidate } from '@/types'
 import { api } from '@/services/api'
 
 export default function SystemMaintenance() {
   const navigate = useNavigate()
   const [health, setHealth] = useState<SystemHealth | null>(null)
   const [stats, setStats] = useState<SystemStats | null>(null)
+  const [gcStats, setGCStats] = useState<GCStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cleaningContainers, setCleaningContainers] = useState(false)
   const [cleaningImages, setCleaningImages] = useState(false)
+  const [triggeringGC, setTriggeringGC] = useState(false)
+  const [previewingGC, setPreviewingGC] = useState(false)
+  const [gcCandidates, setGCCandidates] = useState<GCCandidate[] | null>(null)
+  const [editingGCConfig, setEditingGCConfig] = useState(false)
+  const [gcConfigForm, setGCConfigForm] = useState({ interval: 60, ttl: 7200, idle: 600 })
+  const [savingGCConfig, setSavingGCConfig] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<string | null>(null)
 
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [healthData, statsData] = await Promise.all([
+      const [healthData, statsData, gcData] = await Promise.all([
         api.getSystemHealth(),
         api.getSystemStats(),
+        api.getGCStats(),
       ])
       setHealth(healthData)
       setStats(statsData)
+      setGCStats(gcData)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch system data')
@@ -90,6 +101,71 @@ export default function SystemMaintenance() {
     } finally {
       setCleaningImages(false)
     }
+  }
+
+  const handleTriggerGC = async () => {
+    try {
+      setTriggeringGC(true)
+      setCleanupResult(null)
+      const result = await api.triggerGC()
+      if (result.removed > 0) {
+        setCleanupResult(`GC completed: removed ${result.removed} container(s)`)
+      } else {
+        setCleanupResult('GC completed: no containers to remove')
+      }
+      fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to trigger GC')
+    } finally {
+      setTriggeringGC(false)
+    }
+  }
+
+  const handlePreviewGC = async () => {
+    try {
+      setPreviewingGC(true)
+      const candidates = await api.previewGC()
+      setGCCandidates(candidates)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to preview GC')
+    } finally {
+      setPreviewingGC(false)
+    }
+  }
+
+  const handleEditGCConfig = () => {
+    if (gcStats) {
+      setGCConfigForm({
+        interval: gcStats.config.interval_seconds,
+        ttl: gcStats.config.container_ttl_seconds,
+        idle: gcStats.config.idle_timeout_seconds,
+      })
+    }
+    setEditingGCConfig(true)
+  }
+
+  const handleSaveGCConfig = async () => {
+    try {
+      setSavingGCConfig(true)
+      await api.updateGCConfig({
+        interval_seconds: gcConfigForm.interval,
+        container_ttl_seconds: gcConfigForm.ttl,
+        idle_timeout_seconds: gcConfigForm.idle,
+      })
+      setEditingGCConfig(false)
+      setCleanupResult('GC configuration updated')
+      fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update GC config')
+    } finally {
+      setSavingGCConfig(false)
+    }
+  }
+
+  const formatDuration = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
   }
 
   const formatSize = (bytes: number) => {
@@ -390,6 +466,202 @@ export default function SystemMaintenance() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* GC Status */}
+        {gcStats && (
+          <div className="card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
+                <Recycle className="w-5 h-5 text-cyan-400" />
+                Container GC
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                  gcStats.running
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-gray-500/20 text-gray-400'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${gcStats.running ? 'bg-emerald-400 animate-pulse' : 'bg-gray-400'}`} />
+                  {gcStats.running ? 'Running' : 'Stopped'}
+                </span>
+                <button
+                  onClick={handlePreviewGC}
+                  disabled={previewingGC}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {previewingGC ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5" />
+                  )}
+                  Preview
+                </button>
+                <button
+                  onClick={handleTriggerGC}
+                  disabled={triggeringGC}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {triggeringGC ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  Trigger GC
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* GC Stats */}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Runs</span>
+                  <span className="text-foreground/80">{gcStats.total_runs}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Containers Removed</span>
+                  <span className="text-foreground/80">{gcStats.containers_removed}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Last Run</span>
+                  <span className="text-foreground/80">
+                    {gcStats.last_run_at && gcStats.last_run_at !== '0001-01-01T00:00:00Z'
+                      ? new Date(gcStats.last_run_at).toLocaleTimeString()
+                      : 'Never'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Next Run</span>
+                  <span className="text-foreground/80">
+                    {gcStats.next_run_at && gcStats.next_run_at !== '0001-01-01T00:00:00Z'
+                      ? new Date(gcStats.next_run_at).toLocaleTimeString()
+                      : '-'}
+                  </span>
+                </div>
+              </div>
+
+              {/* GC Config */}
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Configuration</p>
+                  {!editingGCConfig && (
+                    <button onClick={handleEditGCConfig} className="text-xs text-cyan-400 hover:text-cyan-300">
+                      Edit
+                    </button>
+                  )}
+                </div>
+                {editingGCConfig ? (
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Interval (sec)</label>
+                      <input
+                        type="number"
+                        min={10}
+                        value={gcConfigForm.interval}
+                        onChange={e => setGCConfigForm(f => ({ ...f, interval: parseInt(e.target.value) || 10 }))}
+                        className="w-full px-2 py-1 text-xs rounded bg-background border border-default text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">TTL (sec)</label>
+                      <input
+                        type="number"
+                        min={60}
+                        value={gcConfigForm.ttl}
+                        onChange={e => setGCConfigForm(f => ({ ...f, ttl: parseInt(e.target.value) || 60 }))}
+                        className="w-full px-2 py-1 text-xs rounded bg-background border border-default text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Idle Timeout (sec)</label>
+                      <input
+                        type="number"
+                        min={30}
+                        value={gcConfigForm.idle}
+                        onChange={e => setGCConfigForm(f => ({ ...f, idle: parseInt(e.target.value) || 30 }))}
+                        className="w-full px-2 py-1 text-xs rounded bg-background border border-default text-foreground"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={handleSaveGCConfig} disabled={savingGCConfig} className="btn btn-primary btn-sm text-xs">
+                        {savingGCConfig ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                      </button>
+                      <button onClick={() => setEditingGCConfig(false)} className="btn btn-secondary btn-sm text-xs">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Scan Interval</span>
+                      <span className="text-foreground/80">{formatDuration(gcStats.config.interval_seconds)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Container TTL</span>
+                      <span className="text-foreground/80">{formatDuration(gcStats.config.container_ttl_seconds)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Idle Timeout</span>
+                      <span className="text-foreground/80">{formatDuration(gcStats.config.idle_timeout_seconds)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* GC Errors */}
+              <div className="space-y-2 text-sm">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Recent Errors</p>
+                {gcStats.errors.length === 0 ? (
+                  <p className="text-emerald-400 text-xs">No errors</p>
+                ) : (
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {gcStats.errors.slice(-5).map((err, i) => (
+                      <p key={i} className="text-xs text-red-400 truncate" title={err}>{err}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* GC Preview Results */}
+            {gcCandidates !== null && (
+              <div className="mt-4 pt-4 border-t border-default">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-foreground">
+                    GC Preview — {gcCandidates.length} container(s) to remove
+                  </p>
+                  <button onClick={() => setGCCandidates(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                    Dismiss
+                  </button>
+                </div>
+                {gcCandidates.length === 0 ? (
+                  <p className="text-sm text-emerald-400">No containers eligible for removal</p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {gcCandidates.map((c) => (
+                      <div key={c.container_id} className="flex items-center justify-between p-2 rounded bg-background/50 border border-default text-xs">
+                        <div className="flex items-center gap-3">
+                          <Box className="w-3.5 h-3.5 text-muted-foreground" />
+                          <div>
+                            <span className="text-foreground font-mono">{c.container_id.slice(0, 12)}</span>
+                            {c.name && <span className="text-muted-foreground ml-2">{c.name}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-1.5 py-0.5 rounded text-xs ${
+                            c.status === 'running' ? 'bg-emerald-500/20 text-emerald-400' :
+                            c.status === 'exited' ? 'bg-gray-500/20 text-gray-400' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>{c.status}</span>
+                          <span className="text-amber-400">{c.reason}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

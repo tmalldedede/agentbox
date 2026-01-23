@@ -5,7 +5,7 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import ApiPlayground from './components/ApiPlayground'
 
-export function APIPlayground() {
+export function APIPlayground({ preselectedAgentId }: { preselectedAgentId?: string }) {
   return (
     <>
       <Header>
@@ -16,7 +16,7 @@ export function APIPlayground() {
         </div>
       </Header>
       <Main>
-        <ApiPlayground />
+        <ApiPlayground preselectedAgentId={preselectedAgentId} />
       </Main>
     </>
   )

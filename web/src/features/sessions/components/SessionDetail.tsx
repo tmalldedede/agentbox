@@ -15,7 +15,6 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
-  Layers,
   Box,
   HardDrive,
   MemoryStick,
@@ -24,7 +23,6 @@ import type { ExecResponse } from '@/types'
 import { useLanguage } from '@/contexts/LanguageContext'
 import {
   useSession,
-  useProfile,
   useStartSession,
   useStopSession,
   useDeleteSession,
@@ -54,8 +52,6 @@ export default function SessionDetail() {
     error: sessionError,
     refetch: refetchSession,
   } = useSession(sessionId)
-
-  const { data: profile } = useProfile(session?.profile_id)
 
   // Mutations
   const startSession = useStartSession()
@@ -259,28 +255,17 @@ export default function SessionDetail() {
           </h3>
 
           <div className="space-y-4">
-            {/* Profile */}
-            {profile && (
-              <div
-                className="card p-4 cursor-pointer hover:border-emerald-500/50 transition-colors"
-                onClick={() => navigate({ to: `/profiles/${profile.id}` })}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <Layers className="w-5 h-5 text-emerald-400" />
-                  <span className="font-medium">Profile</span>
-                </div>
-                <p className="text-muted-foreground">{profile.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">{profile.adapter}</p>
-              </div>
-            )}
-
             {/* Agent */}
-            <div className="card p-4">
+            <div
+              className="card p-4 cursor-pointer hover:border-emerald-500/50 transition-colors"
+              onClick={() => session.agent_id && navigate({ to: `/agents/${session.agent_id}` })}
+            >
               <div className="flex items-center gap-3 mb-3">
                 <Cpu className="w-5 h-5 text-purple-400" />
                 <span className="font-medium">Agent</span>
               </div>
-              <p className="text-muted-foreground">{session.agent}</p>
+              <p className="text-muted-foreground">{session.agent_id || session.agent}</p>
+              <p className="text-xs text-muted-foreground mt-1">{session.agent}</p>
             </div>
 
             {/* Workspace */}

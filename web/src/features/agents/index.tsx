@@ -23,7 +23,7 @@ export function Agents() {
   )
 }
 
-export function AgentDetail() {
+export function AgentDetail({ agentId }: { agentId: string }) {
   return (
     <>
       <Header>
@@ -34,7 +34,7 @@ export function AgentDetail() {
         </div>
       </Header>
       <Main>
-        <AgentDetailComponent />
+        <AgentDetailComponent agentId={agentId} />
       </Main>
     </>
   )

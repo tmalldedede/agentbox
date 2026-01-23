@@ -9,20 +9,24 @@ import {
   UserX,
   Server,
   Zap,
-  KeyRound,
   Image,
   Webhook,
-  Layers,
   Construction,
   Command,
   History,
   Bot,
   Store,
-  FlaskConical,
   Settings,
   UserCog,
   Wrench,
   Bell,
+  Box,
+  Cloud,
+  TerminalSquare,
+  FileCode2,
+  ListTodo,
+  File,
+  Activity,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -44,9 +48,39 @@ export const sidebarData: SidebarData = {
       title: 'Main',
       items: [
         {
+          title: 'Command Center',
+          url: '/command-center',
+          icon: Activity,
+        },
+        {
+          title: 'Tasks',
+          url: '/tasks',
+          icon: ListTodo,
+        },
+        {
           title: 'Agents',
           url: '/agents',
           icon: Bot,
+        },
+        {
+          title: 'Files',
+          url: '/files',
+          icon: File,
+        },
+        {
+          title: 'API Docs',
+          url: '/api-docs',
+          icon: FileCode2,
+        },
+      ],
+    },
+    {
+      title: 'Admin',
+      items: [
+        {
+          title: 'Sessions',
+          url: '/sessions',
+          icon: TerminalSquare,
         },
         {
           title: 'History',
@@ -54,20 +88,15 @@ export const sidebarData: SidebarData = {
           icon: History,
         },
         {
-          title: 'API Playground',
-          url: '/api-playground',
-          icon: FlaskConical,
+          title: 'Providers',
+          url: '/providers',
+          icon: Cloud,
         },
         {
-          title: 'Profiles',
-          url: '/profiles',
-          icon: Layers,
+          title: 'Runtimes',
+          url: '/runtimes',
+          icon: Box,
         },
-      ],
-    },
-    {
-      title: 'Resources',
-      items: [
         {
           title: 'MCP Servers',
           url: '/mcp-servers',
@@ -79,20 +108,10 @@ export const sidebarData: SidebarData = {
           icon: Zap,
         },
         {
-          title: 'Credentials',
-          url: '/credentials',
-          icon: KeyRound,
-        },
-        {
           title: 'Skill Store',
           url: '/skill-store',
           icon: Store,
         },
-      ],
-    },
-    {
-      title: 'Settings',
-      items: [
         {
           title: 'Images',
           url: '/images',
@@ -107,11 +126,6 @@ export const sidebarData: SidebarData = {
           title: 'System',
           url: '/system',
           icon: Monitor,
-        },
-        {
-          title: 'Appearance',
-          url: '/settings/appearance',
-          icon: Palette,
         },
       ],
     },

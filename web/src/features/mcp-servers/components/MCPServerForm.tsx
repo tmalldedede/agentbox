@@ -1,17 +1,34 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Save, Server, Plus, X, Loader2, Box } from 'lucide-react'
+import { ArrowLeft, Save, Plus, X, Loader2, Box } from 'lucide-react'
 import type { MCPServerType, MCPCategory, CreateMCPServerRequest } from '@/types'
 import { api } from '@/services/api'
 import { toast } from 'sonner'
-import { useLanguage } from '@/contexts/LanguageContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 
 const categories: MCPCategory[] = ['filesystem', 'database', 'api', 'tool', 'browser', 'memory', 'other']
 const serverTypes: MCPServerType[] = ['stdio', 'sse', 'http']
 
 export default function MCPServerForm() {
   const navigate = useNavigate()
-  const { t } = useLanguage()
   const [saving, setSaving] = useState(false)
 
   const [formData, setFormData] = useState<CreateMCPServerRequest>({
@@ -120,325 +137,267 @@ export default function MCPServerForm() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="app-header">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate({ to: '/mcp-servers' })} className="btn btn-ghost btn-icon">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-3">
-            <Server className="w-6 h-6 text-emerald-400" />
-            <span className="text-lg font-bold">Create New MCP Server</span>
-          </div>
+    <form onSubmit={handleSubmit} className='space-y-6'>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <div className='flex items-center gap-3'>
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            onClick={() => navigate({ to: '/mcp-servers' })}
+          >
+            <ArrowLeft className='h-5 w-5' />
+          </Button>
+          <h2 className='text-2xl font-bold tracking-tight'>Create MCP Server</h2>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate({ to: '/mcp-servers' })} className="btn btn-ghost">
+        <div className='flex items-center gap-2'>
+          <Button type='button' variant='outline' size='sm' onClick={() => navigate({ to: '/mcp-servers' })}>
             Cancel
-          </button>
-          <button onClick={handleSubmit} className="btn btn-primary" disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          </Button>
+          <Button type='submit' size='sm' disabled={saving}>
+            {saving ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Save className='mr-2 h-4 w-4' />}
             Create Server
-          </button>
+          </Button>
         </div>
-      </header>
+      </div>
 
-      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-6 space-y-6">
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Basic Information</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">
-                Server ID * <span className="text-muted font-normal">(lowercase, alphanumeric, hyphens)</span>
-              </label>
-              <input
-                type="text"
-                value={formData.id}
-                onChange={e => updateField('id', e.target.value.toLowerCase())}
-                className="input font-mono"
-                placeholder="my-mcp-server"
-                required
-              />
-              <p className="text-xs text-muted mt-1">
-                Unique identifier for this MCP server. Cannot be changed later.
-              </p>
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Basic Information</CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='space-y-2'>
+            <Label>Server ID *</Label>
+            <Input
+              value={formData.id}
+              onChange={e => updateField('id', e.target.value.toLowerCase())}
+              placeholder='my-mcp-server'
+              className='font-mono'
+              required
+            />
+            <p className='text-xs text-muted-foreground'>
+              Lowercase alphanumeric with hyphens. Cannot be changed later.
+            </p>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">{t('name')} *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={e => updateField('name', e.target.value)}
-                className="input"
-                placeholder={t('enterName')}
-                required
-              />
-            </div>
+          <div className='space-y-2'>
+            <Label>Name *</Label>
+            <Input
+              value={formData.name}
+              onChange={e => updateField('name', e.target.value)}
+              placeholder='My MCP Server'
+              required
+            />
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">{t('description')}</label>
-              <textarea
-                value={formData.description || ''}
-                onChange={e => updateField('description', e.target.value)}
-                className="input min-h-[80px]"
-                placeholder={t('enterDescription')}
-              />
-            </div>
+          <div className='space-y-2'>
+            <Label>Description</Label>
+            <Textarea
+              value={formData.description || ''}
+              onChange={e => updateField('description', e.target.value)}
+              placeholder='What does this MCP server do?'
+              rows={3}
+            />
+          </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-secondary mb-2">Type *</label>
-                <select
-                  value={formData.type || 'stdio'}
-                  onChange={e => updateField('type', e.target.value as MCPServerType)}
-                  className="input"
-                  required
-                >
+          <div className='grid grid-cols-2 gap-4'>
+            <div className='space-y-2'>
+              <Label>Type *</Label>
+              <Select value={formData.type || 'stdio'} onValueChange={v => updateField('type', v as MCPServerType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   {serverTypes.map(type => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
                   ))}
-                </select>
-                <p className="text-xs text-muted mt-1">
-                  stdio: Standard input/output • sse: Server-Sent Events • http: HTTP API
-                </p>
-              </div>
+                </SelectContent>
+              </Select>
+              <p className='text-xs text-muted-foreground'>
+                stdio / sse / http
+              </p>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-secondary mb-2">Category *</label>
-                <select
-                  value={formData.category || 'other'}
-                  onChange={e => updateField('category', e.target.value as MCPCategory)}
-                  className="input"
-                  required
-                >
+            <div className='space-y-2'>
+              <Label>Category *</Label>
+              <Select value={formData.category || 'other'} onValueChange={v => updateField('category', v as MCPCategory)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   {categories.map(cat => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
+                    <SelectItem key={cat} value={cat} className='capitalize'>{cat}</SelectItem>
                   ))}
-                </select>
-              </div>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Command & Arguments</h3>
-          <p className="text-sm text-muted mb-4">
-            Configure how to run this MCP server. The command will be executed in the agent's container.
-          </p>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Command *</label>
-              <input
-                type="text"
-                value={formData.command}
-                onChange={e => updateField('command', e.target.value)}
-                className="input font-mono"
-                placeholder="npx -y @modelcontextprotocol/server-filesystem"
-                required
-              />
-              <p className="text-xs text-muted mt-1">
-                Example: <code className="text-emerald-400">npx -y @modelcontextprotocol/server-filesystem</code>
-              </p>
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Command & Arguments</CardTitle>
+          <CardDescription>
+            Configure how to run this MCP server.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='space-y-2'>
+            <Label>Command *</Label>
+            <Input
+              value={formData.command}
+              onChange={e => updateField('command', e.target.value)}
+              placeholder='npx -y @modelcontextprotocol/server-filesystem'
+              className='font-mono'
+              required
+            />
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Arguments</label>
-              <p className="text-xs text-muted mb-2">
-                Add command-line arguments. Each argument will be passed to the command separately.
-              </p>
-              <div className="space-y-2">
-                {(formData.args || []).map((arg, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={arg}
-                      disabled
-                      className="input flex-1 font-mono text-sm bg-secondary"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeArg(index)}
-                      className="btn btn-ghost btn-icon text-red-400"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newArg}
-                    onChange={e => setNewArg(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        addArg()
-                      }
-                    }}
-                    className="input flex-1 font-mono text-sm"
-                    placeholder={t('addArgument')}
-                  />
-                  <button type="button" onClick={addArg} className="btn btn-secondary">
-                    <Plus className="w-4 h-4" />
-                    Add
-                  </button>
+          <div className='space-y-2'>
+            <Label>Arguments</Label>
+            <div className='space-y-2'>
+              {(formData.args || []).map((arg, index) => (
+                <div key={index} className='flex gap-2'>
+                  <Input value={arg} disabled className='flex-1 font-mono text-sm' />
+                  <Button type='button' variant='ghost' size='icon' onClick={() => removeArg(index)}>
+                    <X className='h-4 w-4 text-destructive' />
+                  </Button>
                 </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Working Directory</label>
-              <input
-                type="text"
-                value={formData.work_dir || ''}
-                onChange={e => updateField('work_dir', e.target.value)}
-                className="input font-mono"
-                placeholder="/path/to/workdir"
-              />
-              <p className="text-xs text-muted mt-1">Optional: Directory to run the command from</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Environment Variables</h3>
-          <p className="text-sm text-muted mb-4">
-            Set environment variables that will be available to the MCP server process.
-          </p>
-          <div className="space-y-3">
-            {Object.entries(formData.env || {}).map(([key, value]) => (
-              <div key={key} className="flex gap-2 items-start">
-                <input
-                  type="text"
-                  value={key}
-                  disabled
-                  className="input flex-1 font-mono text-sm bg-secondary"
-                  placeholder="KEY"
-                />
-                <input
-                  type="text"
-                  value={value}
-                  disabled
-                  className="input flex-1 font-mono text-sm bg-secondary"
-                  placeholder="value"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeEnv(key)}
-                  className="btn btn-ghost btn-icon text-red-400"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newEnvKey}
-                onChange={e => setNewEnvKey(e.target.value)}
-                className="input flex-1 font-mono text-sm"
-                placeholder="VARIABLE_NAME"
-              />
-              <input
-                type="text"
-                value={newEnvValue}
-                onChange={e => setNewEnvValue(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addEnv()
-                  }
-                }}
-                className="input flex-1 font-mono text-sm"
-                placeholder="value"
-              />
-              <button type="button" onClick={addEnv} className="btn btn-secondary">
-                <Plus className="w-4 h-4" />
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Tags</h3>
-          <p className="text-sm text-muted mb-4">Add tags to help organize and search for this MCP server.</p>
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {(formData.tags || []).map(tag => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-secondary text-secondary"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="text-red-400 hover:text-red-300"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
               ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newTag}
-                onChange={e => setNewTag(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addTag()
-                  }
-                }}
-                className="input flex-1"
-                placeholder={t('addTag')}
-              />
-              <button type="button" onClick={addTag} className="btn btn-secondary">
-                <Plus className="w-4 h-4" />
-                Add
-              </button>
+              <div className='flex gap-2'>
+                <Input
+                  value={newArg}
+                  onChange={e => setNewArg(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addArg() } }}
+                  placeholder='Add argument...'
+                  className='flex-1 font-mono text-sm'
+                />
+                <Button type='button' variant='secondary' size='sm' onClick={addArg}>
+                  <Plus className='mr-1 h-4 w-4' />
+                  Add
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="card p-6 bg-blue-500/5 border-blue-500/20">
-          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-            <Box className="w-5 h-5 text-blue-400" />
-            Common Examples
-          </h3>
-          <p className="text-sm text-muted mb-4">
-            Here are some common MCP server configurations you can use as reference:
-          </p>
-          <div className="space-y-3 text-sm">
-            <div className="p-3 rounded-lg bg-secondary">
-              <p className="font-medium text-primary mb-1">Filesystem Server</p>
-              <code className="text-xs text-emerald-400">
-                npx -y @modelcontextprotocol/server-filesystem /workspace
-              </code>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary">
-              <p className="font-medium text-primary mb-1">GitHub Server</p>
-              <code className="text-xs text-emerald-400">
-                npx -y @modelcontextprotocol/server-github
-              </code>
-              <p className="text-xs text-muted mt-1">Requires: GITHUB_PERSONAL_ACCESS_TOKEN env var</p>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary">
-              <p className="font-medium text-primary mb-1">Web Browser Server</p>
-              <code className="text-xs text-emerald-400">
-                npx -y @modelcontextprotocol/server-puppeteer
-              </code>
-            </div>
+          <div className='space-y-2'>
+            <Label>Working Directory</Label>
+            <Input
+              value={formData.work_dir || ''}
+              onChange={e => updateField('work_dir', e.target.value)}
+              placeholder='/path/to/workdir'
+              className='font-mono'
+            />
           </div>
-        </div>
-      </form>
-    </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Environment Variables</CardTitle>
+          <CardDescription>
+            Variables available to the MCP server process.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-3'>
+          {Object.entries(formData.env || {}).map(([key, value]) => (
+            <div key={key} className='flex gap-2 items-center'>
+              <Input value={key} disabled className='flex-1 font-mono text-sm' />
+              <Input value={value} disabled className='flex-1 font-mono text-sm' />
+              <Button type='button' variant='ghost' size='icon' onClick={() => removeEnv(key)}>
+                <X className='h-4 w-4 text-destructive' />
+              </Button>
+            </div>
+          ))}
+          <div className='flex gap-2'>
+            <Input
+              value={newEnvKey}
+              onChange={e => setNewEnvKey(e.target.value)}
+              placeholder='VARIABLE_NAME'
+              className='flex-1 font-mono text-sm'
+            />
+            <Input
+              value={newEnvValue}
+              onChange={e => setNewEnvValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEnv() } }}
+              placeholder='value'
+              className='flex-1 font-mono text-sm'
+            />
+            <Button type='button' variant='secondary' size='sm' onClick={addEnv}>
+              <Plus className='mr-1 h-4 w-4' />
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tags</CardTitle>
+          <CardDescription>
+            Organize and search for this MCP server.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-3'>
+          <div className='flex flex-wrap gap-2'>
+            {(formData.tags || []).map(tag => (
+              <Badge key={tag} variant='secondary' className='gap-1'>
+                {tag}
+                <button type='button' onClick={() => removeTag(tag)} className='ml-1 hover:text-destructive'>
+                  <X className='h-3 w-3' />
+                </button>
+              </Badge>
+            ))}
+          </div>
+          <div className='flex gap-2'>
+            <Input
+              value={newTag}
+              onChange={e => setNewTag(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+              placeholder='Add tag...'
+              className='flex-1'
+            />
+            <Button type='button' variant='secondary' size='sm' onClick={addTag}>
+              <Plus className='mr-1 h-4 w-4' />
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className='border-blue-500/20 bg-blue-500/5'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <Box className='h-5 w-5 text-blue-500' />
+            Common Examples
+          </CardTitle>
+          <CardDescription>
+            Reference configurations for common MCP servers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-3 text-sm'>
+          <div className='rounded-lg border p-3'>
+            <p className='font-medium mb-1'>Filesystem Server</p>
+            <code className='text-xs text-emerald-600 dark:text-emerald-400'>
+              npx -y @modelcontextprotocol/server-filesystem /workspace
+            </code>
+          </div>
+          <div className='rounded-lg border p-3'>
+            <p className='font-medium mb-1'>GitHub Server</p>
+            <code className='text-xs text-emerald-600 dark:text-emerald-400'>
+              npx -y @modelcontextprotocol/server-github
+            </code>
+            <p className='text-xs text-muted-foreground mt-1'>Requires: GITHUB_PERSONAL_ACCESS_TOKEN</p>
+          </div>
+          <div className='rounded-lg border p-3'>
+            <p className='font-medium mb-1'>Web Browser Server</p>
+            <code className='text-xs text-emerald-600 dark:text-emerald-400'>
+              npx -y @modelcontextprotocol/server-puppeteer
+            </code>
+          </div>
+        </CardContent>
+      </Card>
+    </form>
   )
 }

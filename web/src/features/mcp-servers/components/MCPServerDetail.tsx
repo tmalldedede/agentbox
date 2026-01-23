@@ -6,7 +6,6 @@ import {
   Trash2,
   Loader2,
   AlertCircle,
-  Server,
   Lock,
   Plus,
   X,
@@ -18,7 +17,32 @@ import type { MCPServer, MCPServerType, MCPCategory } from '@/types'
 import { useMCPServers, useUpdateMCPServer, useDeleteMCPServer } from '@/hooks'
 import { api } from '@/services/api'
 import { toast } from 'sonner'
-import { useLanguage } from '@/contexts/LanguageContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const categories: MCPCategory[] = ['filesystem', 'database', 'api', 'tool', 'browser', 'memory', 'other']
 const serverTypes: MCPServerType[] = ['stdio', 'sse', 'http']
@@ -29,7 +53,6 @@ type MCPServerDetailProps = {
 
 export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
   const navigate = useNavigate()
-  const { t } = useLanguage()
   const { data: servers = [], isLoading } = useMCPServers()
   const updateServer = useUpdateMCPServer()
   const deleteServer = useDeleteMCPServer()
@@ -45,6 +68,7 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
   const [newArg, setNewArg] = useState('')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   useEffect(() => {
     if (server) {
@@ -62,22 +86,20 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      <div className='flex items-center justify-center h-48'>
+        <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
       </div>
     )
   }
 
   if (!server) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-          <p className="text-red-400 text-lg">MCP Server not found</p>
-          <button onClick={() => navigate({ to: '/mcp-servers' })} className="btn btn-primary mt-4">
-            Back to MCP Servers
-          </button>
-        </div>
+      <div className='flex flex-col items-center justify-center h-48 text-center'>
+        <AlertCircle className='h-16 w-16 text-muted-foreground mb-4' />
+        <p className='text-lg text-muted-foreground'>MCP Server not found</p>
+        <Button variant='outline' className='mt-4' onClick={() => navigate({ to: '/mcp-servers' })}>
+          Back to MCP Servers
+        </Button>
       </div>
     )
   }
@@ -87,7 +109,6 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
 
   const handleSave = async () => {
     if (!serverId) return
-
     try {
       await updateServer.mutateAsync({
         id: serverId,
@@ -113,8 +134,6 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
 
   const handleDelete = async () => {
     if (!serverId) return
-    if (!confirm(`Delete MCP server "${server.name}"?`)) return
-
     try {
       await deleteServer.mutateAsync(serverId)
       toast.success('MCP Server deleted')
@@ -194,319 +213,314 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="app-header">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate({ to: '/mcp-servers' })} className="btn btn-ghost btn-icon">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-3">
-            <Server className="w-6 h-6 text-emerald-400" />
-            <span className="text-lg font-bold">MCP Server Detail</span>
-          </div>
-          {isBuiltIn && (
-            <span className="badge badge-scaling">
-              <Lock className="w-3 h-3" />
-              Built-in
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={handleTest} className="btn btn-ghost" disabled={testing}>
-            {testing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : testResult === 'ok' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-            ) : testResult === 'error' ? (
-              <XCircle className="w-4 h-4 text-red-400" />
-            ) : (
-              <Play className="w-4 h-4" />
+    <>
+      <div className='space-y-6'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <div className='flex items-center gap-3'>
+            <Button variant='ghost' size='icon' onClick={() => navigate({ to: '/mcp-servers' })}>
+              <ArrowLeft className='h-5 w-5' />
+            </Button>
+            <h2 className='text-2xl font-bold tracking-tight'>MCP Server Detail</h2>
+            {isBuiltIn && (
+              <Badge variant='secondary'>
+                <Lock className='mr-1 h-3 w-3' />
+                Built-in
+              </Badge>
             )}
-            Test
-          </button>
-          {!isBuiltIn && (
-            <button
-              onClick={handleDelete}
-              className="btn btn-ghost text-red-400"
-              disabled={deleteServer.isPending}
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          )}
-          {!isReadOnly && (
-            <button
-              onClick={handleSave}
-              className="btn btn-primary"
-              disabled={!isDirty || updateServer.isPending}
-            >
-              {updateServer.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+          </div>
+          <div className='flex items-center gap-2'>
+            <Button variant='outline' size='sm' onClick={handleTest} disabled={testing}>
+              {testing ? (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              ) : testResult === 'ok' ? (
+                <CheckCircle className='mr-2 h-4 w-4 text-green-500' />
+              ) : testResult === 'error' ? (
+                <XCircle className='mr-2 h-4 w-4 text-red-500' />
               ) : (
-                <Save className="w-4 h-4" />
+                <Play className='mr-2 h-4 w-4' />
               )}
-              Save
-            </button>
-          )}
+              Test
+            </Button>
+            {!isBuiltIn && (
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={deleteServer.isPending}
+                className='text-destructive hover:text-destructive'
+              >
+                <Trash2 className='mr-2 h-4 w-4' />
+                Delete
+              </Button>
+            )}
+            {!isReadOnly && (
+              <Button
+                size='sm'
+                onClick={handleSave}
+                disabled={!isDirty || updateServer.isPending}
+              >
+                {updateServer.isPending ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : (
+                  <Save className='mr-2 h-4 w-4' />
+                )}
+                Save
+              </Button>
+            )}
+          </div>
         </div>
-      </header>
 
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Basic Information</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Server ID</label>
-              <input type="text" value={server.id} disabled className="input bg-secondary" />
+        <Card>
+          <CardHeader>
+            <CardTitle>Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='space-y-2'>
+              <Label>Server ID</Label>
+              <Input value={server.id} disabled className='font-mono' />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">{t('name')} *</label>
-              <input
-                type="text"
+            <div className='space-y-2'>
+              <Label>Name *</Label>
+              <Input
                 value={formData.name || ''}
                 onChange={e => updateField('name', e.target.value)}
                 disabled={isReadOnly}
-                className="input"
-                placeholder={t('enterName')}
+                placeholder='Server name'
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">{t('description')}</label>
-              <textarea
+            <div className='space-y-2'>
+              <Label>Description</Label>
+              <Textarea
                 value={formData.description || ''}
                 onChange={e => updateField('description', e.target.value)}
                 disabled={isReadOnly}
-                className="input min-h-[80px]"
-                placeholder={t('enterDescription')}
+                placeholder='What does this server do?'
+                rows={3}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-secondary mb-2">Type *</label>
-                <select
+            <div className='grid grid-cols-2 gap-4'>
+              <div className='space-y-2'>
+                <Label>Type *</Label>
+                <Select
                   value={formData.type || 'stdio'}
-                  onChange={e => updateField('type', e.target.value as MCPServerType)}
+                  onValueChange={v => updateField('type', v as MCPServerType)}
                   disabled={isReadOnly}
-                  className="input"
                 >
-                  {serverTypes.map(type => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {serverTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-secondary mb-2">Category *</label>
-                <select
+              <div className='space-y-2'>
+                <Label>Category *</Label>
+                <Select
                   value={formData.category || 'other'}
-                  onChange={e => updateField('category', e.target.value as MCPCategory)}
+                  onValueChange={v => updateField('category', v as MCPCategory)}
                   disabled={isReadOnly}
-                  className="input"
                 >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(cat => (
+                      <SelectItem key={cat} value={cat} className='capitalize'>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Command & Arguments</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Command *</label>
-              <input
-                type="text"
+        <Card>
+          <CardHeader>
+            <CardTitle>Command & Arguments</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='space-y-2'>
+              <Label>Command *</Label>
+              <Input
                 value={formData.command || ''}
                 onChange={e => updateField('command', e.target.value)}
                 disabled={isReadOnly}
-                className="input font-mono"
-                placeholder="npx -y @modelcontextprotocol/server-filesystem"
+                className='font-mono'
+                placeholder='npx -y @modelcontextprotocol/server-filesystem'
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Arguments</label>
-              <div className="space-y-2">
+            <div className='space-y-2'>
+              <Label>Arguments</Label>
+              <div className='space-y-2'>
                 {(formData.args || []).map((arg, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={arg}
-                      disabled
-                      className="input flex-1 font-mono text-sm bg-secondary"
-                    />
+                  <div key={index} className='flex gap-2'>
+                    <Input value={arg} disabled className='flex-1 font-mono text-sm' />
                     {!isReadOnly && (
-                      <button
-                        onClick={() => removeArg(index)}
-                        className="btn btn-ghost btn-icon text-red-400"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <Button variant='ghost' size='icon' onClick={() => removeArg(index)}>
+                        <X className='h-4 w-4 text-destructive' />
+                      </Button>
                     )}
                   </div>
                 ))}
                 {!isReadOnly && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
+                  <div className='flex gap-2'>
+                    <Input
                       value={newArg}
                       onChange={e => setNewArg(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          addArg()
-                        }
-                      }}
-                      className="input flex-1 font-mono text-sm"
-                      placeholder={t('addArgument')}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addArg() } }}
+                      placeholder='Add argument...'
+                      className='flex-1 font-mono text-sm'
                     />
-                    <button onClick={addArg} className="btn btn-secondary">
-                      <Plus className="w-4 h-4" />
+                    <Button variant='secondary' size='sm' onClick={addArg}>
+                      <Plus className='mr-1 h-4 w-4' />
                       Add
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">Working Directory</label>
-              <input
-                type="text"
+            <div className='space-y-2'>
+              <Label>Working Directory</Label>
+              <Input
                 value={formData.work_dir || ''}
                 onChange={e => updateField('work_dir', e.target.value)}
                 disabled={isReadOnly}
-                className="input font-mono"
-                placeholder="/path/to/workdir"
+                className='font-mono'
+                placeholder='/path/to/workdir'
               />
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Environment Variables</h3>
-          <div className="space-y-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Environment Variables</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-3'>
             {Object.entries(formData.env || {}).map(([key, value]) => (
-              <div key={key} className="flex gap-2 items-start">
-                <input
-                  type="text"
-                  value={key}
-                  disabled
-                  className="input flex-1 font-mono text-sm bg-secondary"
-                  placeholder="KEY"
-                />
-                <input
-                  type="text"
-                  value={value}
-                  disabled
-                  className="input flex-1 font-mono text-sm bg-secondary"
-                  placeholder="value"
-                />
+              <div key={key} className='flex gap-2 items-center'>
+                <Input value={key} disabled className='flex-1 font-mono text-sm' />
+                <Input value={value} disabled className='flex-1 font-mono text-sm' />
                 {!isReadOnly && (
-                  <button onClick={() => removeEnv(key)} className="btn btn-ghost btn-icon text-red-400">
-                    <X className="w-4 h-4" />
-                  </button>
+                  <Button variant='ghost' size='icon' onClick={() => removeEnv(key)}>
+                    <X className='h-4 w-4 text-destructive' />
+                  </Button>
                 )}
               </div>
             ))}
             {!isReadOnly && (
-              <div className="flex gap-2">
-                <input
-                  type="text"
+              <div className='flex gap-2'>
+                <Input
                   value={newEnvKey}
                   onChange={e => setNewEnvKey(e.target.value)}
-                  className="input flex-1 font-mono text-sm"
-                  placeholder="KEY"
+                  placeholder='KEY'
+                  className='flex-1 font-mono text-sm'
                 />
-                <input
-                  type="text"
+                <Input
                   value={newEnvValue}
                   onChange={e => setNewEnvValue(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addEnv()
-                    }
-                  }}
-                  className="input flex-1 font-mono text-sm"
-                  placeholder="value"
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEnv() } }}
+                  placeholder='value'
+                  className='flex-1 font-mono text-sm'
                 />
-                <button onClick={addEnv} className="btn btn-secondary">
-                  <Plus className="w-4 h-4" />
+                <Button variant='secondary' size='sm' onClick={addEnv}>
+                  <Plus className='mr-1 h-4 w-4' />
                   Add
-                </button>
+                </Button>
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Tags</h3>
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tags</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-3'>
+            <div className='flex flex-wrap gap-2'>
               {(formData.tags || []).map(tag => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-secondary text-secondary"
-                >
+                <Badge key={tag} variant='secondary' className='gap-1'>
                   {tag}
                   {!isReadOnly && (
-                    <button onClick={() => removeTag(tag)} className="text-red-400 hover:text-red-300">
-                      <X className="w-3 h-3" />
+                    <button onClick={() => removeTag(tag)} className='ml-1 hover:text-destructive'>
+                      <X className='h-3 w-3' />
                     </button>
                   )}
-                </span>
+                </Badge>
               ))}
             </div>
             {!isReadOnly && (
-              <div className="flex gap-2">
-                <input
-                  type="text"
+              <div className='flex gap-2'>
+                <Input
                   value={newTag}
                   onChange={e => setNewTag(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addTag()
-                    }
-                  }}
-                  className="input flex-1"
-                  placeholder={t('addTag')}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+                  placeholder='Add tag...'
+                  className='flex-1'
                 />
-                <button onClick={addTag} className="btn btn-secondary">
-                  <Plus className="w-4 h-4" />
+                <Button variant='secondary' size='sm' onClick={addTag}>
+                  <Plus className='mr-1 h-4 w-4' />
                   Add
-                </button>
+                </Button>
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="card p-6">
-          <h3 className="font-semibold text-lg mb-4">Metadata</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-muted">Created</p>
-              <p className="text-primary mt-1">{new Date(server.created_at).toLocaleString()}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Metadata</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className='grid grid-cols-2 gap-4 text-sm'>
+              <div>
+                <p className='text-muted-foreground'>Created</p>
+                <p className='mt-1'>{new Date(server.created_at).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className='text-muted-foreground'>Updated</p>
+                <p className='mt-1'>{new Date(server.updated_at).toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-muted">Updated</p>
-              <p className="text-primary mt-1">{new Date(server.updated_at).toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete MCP Server</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete MCP server &quot;{server.name}&quot;?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant='outline' onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant='destructive'
+              onClick={handleDelete}
+              disabled={deleteServer.isPending}
+            >
+              {deleteServer.isPending && (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              )}
+              Delete
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

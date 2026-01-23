@@ -25,6 +25,7 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_authenticated/route'
 import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
+import { Route as AuthenticatedApiDocsRouteRouteImport } from './routes/_authenticated/api-docs/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedTasksIndexRouteImport } from './routes/_authenticated/tasks/index'
@@ -33,21 +34,25 @@ import { Route as AuthenticatedSkillsIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedSkillStoreIndexRouteImport } from './routes/_authenticated/skill-store/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSessionsIndexRouteImport } from './routes/_authenticated/sessions/index'
-import { Route as AuthenticatedProfilesIndexRouteImport } from './routes/_authenticated/profiles/index'
+import { Route as AuthenticatedRuntimesIndexRouteImport } from './routes/_authenticated/runtimes/index'
+import { Route as AuthenticatedProvidersIndexRouteImport } from './routes/_authenticated/providers/index'
 import { Route as AuthenticatedMonitoringIndexRouteImport } from './routes/_authenticated/monitoring/index'
 import { Route as AuthenticatedMcpServersIndexRouteImport } from './routes/_authenticated/mcp-servers/index'
 import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenticated/images/index'
 import { Route as AuthenticatedHistoryIndexRouteImport } from './routes/_authenticated/history/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedFilesIndexRouteImport } from './routes/_authenticated/files/index'
 import { Route as AuthenticatedDemoIndexRouteImport } from './routes/_authenticated/demo/index'
-import { Route as AuthenticatedCredentialsIndexRouteImport } from './routes/_authenticated/credentials/index'
+import { Route as AuthenticatedCommandCenterIndexRouteImport } from './routes/_authenticated/command-center/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedApiPlaygroundIndexRouteImport } from './routes/_authenticated/api-playground/index'
+import { Route as AuthenticatedApiDocsIndexRouteImport } from './routes/_authenticated/api-docs/index'
 import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents/index'
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
+import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks/$id'
 import { Route as AuthenticatedSkillsNewRouteImport } from './routes/_authenticated/skills/new'
 import { Route as AuthenticatedSkillsIdRouteImport } from './routes/_authenticated/skills/$id'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
@@ -55,14 +60,21 @@ import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_auth
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedSessionsIdRouteImport } from './routes/_authenticated/sessions/$id'
-import { Route as AuthenticatedProfilesNewRouteImport } from './routes/_authenticated/profiles/new'
-import { Route as AuthenticatedProfilesIdRouteImport } from './routes/_authenticated/profiles/$id'
 import { Route as AuthenticatedMcpServersNewRouteImport } from './routes/_authenticated/mcp-servers/new'
 import { Route as AuthenticatedMcpServersIdRouteImport } from './routes/_authenticated/mcp-servers/$id'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedApiDocsUploadFileRouteImport } from './routes/_authenticated/api-docs/upload-file'
+import { Route as AuthenticatedApiDocsStreamEventsRouteImport } from './routes/_authenticated/api-docs/stream-events'
+import { Route as AuthenticatedApiDocsListFilesRouteImport } from './routes/_authenticated/api-docs/list-files'
+import { Route as AuthenticatedApiDocsGetTasksRouteImport } from './routes/_authenticated/api-docs/get-tasks'
+import { Route as AuthenticatedApiDocsGetTaskRouteImport } from './routes/_authenticated/api-docs/get-task'
+import { Route as AuthenticatedApiDocsGetFileRouteImport } from './routes/_authenticated/api-docs/get-file'
+import { Route as AuthenticatedApiDocsDownloadFileRouteImport } from './routes/_authenticated/api-docs/download-file'
+import { Route as AuthenticatedApiDocsDeleteFileRouteImport } from './routes/_authenticated/api-docs/delete-file'
+import { Route as AuthenticatedApiDocsCreateTaskRouteImport } from './routes/_authenticated/api-docs/create-task'
+import { Route as AuthenticatedApiDocsCancelTaskRouteImport } from './routes/_authenticated/api-docs/cancel-task'
 import { Route as AuthenticatedAgentsNewRouteImport } from './routes/_authenticated/agents/new'
 import { Route as AuthenticatedAgentsIdRouteImport } from './routes/_authenticated/agents/$id'
-import { Route as AuthenticatedProfilesIdEditRouteImport } from './routes/_authenticated/profiles/$id/edit'
 
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
   id: '/clerk',
@@ -142,6 +154,12 @@ const AuthenticatedSettingsRouteRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedApiDocsRouteRoute =
+  AuthenticatedApiDocsRouteRouteImport.update({
+    id: '/api-docs',
+    path: '/api-docs',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedWebhooksIndexRoute =
   AuthenticatedWebhooksIndexRouteImport.update({
     id: '/webhooks/',
@@ -188,10 +206,16 @@ const AuthenticatedSessionsIndexRoute =
     path: '/sessions/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedProfilesIndexRoute =
-  AuthenticatedProfilesIndexRouteImport.update({
-    id: '/profiles/',
-    path: '/profiles/',
+const AuthenticatedRuntimesIndexRoute =
+  AuthenticatedRuntimesIndexRouteImport.update({
+    id: '/runtimes/',
+    path: '/runtimes/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedProvidersIndexRoute =
+  AuthenticatedProvidersIndexRouteImport.update({
+    id: '/providers/',
+    path: '/providers/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMonitoringIndexRoute =
@@ -224,15 +248,20 @@ const AuthenticatedHelpCenterIndexRoute =
     path: '/help-center/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedFilesIndexRoute = AuthenticatedFilesIndexRouteImport.update({
+  id: '/files/',
+  path: '/files/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDemoIndexRoute = AuthenticatedDemoIndexRouteImport.update({
   id: '/demo/',
   path: '/demo/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedCredentialsIndexRoute =
-  AuthenticatedCredentialsIndexRouteImport.update({
-    id: '/credentials/',
-    path: '/credentials/',
+const AuthenticatedCommandCenterIndexRoute =
+  AuthenticatedCommandCenterIndexRouteImport.update({
+    id: '/command-center/',
+    path: '/command-center/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
@@ -250,6 +279,12 @@ const AuthenticatedApiPlaygroundIndexRoute =
     id: '/api-playground/',
     path: '/api-playground/',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedApiDocsIndexRoute =
+  AuthenticatedApiDocsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
 const AuthenticatedAgentsIndexRoute =
   AuthenticatedAgentsIndexRouteImport.update({
@@ -272,6 +307,11 @@ const ClerkauthSignInRoute = ClerkauthSignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
   getParentRoute: () => ClerkauthRouteRoute,
+} as any)
+const AuthenticatedTasksIdRoute = AuthenticatedTasksIdRouteImport.update({
+  id: '/tasks/$id',
+  path: '/tasks/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSkillsNewRoute = AuthenticatedSkillsNewRouteImport.update({
   id: '/skills/new',
@@ -312,17 +352,6 @@ const AuthenticatedSessionsIdRoute = AuthenticatedSessionsIdRouteImport.update({
   path: '/sessions/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedProfilesNewRoute =
-  AuthenticatedProfilesNewRouteImport.update({
-    id: '/profiles/new',
-    path: '/profiles/new',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedProfilesIdRoute = AuthenticatedProfilesIdRouteImport.update({
-  id: '/profiles/$id',
-  path: '/profiles/$id',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedMcpServersNewRoute =
   AuthenticatedMcpServersNewRouteImport.update({
     id: '/mcp-servers/new',
@@ -341,6 +370,66 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedApiDocsUploadFileRoute =
+  AuthenticatedApiDocsUploadFileRouteImport.update({
+    id: '/upload-file',
+    path: '/upload-file',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsStreamEventsRoute =
+  AuthenticatedApiDocsStreamEventsRouteImport.update({
+    id: '/stream-events',
+    path: '/stream-events',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsListFilesRoute =
+  AuthenticatedApiDocsListFilesRouteImport.update({
+    id: '/list-files',
+    path: '/list-files',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsGetTasksRoute =
+  AuthenticatedApiDocsGetTasksRouteImport.update({
+    id: '/get-tasks',
+    path: '/get-tasks',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsGetTaskRoute =
+  AuthenticatedApiDocsGetTaskRouteImport.update({
+    id: '/get-task',
+    path: '/get-task',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsGetFileRoute =
+  AuthenticatedApiDocsGetFileRouteImport.update({
+    id: '/get-file',
+    path: '/get-file',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsDownloadFileRoute =
+  AuthenticatedApiDocsDownloadFileRouteImport.update({
+    id: '/download-file',
+    path: '/download-file',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsDeleteFileRoute =
+  AuthenticatedApiDocsDeleteFileRouteImport.update({
+    id: '/delete-file',
+    path: '/delete-file',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsCreateTaskRoute =
+  AuthenticatedApiDocsCreateTaskRouteImport.update({
+    id: '/create-task',
+    path: '/create-task',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsCancelTaskRoute =
+  AuthenticatedApiDocsCancelTaskRouteImport.update({
+    id: '/cancel-task',
+    path: '/cancel-task',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedAgentsNewRoute = AuthenticatedAgentsNewRouteImport.update({
   id: '/agents/new',
   path: '/agents/new',
@@ -351,15 +440,10 @@ const AuthenticatedAgentsIdRoute = AuthenticatedAgentsIdRouteImport.update({
   path: '/agents/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedProfilesIdEditRoute =
-  AuthenticatedProfilesIdEditRouteImport.update({
-    id: '/edit',
-    path: '/edit',
-    getParentRoute: () => AuthenticatedProfilesIdRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
+  '/api-docs': typeof AuthenticatedApiDocsRouteRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
@@ -374,11 +458,19 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
+  '/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
+  '/api-docs/download-file': typeof AuthenticatedApiDocsDownloadFileRoute
+  '/api-docs/get-file': typeof AuthenticatedApiDocsGetFileRoute
+  '/api-docs/get-task': typeof AuthenticatedApiDocsGetTaskRoute
+  '/api-docs/get-tasks': typeof AuthenticatedApiDocsGetTasksRoute
+  '/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
+  '/api-docs/stream-events': typeof AuthenticatedApiDocsStreamEventsRoute
+  '/api-docs/upload-file': typeof AuthenticatedApiDocsUploadFileRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
-  '/profiles/$id': typeof AuthenticatedProfilesIdRouteWithChildren
-  '/profiles/new': typeof AuthenticatedProfilesNewRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -386,21 +478,25 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/skills/new': typeof AuthenticatedSkillsNewRoute
+  '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
+  '/api-docs/': typeof AuthenticatedApiDocsIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
-  '/credentials': typeof AuthenticatedCredentialsIndexRoute
+  '/command-center': typeof AuthenticatedCommandCenterIndexRoute
   '/demo': typeof AuthenticatedDemoIndexRoute
+  '/files': typeof AuthenticatedFilesIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/mcp-servers': typeof AuthenticatedMcpServersIndexRoute
   '/monitoring': typeof AuthenticatedMonitoringIndexRoute
-  '/profiles': typeof AuthenticatedProfilesIndexRoute
+  '/providers': typeof AuthenticatedProvidersIndexRoute
+  '/runtimes': typeof AuthenticatedRuntimesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-store': typeof AuthenticatedSkillStoreIndexRoute
@@ -409,7 +505,6 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
-  '/profiles/$id/edit': typeof AuthenticatedProfilesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -426,11 +521,19 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
+  '/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
+  '/api-docs/download-file': typeof AuthenticatedApiDocsDownloadFileRoute
+  '/api-docs/get-file': typeof AuthenticatedApiDocsGetFileRoute
+  '/api-docs/get-task': typeof AuthenticatedApiDocsGetTaskRoute
+  '/api-docs/get-tasks': typeof AuthenticatedApiDocsGetTasksRoute
+  '/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
+  '/api-docs/stream-events': typeof AuthenticatedApiDocsStreamEventsRoute
+  '/api-docs/upload-file': typeof AuthenticatedApiDocsUploadFileRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
-  '/profiles/$id': typeof AuthenticatedProfilesIdRouteWithChildren
-  '/profiles/new': typeof AuthenticatedProfilesNewRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -438,21 +541,25 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/skills/new': typeof AuthenticatedSkillsNewRoute
+  '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
+  '/api-docs': typeof AuthenticatedApiDocsIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
-  '/credentials': typeof AuthenticatedCredentialsIndexRoute
+  '/command-center': typeof AuthenticatedCommandCenterIndexRoute
   '/demo': typeof AuthenticatedDemoIndexRoute
+  '/files': typeof AuthenticatedFilesIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/history': typeof AuthenticatedHistoryIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/mcp-servers': typeof AuthenticatedMcpServersIndexRoute
   '/monitoring': typeof AuthenticatedMonitoringIndexRoute
-  '/profiles': typeof AuthenticatedProfilesIndexRoute
+  '/providers': typeof AuthenticatedProvidersIndexRoute
+  '/runtimes': typeof AuthenticatedRuntimesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-store': typeof AuthenticatedSkillStoreIndexRoute
@@ -461,12 +568,12 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
-  '/profiles/$id/edit': typeof AuthenticatedProfilesIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/clerk': typeof ClerkRouteRouteWithChildren
+  '/_authenticated/api-docs': typeof AuthenticatedApiDocsRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/clerk/(auth)': typeof ClerkauthRouteRouteWithChildren
   '/clerk/_authenticated': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -483,11 +590,19 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/_authenticated/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/_authenticated/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/_authenticated/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
+  '/_authenticated/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
+  '/_authenticated/api-docs/download-file': typeof AuthenticatedApiDocsDownloadFileRoute
+  '/_authenticated/api-docs/get-file': typeof AuthenticatedApiDocsGetFileRoute
+  '/_authenticated/api-docs/get-task': typeof AuthenticatedApiDocsGetTaskRoute
+  '/_authenticated/api-docs/get-tasks': typeof AuthenticatedApiDocsGetTasksRoute
+  '/_authenticated/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
+  '/_authenticated/api-docs/stream-events': typeof AuthenticatedApiDocsStreamEventsRoute
+  '/_authenticated/api-docs/upload-file': typeof AuthenticatedApiDocsUploadFileRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/_authenticated/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
-  '/_authenticated/profiles/$id': typeof AuthenticatedProfilesIdRouteWithChildren
-  '/_authenticated/profiles/new': typeof AuthenticatedProfilesNewRoute
   '/_authenticated/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -495,21 +610,25 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/_authenticated/skills/new': typeof AuthenticatedSkillsNewRoute
+  '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
+  '/_authenticated/api-docs/': typeof AuthenticatedApiDocsIndexRoute
   '/_authenticated/api-playground/': typeof AuthenticatedApiPlaygroundIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
-  '/_authenticated/credentials/': typeof AuthenticatedCredentialsIndexRoute
+  '/_authenticated/command-center/': typeof AuthenticatedCommandCenterIndexRoute
   '/_authenticated/demo/': typeof AuthenticatedDemoIndexRoute
+  '/_authenticated/files/': typeof AuthenticatedFilesIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/history/': typeof AuthenticatedHistoryIndexRoute
   '/_authenticated/images/': typeof AuthenticatedImagesIndexRoute
   '/_authenticated/mcp-servers/': typeof AuthenticatedMcpServersIndexRoute
   '/_authenticated/monitoring/': typeof AuthenticatedMonitoringIndexRoute
-  '/_authenticated/profiles/': typeof AuthenticatedProfilesIndexRoute
+  '/_authenticated/providers/': typeof AuthenticatedProvidersIndexRoute
+  '/_authenticated/runtimes/': typeof AuthenticatedRuntimesIndexRoute
   '/_authenticated/sessions/': typeof AuthenticatedSessionsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-store/': typeof AuthenticatedSkillStoreIndexRoute
@@ -518,12 +637,12 @@ export interface FileRoutesById {
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
-  '/_authenticated/profiles/$id/edit': typeof AuthenticatedProfilesIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/clerk'
+    | '/api-docs'
     | '/settings'
     | '/forgot-password'
     | '/otp'
@@ -538,11 +657,19 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$id'
     | '/agents/new'
+    | '/api-docs/cancel-task'
+    | '/api-docs/create-task'
+    | '/api-docs/delete-file'
+    | '/api-docs/download-file'
+    | '/api-docs/get-file'
+    | '/api-docs/get-task'
+    | '/api-docs/get-tasks'
+    | '/api-docs/list-files'
+    | '/api-docs/stream-events'
+    | '/api-docs/upload-file'
     | '/errors/$error'
     | '/mcp-servers/$id'
     | '/mcp-servers/new'
-    | '/profiles/$id'
-    | '/profiles/new'
     | '/sessions/$id'
     | '/settings/account'
     | '/settings/appearance'
@@ -550,21 +677,25 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/skills/$id'
     | '/skills/new'
+    | '/tasks/$id'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
     | '/agents'
+    | '/api-docs/'
     | '/api-playground'
     | '/apps'
     | '/chats'
-    | '/credentials'
+    | '/command-center'
     | '/demo'
+    | '/files'
     | '/help-center'
     | '/history'
     | '/images'
     | '/mcp-servers'
     | '/monitoring'
-    | '/profiles'
+    | '/providers'
+    | '/runtimes'
     | '/sessions'
     | '/settings/'
     | '/skill-store'
@@ -573,7 +704,6 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users'
     | '/webhooks'
-    | '/profiles/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
@@ -590,11 +720,19 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$id'
     | '/agents/new'
+    | '/api-docs/cancel-task'
+    | '/api-docs/create-task'
+    | '/api-docs/delete-file'
+    | '/api-docs/download-file'
+    | '/api-docs/get-file'
+    | '/api-docs/get-task'
+    | '/api-docs/get-tasks'
+    | '/api-docs/list-files'
+    | '/api-docs/stream-events'
+    | '/api-docs/upload-file'
     | '/errors/$error'
     | '/mcp-servers/$id'
     | '/mcp-servers/new'
-    | '/profiles/$id'
-    | '/profiles/new'
     | '/sessions/$id'
     | '/settings/account'
     | '/settings/appearance'
@@ -602,21 +740,25 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/skills/$id'
     | '/skills/new'
+    | '/tasks/$id'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
     | '/agents'
+    | '/api-docs'
     | '/api-playground'
     | '/apps'
     | '/chats'
-    | '/credentials'
+    | '/command-center'
     | '/demo'
+    | '/files'
     | '/help-center'
     | '/history'
     | '/images'
     | '/mcp-servers'
     | '/monitoring'
-    | '/profiles'
+    | '/providers'
+    | '/runtimes'
     | '/sessions'
     | '/settings'
     | '/skill-store'
@@ -625,11 +767,11 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users'
     | '/webhooks'
-    | '/profiles/$id/edit'
   id:
     | '__root__'
     | '/_authenticated'
     | '/clerk'
+    | '/_authenticated/api-docs'
     | '/_authenticated/settings'
     | '/clerk/(auth)'
     | '/clerk/_authenticated'
@@ -646,11 +788,19 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/agents/$id'
     | '/_authenticated/agents/new'
+    | '/_authenticated/api-docs/cancel-task'
+    | '/_authenticated/api-docs/create-task'
+    | '/_authenticated/api-docs/delete-file'
+    | '/_authenticated/api-docs/download-file'
+    | '/_authenticated/api-docs/get-file'
+    | '/_authenticated/api-docs/get-task'
+    | '/_authenticated/api-docs/get-tasks'
+    | '/_authenticated/api-docs/list-files'
+    | '/_authenticated/api-docs/stream-events'
+    | '/_authenticated/api-docs/upload-file'
     | '/_authenticated/errors/$error'
     | '/_authenticated/mcp-servers/$id'
     | '/_authenticated/mcp-servers/new'
-    | '/_authenticated/profiles/$id'
-    | '/_authenticated/profiles/new'
     | '/_authenticated/sessions/$id'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
@@ -658,21 +808,25 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/_authenticated/skills/$id'
     | '/_authenticated/skills/new'
+    | '/_authenticated/tasks/$id'
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
     | '/clerk/_authenticated/user-management'
     | '/_authenticated/agents/'
+    | '/_authenticated/api-docs/'
     | '/_authenticated/api-playground/'
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
-    | '/_authenticated/credentials/'
+    | '/_authenticated/command-center/'
     | '/_authenticated/demo/'
+    | '/_authenticated/files/'
     | '/_authenticated/help-center/'
     | '/_authenticated/history/'
     | '/_authenticated/images/'
     | '/_authenticated/mcp-servers/'
     | '/_authenticated/monitoring/'
-    | '/_authenticated/profiles/'
+    | '/_authenticated/providers/'
+    | '/_authenticated/runtimes/'
     | '/_authenticated/sessions/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-store/'
@@ -681,7 +835,6 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
     | '/_authenticated/webhooks/'
-    | '/_authenticated/profiles/$id/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -813,6 +966,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/api-docs': {
+      id: '/_authenticated/api-docs'
+      path: '/api-docs'
+      fullPath: '/api-docs'
+      preLoaderRoute: typeof AuthenticatedApiDocsRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/webhooks/': {
       id: '/_authenticated/webhooks/'
       path: '/webhooks'
@@ -869,11 +1029,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSessionsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/profiles/': {
-      id: '/_authenticated/profiles/'
-      path: '/profiles'
-      fullPath: '/profiles'
-      preLoaderRoute: typeof AuthenticatedProfilesIndexRouteImport
+    '/_authenticated/runtimes/': {
+      id: '/_authenticated/runtimes/'
+      path: '/runtimes'
+      fullPath: '/runtimes'
+      preLoaderRoute: typeof AuthenticatedRuntimesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/providers/': {
+      id: '/_authenticated/providers/'
+      path: '/providers'
+      fullPath: '/providers'
+      preLoaderRoute: typeof AuthenticatedProvidersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/monitoring/': {
@@ -911,6 +1078,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/files/': {
+      id: '/_authenticated/files/'
+      path: '/files'
+      fullPath: '/files'
+      preLoaderRoute: typeof AuthenticatedFilesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/demo/': {
       id: '/_authenticated/demo/'
       path: '/demo'
@@ -918,11 +1092,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDemoIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/credentials/': {
-      id: '/_authenticated/credentials/'
-      path: '/credentials'
-      fullPath: '/credentials'
-      preLoaderRoute: typeof AuthenticatedCredentialsIndexRouteImport
+    '/_authenticated/command-center/': {
+      id: '/_authenticated/command-center/'
+      path: '/command-center'
+      fullPath: '/command-center'
+      preLoaderRoute: typeof AuthenticatedCommandCenterIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/chats/': {
@@ -945,6 +1119,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api-playground'
       preLoaderRoute: typeof AuthenticatedApiPlaygroundIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/api-docs/': {
+      id: '/_authenticated/api-docs/'
+      path: '/'
+      fullPath: '/api-docs/'
+      preLoaderRoute: typeof AuthenticatedApiDocsIndexRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
     '/_authenticated/agents/': {
       id: '/_authenticated/agents/'
@@ -973,6 +1154,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/clerk/sign-in'
       preLoaderRoute: typeof ClerkauthSignInRouteImport
       parentRoute: typeof ClerkauthRouteRoute
+    }
+    '/_authenticated/tasks/$id': {
+      id: '/_authenticated/tasks/$id'
+      path: '/tasks/$id'
+      fullPath: '/tasks/$id'
+      preLoaderRoute: typeof AuthenticatedTasksIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/skills/new': {
       id: '/_authenticated/skills/new'
@@ -1023,20 +1211,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSessionsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/profiles/new': {
-      id: '/_authenticated/profiles/new'
-      path: '/profiles/new'
-      fullPath: '/profiles/new'
-      preLoaderRoute: typeof AuthenticatedProfilesNewRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/profiles/$id': {
-      id: '/_authenticated/profiles/$id'
-      path: '/profiles/$id'
-      fullPath: '/profiles/$id'
-      preLoaderRoute: typeof AuthenticatedProfilesIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/mcp-servers/new': {
       id: '/_authenticated/mcp-servers/new'
       path: '/mcp-servers/new'
@@ -1058,6 +1232,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/api-docs/upload-file': {
+      id: '/_authenticated/api-docs/upload-file'
+      path: '/upload-file'
+      fullPath: '/api-docs/upload-file'
+      preLoaderRoute: typeof AuthenticatedApiDocsUploadFileRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/stream-events': {
+      id: '/_authenticated/api-docs/stream-events'
+      path: '/stream-events'
+      fullPath: '/api-docs/stream-events'
+      preLoaderRoute: typeof AuthenticatedApiDocsStreamEventsRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/list-files': {
+      id: '/_authenticated/api-docs/list-files'
+      path: '/list-files'
+      fullPath: '/api-docs/list-files'
+      preLoaderRoute: typeof AuthenticatedApiDocsListFilesRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/get-tasks': {
+      id: '/_authenticated/api-docs/get-tasks'
+      path: '/get-tasks'
+      fullPath: '/api-docs/get-tasks'
+      preLoaderRoute: typeof AuthenticatedApiDocsGetTasksRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/get-task': {
+      id: '/_authenticated/api-docs/get-task'
+      path: '/get-task'
+      fullPath: '/api-docs/get-task'
+      preLoaderRoute: typeof AuthenticatedApiDocsGetTaskRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/get-file': {
+      id: '/_authenticated/api-docs/get-file'
+      path: '/get-file'
+      fullPath: '/api-docs/get-file'
+      preLoaderRoute: typeof AuthenticatedApiDocsGetFileRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/download-file': {
+      id: '/_authenticated/api-docs/download-file'
+      path: '/download-file'
+      fullPath: '/api-docs/download-file'
+      preLoaderRoute: typeof AuthenticatedApiDocsDownloadFileRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/delete-file': {
+      id: '/_authenticated/api-docs/delete-file'
+      path: '/delete-file'
+      fullPath: '/api-docs/delete-file'
+      preLoaderRoute: typeof AuthenticatedApiDocsDeleteFileRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/create-task': {
+      id: '/_authenticated/api-docs/create-task'
+      path: '/create-task'
+      fullPath: '/api-docs/create-task'
+      preLoaderRoute: typeof AuthenticatedApiDocsCreateTaskRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/cancel-task': {
+      id: '/_authenticated/api-docs/cancel-task'
+      path: '/cancel-task'
+      fullPath: '/api-docs/cancel-task'
+      preLoaderRoute: typeof AuthenticatedApiDocsCancelTaskRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/agents/new': {
       id: '/_authenticated/agents/new'
       path: '/agents/new'
@@ -1072,15 +1316,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/profiles/$id/edit': {
-      id: '/_authenticated/profiles/$id/edit'
-      path: '/edit'
-      fullPath: '/profiles/$id/edit'
-      preLoaderRoute: typeof AuthenticatedProfilesIdEditRouteImport
-      parentRoute: typeof AuthenticatedProfilesIdRoute
-    }
   }
 }
+
+interface AuthenticatedApiDocsRouteRouteChildren {
+  AuthenticatedApiDocsCancelTaskRoute: typeof AuthenticatedApiDocsCancelTaskRoute
+  AuthenticatedApiDocsCreateTaskRoute: typeof AuthenticatedApiDocsCreateTaskRoute
+  AuthenticatedApiDocsDeleteFileRoute: typeof AuthenticatedApiDocsDeleteFileRoute
+  AuthenticatedApiDocsDownloadFileRoute: typeof AuthenticatedApiDocsDownloadFileRoute
+  AuthenticatedApiDocsGetFileRoute: typeof AuthenticatedApiDocsGetFileRoute
+  AuthenticatedApiDocsGetTaskRoute: typeof AuthenticatedApiDocsGetTaskRoute
+  AuthenticatedApiDocsGetTasksRoute: typeof AuthenticatedApiDocsGetTasksRoute
+  AuthenticatedApiDocsListFilesRoute: typeof AuthenticatedApiDocsListFilesRoute
+  AuthenticatedApiDocsStreamEventsRoute: typeof AuthenticatedApiDocsStreamEventsRoute
+  AuthenticatedApiDocsUploadFileRoute: typeof AuthenticatedApiDocsUploadFileRoute
+  AuthenticatedApiDocsIndexRoute: typeof AuthenticatedApiDocsIndexRoute
+}
+
+const AuthenticatedApiDocsRouteRouteChildren: AuthenticatedApiDocsRouteRouteChildren =
+  {
+    AuthenticatedApiDocsCancelTaskRoute: AuthenticatedApiDocsCancelTaskRoute,
+    AuthenticatedApiDocsCreateTaskRoute: AuthenticatedApiDocsCreateTaskRoute,
+    AuthenticatedApiDocsDeleteFileRoute: AuthenticatedApiDocsDeleteFileRoute,
+    AuthenticatedApiDocsDownloadFileRoute:
+      AuthenticatedApiDocsDownloadFileRoute,
+    AuthenticatedApiDocsGetFileRoute: AuthenticatedApiDocsGetFileRoute,
+    AuthenticatedApiDocsGetTaskRoute: AuthenticatedApiDocsGetTaskRoute,
+    AuthenticatedApiDocsGetTasksRoute: AuthenticatedApiDocsGetTasksRoute,
+    AuthenticatedApiDocsListFilesRoute: AuthenticatedApiDocsListFilesRoute,
+    AuthenticatedApiDocsStreamEventsRoute:
+      AuthenticatedApiDocsStreamEventsRoute,
+    AuthenticatedApiDocsUploadFileRoute: AuthenticatedApiDocsUploadFileRoute,
+    AuthenticatedApiDocsIndexRoute: AuthenticatedApiDocsIndexRoute,
+  }
+
+const AuthenticatedApiDocsRouteRouteWithChildren =
+  AuthenticatedApiDocsRouteRoute._addFileChildren(
+    AuthenticatedApiDocsRouteRouteChildren,
+  )
 
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
@@ -1105,21 +1378,8 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
-interface AuthenticatedProfilesIdRouteChildren {
-  AuthenticatedProfilesIdEditRoute: typeof AuthenticatedProfilesIdEditRoute
-}
-
-const AuthenticatedProfilesIdRouteChildren: AuthenticatedProfilesIdRouteChildren =
-  {
-    AuthenticatedProfilesIdEditRoute: AuthenticatedProfilesIdEditRoute,
-  }
-
-const AuthenticatedProfilesIdRouteWithChildren =
-  AuthenticatedProfilesIdRoute._addFileChildren(
-    AuthenticatedProfilesIdRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedApiDocsRouteRoute: typeof AuthenticatedApiDocsRouteRouteWithChildren
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAgentsIdRoute: typeof AuthenticatedAgentsIdRoute
@@ -1127,23 +1387,24 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedMcpServersIdRoute: typeof AuthenticatedMcpServersIdRoute
   AuthenticatedMcpServersNewRoute: typeof AuthenticatedMcpServersNewRoute
-  AuthenticatedProfilesIdRoute: typeof AuthenticatedProfilesIdRouteWithChildren
-  AuthenticatedProfilesNewRoute: typeof AuthenticatedProfilesNewRoute
   AuthenticatedSessionsIdRoute: typeof AuthenticatedSessionsIdRoute
   AuthenticatedSkillsIdRoute: typeof AuthenticatedSkillsIdRoute
   AuthenticatedSkillsNewRoute: typeof AuthenticatedSkillsNewRoute
+  AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
   AuthenticatedAgentsIndexRoute: typeof AuthenticatedAgentsIndexRoute
   AuthenticatedApiPlaygroundIndexRoute: typeof AuthenticatedApiPlaygroundIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
-  AuthenticatedCredentialsIndexRoute: typeof AuthenticatedCredentialsIndexRoute
+  AuthenticatedCommandCenterIndexRoute: typeof AuthenticatedCommandCenterIndexRoute
   AuthenticatedDemoIndexRoute: typeof AuthenticatedDemoIndexRoute
+  AuthenticatedFilesIndexRoute: typeof AuthenticatedFilesIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedHistoryIndexRoute: typeof AuthenticatedHistoryIndexRoute
   AuthenticatedImagesIndexRoute: typeof AuthenticatedImagesIndexRoute
   AuthenticatedMcpServersIndexRoute: typeof AuthenticatedMcpServersIndexRoute
   AuthenticatedMonitoringIndexRoute: typeof AuthenticatedMonitoringIndexRoute
-  AuthenticatedProfilesIndexRoute: typeof AuthenticatedProfilesIndexRoute
+  AuthenticatedProvidersIndexRoute: typeof AuthenticatedProvidersIndexRoute
+  AuthenticatedRuntimesIndexRoute: typeof AuthenticatedRuntimesIndexRoute
   AuthenticatedSessionsIndexRoute: typeof AuthenticatedSessionsIndexRoute
   AuthenticatedSkillStoreIndexRoute: typeof AuthenticatedSkillStoreIndexRoute
   AuthenticatedSkillsIndexRoute: typeof AuthenticatedSkillsIndexRoute
@@ -1154,6 +1415,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedApiDocsRouteRoute: AuthenticatedApiDocsRouteRouteWithChildren,
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAgentsIdRoute: AuthenticatedAgentsIdRoute,
@@ -1161,23 +1423,24 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedMcpServersIdRoute: AuthenticatedMcpServersIdRoute,
   AuthenticatedMcpServersNewRoute: AuthenticatedMcpServersNewRoute,
-  AuthenticatedProfilesIdRoute: AuthenticatedProfilesIdRouteWithChildren,
-  AuthenticatedProfilesNewRoute: AuthenticatedProfilesNewRoute,
   AuthenticatedSessionsIdRoute: AuthenticatedSessionsIdRoute,
   AuthenticatedSkillsIdRoute: AuthenticatedSkillsIdRoute,
   AuthenticatedSkillsNewRoute: AuthenticatedSkillsNewRoute,
+  AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
   AuthenticatedAgentsIndexRoute: AuthenticatedAgentsIndexRoute,
   AuthenticatedApiPlaygroundIndexRoute: AuthenticatedApiPlaygroundIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
-  AuthenticatedCredentialsIndexRoute: AuthenticatedCredentialsIndexRoute,
+  AuthenticatedCommandCenterIndexRoute: AuthenticatedCommandCenterIndexRoute,
   AuthenticatedDemoIndexRoute: AuthenticatedDemoIndexRoute,
+  AuthenticatedFilesIndexRoute: AuthenticatedFilesIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedHistoryIndexRoute: AuthenticatedHistoryIndexRoute,
   AuthenticatedImagesIndexRoute: AuthenticatedImagesIndexRoute,
   AuthenticatedMcpServersIndexRoute: AuthenticatedMcpServersIndexRoute,
   AuthenticatedMonitoringIndexRoute: AuthenticatedMonitoringIndexRoute,
-  AuthenticatedProfilesIndexRoute: AuthenticatedProfilesIndexRoute,
+  AuthenticatedProvidersIndexRoute: AuthenticatedProvidersIndexRoute,
+  AuthenticatedRuntimesIndexRoute: AuthenticatedRuntimesIndexRoute,
   AuthenticatedSessionsIndexRoute: AuthenticatedSessionsIndexRoute,
   AuthenticatedSkillStoreIndexRoute: AuthenticatedSkillStoreIndexRoute,
   AuthenticatedSkillsIndexRoute: AuthenticatedSkillsIndexRoute,

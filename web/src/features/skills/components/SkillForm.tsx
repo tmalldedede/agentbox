@@ -254,8 +254,8 @@ function GenerateTab() {
     }
 
     const session = sessions.find(s => s.id === selectedSession)
-    if (!session?.profile_id) {
-      toast.error('Selected session does not have a profile')
+    if (!session?.agent_id) {
+      toast.error('Selected session does not have an agent')
       return
     }
 
@@ -302,7 +302,7 @@ Follow the skill-creator workflow to generate a complete skill:
 - Follow the progressive disclosure principle`
 
       const task = await api.createTask({
-        profile_id: session.profile_id,
+        agent_id: session.agent_id,
         prompt,
       })
 
@@ -518,8 +518,8 @@ Follow the skill-creator workflow to generate a complete skill:
               <p className="text-sm text-secondary mb-3">
                 You need a running session to generate skills. Start a session first.
               </p>
-              <button onClick={() => navigate({ to: '/profiles' })} className="btn btn-secondary btn-sm">
-                Go to Profiles
+              <button onClick={() => navigate({ to: '/agents' })} className="btn btn-secondary btn-sm">
+                Go to Agents
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -537,7 +537,7 @@ Follow the skill-creator workflow to generate a complete skill:
             <option value="">Choose a session...</option>
             {runningSessions.map(session => (
               <option key={session.id} value={session.id}>
-                {session.profile_id ?? session.id.slice(0, 8)} ({session.id.slice(0, 8)})
+                {session.agent_id ?? session.id.slice(0, 8)} ({session.id.slice(0, 8)})
               </option>
             ))}
           </select>

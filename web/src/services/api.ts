@@ -1,15 +1,22 @@
 import type {
+  Engine,
   Session,
   Agent,
+  CreateAgentRequest,
+  UpdateAgentRequest,
+  RunAgentRequest,
+  AgentRunResult,
+  AgentRuntime,
+  CreateRuntimeRequest,
+  UpdateRuntimeRequest,
   ApiResponse,
   CreateSessionRequest,
   ExecRequest,
   ExecResponse,
   Execution,
-  Profile,
-  CreateProfileRequest,
-  CloneProfileRequest,
   Provider,
+  ProviderStats,
+  VerifyResult,
   CreateProviderRequest,
   UpdateProviderRequest,
   MCPServer,
@@ -24,13 +31,13 @@ import type {
   RemoteSkill,
   InstallSkillRequest,
   AddSourceRequest,
-  Credential,
-  CreateCredentialRequest,
-  UpdateCredentialRequest,
   Image,
   PullImageRequest,
   SystemHealth,
   SystemStats,
+  GCStats,
+  GCCandidate,
+  UpdateGCConfigRequest,
   CleanupContainersResponse,
   CleanupImagesRequest,
   CleanupImagesResponse,
@@ -38,16 +45,14 @@ import type {
   CreateWebhookRequest,
   UpdateWebhookRequest,
   Task,
+  TaskStats,
   CreateTaskRequest,
-  SmartAgent,
-  CreateSmartAgentRequest,
-  UpdateSmartAgentRequest,
-  RunSmartAgentRequest,
-  SmartAgentRunResult,
+  UploadedFile,
   HistoryEntry,
   HistoryStats,
   HistoryListResponse,
   HistoryFilter,
+  DashboardStats,
 } from '../types'
 
 const API_BASE = '/api/v1'
@@ -71,148 +76,24 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  // ==================== Public API ====================
-  // 参考 Manus API 设计
+  // ==================== Public API (Task-Centric) ====================
 
   // Health
   health: () => request<{ status: string; version: string }>(`${API_BASE}/health`),
 
-  // Engines (只读) - 底层引擎适配器列表
-  listEngines: () => request<Agent[]>(`${API_BASE}/engines`),
-  listAgents: () => request<Agent[]>(`${API_BASE}/engines`), // Alias for backward compatibility
+  // Engines (只读)
+  listEngines: () => request<Engine[]>(`${API_BASE}/engines`),
 
-  // SmartAgents (CRUD + Run) - 对外暴露的智能体 API
-  listSmartAgents: () => request<SmartAgent[]>(`${API_BASE}/agents`),
+  // Agents (只读 - 只暴露 active agents)
+  listAgents: () => request<Agent[]>(`${API_BASE}/agents`),
+  getAgent: (id: string) => request<Agent>(`${API_BASE}/agents/${id}`),
 
-  getSmartAgent: (id: string) => request<SmartAgent>(`${API_BASE}/agents/${id}`),
-
-  createSmartAgent: (req: CreateSmartAgentRequest) =>
-    request<SmartAgent>(`${API_BASE}/agents`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  updateSmartAgent: (id: string, req: UpdateSmartAgentRequest) =>
-    request<SmartAgent>(`${API_BASE}/agents/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(req),
-    }),
-
-  deleteSmartAgent: (id: string) =>
-    request<{ id: string; deleted: boolean }>(`${API_BASE}/agents/${id}`, {
-      method: 'DELETE',
-    }),
-
-  runSmartAgent: (id: string, req: RunSmartAgentRequest) =>
-    request<SmartAgentRunResult>(`${API_BASE}/agents/${id}/run`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  // Profiles (CRUD)
-  listProfiles: () => request<Profile[]>(`${API_BASE}/profiles`),
-
-  getProfile: (id: string) => request<Profile>(`${API_BASE}/profiles/${id}`),
-
-  getProfileResolved: (id: string) => request<Profile>(`${API_BASE}/profiles/${id}/resolved`),
-
-  createProfile: (req: CreateProfileRequest) =>
-    request<Profile>(`${API_BASE}/profiles`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  updateProfile: (id: string, req: CreateProfileRequest) =>
-    request<Profile>(`${API_BASE}/profiles/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(req),
-    }),
-
-  deleteProfile: (id: string) =>
-    request<void>(`${API_BASE}/profiles/${id}`, {
-      method: 'DELETE',
-    }),
-
-  cloneProfile: (id: string, req: CloneProfileRequest) =>
-    request<Profile>(`${API_BASE}/profiles/${id}/clone`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  // Providers (CRUD) - API 提供商配置
-  listProviders: (options?: { agent?: string; category?: string }) => {
-    const params = new URLSearchParams()
-    if (options?.agent) params.set('agent', options.agent)
-    if (options?.category) params.set('category', options.category)
-    const query = params.toString()
-    return request<Provider[]>(`${API_BASE}/providers${query ? `?${query}` : ''}`)
-  },
-
-  getProvider: (id: string) => request<Provider>(`${API_BASE}/providers/${id}`),
-
-  createProvider: (req: CreateProviderRequest) =>
-    request<Provider>(`${API_BASE}/providers`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  updateProvider: (id: string, req: UpdateProviderRequest) =>
-    request<Provider>(`${API_BASE}/providers/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(req),
-    }),
-
-  deleteProvider: (id: string) =>
-    request<void>(`${API_BASE}/providers/${id}`, {
-      method: 'DELETE',
-    }),
-
-  // Sessions (CRUD) - 类似 Manus Projects
-  listSessions: () => request<Session[]>(`${API_BASE}/sessions`),
-
-  getSession: (id: string) => request<Session>(`${API_BASE}/sessions/${id}`),
-
-  createSession: (req: CreateSessionRequest) =>
-    request<Session>(`${API_BASE}/sessions`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  deleteSession: (id: string) =>
-    request<{ deleted: string }>(`${API_BASE}/sessions/${id}`, {
-      method: 'DELETE',
-    }),
-
-  startSession: (id: string) =>
-    request<Session>(`${API_BASE}/sessions/${id}/start`, {
-      method: 'POST',
-    }),
-
-  stopSession: (id: string) =>
-    request<Session>(`${API_BASE}/sessions/${id}/stop`, {
-      method: 'POST',
-    }),
-
-  execSession: (id: string, req: ExecRequest) =>
-    request<ExecResponse>(`${API_BASE}/sessions/${id}/exec`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  getExecutions: (id: string) =>
-    request<Execution[]>(`${API_BASE}/sessions/${id}/executions`),
-
-  getExecution: (sessionId: string, execId: string) =>
-    request<Execution>(`${API_BASE}/sessions/${sessionId}/executions/${execId}`),
-
-  getSessionLogs: (id: string) =>
-    request<{ logs: string }>(`${API_BASE}/sessions/${id}/logs`),
-
-  // Tasks (CRUD) - 异步任务队列
-  listTasks: (options?: { status?: string; profile_id?: string; limit?: number; offset?: number }) => {
+  // Tasks (核心 API) - 创建/多轮/取消/SSE
+  listTasks: (options?: { status?: string; agent_id?: string; search?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams()
     if (options?.status) params.set('status', options.status)
-    if (options?.profile_id) params.set('profile_id', options.profile_id)
+    if (options?.agent_id) params.set('agent_id', options.agent_id)
+    if (options?.search) params.set('search', options.search)
     if (options?.limit) params.set('limit', options.limit.toString())
     if (options?.offset) params.set('offset', options.offset.toString())
     const query = params.toString()
@@ -221,6 +102,8 @@ export const api = {
 
   getTask: (id: string) => request<Task>(`${API_BASE}/tasks/${id}`),
 
+  getTaskStats: () => request<TaskStats>(`${API_BASE}/tasks/stats`),
+
   createTask: (req: CreateTaskRequest) =>
     request<Task>(`${API_BASE}/tasks`, {
       method: 'POST',
@@ -228,15 +111,58 @@ export const api = {
     }),
 
   cancelTask: (id: string) =>
-    request<Task>(`${API_BASE}/tasks/${id}`, {
+    request<Task>(`${API_BASE}/tasks/${id}/cancel`, {
+      method: 'POST',
+    }),
+
+  retryTask: (id: string) =>
+    request<Task>(`${API_BASE}/tasks/${id}/retry`, {
+      method: 'POST',
+    }),
+
+  deleteTask: (id: string) =>
+    request<{ deleted: boolean }>(`${API_BASE}/tasks/${id}`, {
       method: 'DELETE',
+    }),
+
+  cleanupTasks: (options?: { before_days?: number; statuses?: string[] }) =>
+    request<{ deleted: number }>(`${API_BASE}/tasks/cleanup`, {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
     }),
 
   getTaskOutput: (id: string) =>
     request<unknown>(`${API_BASE}/tasks/${id}/output`),
 
-  getTaskLogs: (id: string) =>
-    request<{ task_id: string; status: string; logs: string }>(`${API_BASE}/tasks/${id}/logs`),
+  // SSE 事件流
+  streamTaskEvents: (id: string): EventSource =>
+    new EventSource(`${API_BASE}/tasks/${id}/events`),
+
+  // Files (附件 API) - 文件上传/下载
+  listFiles: () => request<UploadedFile[]>(`${API_BASE}/files`),
+
+  getFile: (id: string) => request<UploadedFile>(`${API_BASE}/files/${id}`),
+
+  uploadFile: async (file: File): Promise<UploadedFile> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch(`${API_BASE}/files`, {
+      method: 'POST',
+      body: formData,
+    })
+    const data: ApiResponse<UploadedFile> = await response.json()
+    if (data.code !== 0) {
+      throw new Error(data.message)
+    }
+    return data.data as UploadedFile
+  },
+
+  deleteFile: (id: string) =>
+    request<{ deleted: string }>(`${API_BASE}/files/${id}`, {
+      method: 'DELETE',
+    }),
+
+  getFileDownloadUrl: (id: string) => `${API_BASE}/files/${id}/download`,
 
   // Webhooks (CRUD)
   listWebhooks: () => request<Webhook[]>(`${API_BASE}/webhooks`),
@@ -260,38 +186,194 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // History (只读) - 统一执行历史
+  // History (admin 只读) - 统一执行历史
   listHistory: (filter?: HistoryFilter) => {
     const params = new URLSearchParams()
     if (filter?.source_type) params.set('source_type', filter.source_type)
     if (filter?.source_id) params.set('source_id', filter.source_id)
-    if (filter?.profile_id) params.set('profile_id', filter.profile_id)
+    if (filter?.agent_id) params.set('agent_id', filter.agent_id)
     if (filter?.engine) params.set('engine', filter.engine)
     if (filter?.status) params.set('status', filter.status)
     if (filter?.limit) params.set('limit', filter.limit.toString())
     if (filter?.offset) params.set('offset', filter.offset.toString())
     const query = params.toString()
-    return request<HistoryListResponse>(`${API_BASE}/history${query ? `?${query}` : ''}`)
+    return request<HistoryListResponse>(`${ADMIN_BASE}/history${query ? `?${query}` : ''}`)
   },
 
-  getHistoryEntry: (id: string) => request<HistoryEntry>(`${API_BASE}/history/${id}`),
+  getHistoryEntry: (id: string) => request<HistoryEntry>(`${ADMIN_BASE}/history/${id}`),
 
   deleteHistoryEntry: (id: string) =>
-    request<{ id: string; deleted: boolean }>(`${API_BASE}/history/${id}`, {
+    request<{ id: string; deleted: boolean }>(`${ADMIN_BASE}/history/${id}`, {
       method: 'DELETE',
     }),
 
   getHistoryStats: (filter?: HistoryFilter) => {
     const params = new URLSearchParams()
     if (filter?.source_type) params.set('source_type', filter.source_type)
-    if (filter?.profile_id) params.set('profile_id', filter.profile_id)
+    if (filter?.agent_id) params.set('agent_id', filter.agent_id)
     if (filter?.engine) params.set('engine', filter.engine)
     const query = params.toString()
-    return request<HistoryStats>(`${API_BASE}/history/stats${query ? `?${query}` : ''}`)
+    return request<HistoryStats>(`${ADMIN_BASE}/history/stats${query ? `?${query}` : ''}`)
   },
 
   // ==================== Admin API ====================
-  // 平台管理接口
+
+  // Sessions (admin 调试用)
+  listSessions: () => request<Session[]>(`${ADMIN_BASE}/sessions`),
+
+  getSession: (id: string) => request<Session>(`${ADMIN_BASE}/sessions/${id}`),
+
+  createSession: (req: CreateSessionRequest) =>
+    request<Session>(`${ADMIN_BASE}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  deleteSession: (id: string) =>
+    request<{ deleted: string }>(`${ADMIN_BASE}/sessions/${id}`, {
+      method: 'DELETE',
+    }),
+
+  startSession: (id: string) =>
+    request<Session>(`${ADMIN_BASE}/sessions/${id}/start`, {
+      method: 'POST',
+    }),
+
+  stopSession: (id: string) =>
+    request<Session>(`${ADMIN_BASE}/sessions/${id}/stop`, {
+      method: 'POST',
+    }),
+
+  execSession: (id: string, req: ExecRequest) =>
+    request<ExecResponse>(`${ADMIN_BASE}/sessions/${id}/exec`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  getExecutions: (id: string) =>
+    request<Execution[]>(`${ADMIN_BASE}/sessions/${id}/executions`),
+
+  getExecution: (sessionId: string, execId: string) =>
+    request<Execution>(`${ADMIN_BASE}/sessions/${sessionId}/executions/${execId}`),
+
+  getSessionLogs: (id: string) =>
+    request<{ logs: string }>(`${ADMIN_BASE}/sessions/${id}/logs`),
+
+  // Agents (admin CRUD + Run)
+  createAgent: (req: CreateAgentRequest) =>
+    request<Agent>(`${ADMIN_BASE}/agents`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  updateAgent: (id: string, req: UpdateAgentRequest) =>
+    request<Agent>(`${ADMIN_BASE}/agents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  deleteAgent: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`${ADMIN_BASE}/agents/${id}`, {
+      method: 'DELETE',
+    }),
+
+  runAgent: (id: string, req: RunAgentRequest) =>
+    request<AgentRunResult>(`${ADMIN_BASE}/agents/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  // Providers (admin CRUD + Key 管理)
+  listProviders: (options?: { agent?: string; category?: string; configured?: boolean }) => {
+    const params = new URLSearchParams()
+    if (options?.agent) params.set('agent', options.agent)
+    if (options?.category) params.set('category', options.category)
+    if (options?.configured) params.set('configured', 'true')
+    const query = params.toString()
+    return request<Provider[]>(`${ADMIN_BASE}/providers${query ? `?${query}` : ''}`)
+  },
+
+  listProviderTemplates: () =>
+    request<Provider[]>(`${ADMIN_BASE}/providers/templates`),
+
+  getProviderStats: () =>
+    request<ProviderStats>(`${ADMIN_BASE}/providers/stats`),
+
+  verifyAllProviders: () =>
+    request<VerifyResult[]>(`${ADMIN_BASE}/providers/verify-all`, {
+      method: 'POST',
+    }),
+
+  getProvider: (id: string) => request<Provider>(`${ADMIN_BASE}/providers/${id}`),
+
+  createProvider: (req: CreateProviderRequest) =>
+    request<Provider>(`${ADMIN_BASE}/providers`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  updateProvider: (id: string, req: UpdateProviderRequest) =>
+    request<Provider>(`${ADMIN_BASE}/providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  deleteProvider: (id: string) =>
+    request<void>(`${ADMIN_BASE}/providers/${id}`, {
+      method: 'DELETE',
+    }),
+
+  configureProviderKey: (id: string, apiKey: string) =>
+    request<Provider>(`${ADMIN_BASE}/providers/${id}/key`, {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: apiKey }),
+    }),
+
+  verifyProviderKey: (id: string) =>
+    request<{ valid: boolean; message: string }>(`${ADMIN_BASE}/providers/${id}/verify`, {
+      method: 'POST',
+    }),
+
+  deleteProviderKey: (id: string) =>
+    request<Provider>(`${ADMIN_BASE}/providers/${id}/key`, {
+      method: 'DELETE',
+    }),
+
+  fetchProviderModels: (id: string) =>
+    request<string[]>(`${ADMIN_BASE}/providers/${id}/models`),
+
+  probeModels: (baseURL: string, apiKey: string, agents: string[]) =>
+    request<string[]>(`${ADMIN_BASE}/providers/probe-models`, {
+      method: 'POST',
+      body: JSON.stringify({ base_url: baseURL, api_key: apiKey, agents }),
+    }),
+
+  // Runtimes (管理接口) - 运行环境配置
+  listRuntimes: () => request<AgentRuntime[]>(`${ADMIN_BASE}/runtimes`),
+
+  getRuntime: (id: string) => request<AgentRuntime>(`${ADMIN_BASE}/runtimes/${id}`),
+
+  createRuntime: (req: CreateRuntimeRequest) =>
+    request<AgentRuntime>(`${ADMIN_BASE}/runtimes`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  updateRuntime: (id: string, req: UpdateRuntimeRequest) =>
+    request<AgentRuntime>(`${ADMIN_BASE}/runtimes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  deleteRuntime: (id: string) =>
+    request<{ deleted: string }>(`${ADMIN_BASE}/runtimes/${id}`, {
+      method: 'DELETE',
+    }),
+
+  setDefaultRuntime: (id: string) =>
+    request<AgentRuntime>(`${ADMIN_BASE}/runtimes/${id}/set-default`, {
+      method: 'POST',
+    }),
 
   // MCP Servers (管理接口)
   listMCPServers: (options?: { category?: string; enabled?: boolean }) => {
@@ -404,39 +486,6 @@ export const api = {
       method: 'POST',
     }),
 
-  // Credentials (管理接口)
-  listCredentials: (options?: { scope?: string; provider?: string }) => {
-    const params = new URLSearchParams()
-    if (options?.scope) params.set('scope', options.scope)
-    if (options?.provider) params.set('provider', options.provider)
-    const query = params.toString()
-    return request<Credential[]>(`${ADMIN_BASE}/credentials${query ? `?${query}` : ''}`)
-  },
-
-  getCredential: (id: string) => request<Credential>(`${ADMIN_BASE}/credentials/${id}`),
-
-  createCredential: (req: CreateCredentialRequest) =>
-    request<Credential>(`${ADMIN_BASE}/credentials`, {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-
-  updateCredential: (id: string, req: UpdateCredentialRequest) =>
-    request<Credential>(`${ADMIN_BASE}/credentials/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(req),
-    }),
-
-  deleteCredential: (id: string) =>
-    request<{ deleted: string }>(`${ADMIN_BASE}/credentials/${id}`, {
-      method: 'DELETE',
-    }),
-
-  verifyCredential: (id: string) =>
-    request<{ valid: boolean; message: string }>(`${ADMIN_BASE}/credentials/${id}/verify`, {
-      method: 'POST',
-    }),
-
   // Images (管理接口)
   listImages: (options?: { agentOnly?: boolean }) => {
     const params = new URLSearchParams()
@@ -456,6 +505,9 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Dashboard (态势感知大屏)
+  getDashboardStats: () => request<DashboardStats>(`${ADMIN_BASE}/dashboard/stats`),
+
   // System (管理接口)
   getSystemHealth: () => request<SystemHealth>(`${ADMIN_BASE}/system/health`),
 
@@ -470,5 +522,24 @@ export const api = {
     request<CleanupImagesResponse>(`${ADMIN_BASE}/system/cleanup/images`, {
       method: 'POST',
       body: JSON.stringify(req || { unused_only: true }),
+    }),
+
+  // GC (管理接口)
+  getGCStats: () => request<GCStats>(`${ADMIN_BASE}/system/gc/stats`),
+
+  triggerGC: () =>
+    request<{ removed: number }>(`${ADMIN_BASE}/system/gc/trigger`, {
+      method: 'POST',
+    }),
+
+  previewGC: () =>
+    request<GCCandidate[]>(`${ADMIN_BASE}/system/gc/preview`, {
+      method: 'POST',
+    }),
+
+  updateGCConfig: (req: UpdateGCConfigRequest) =>
+    request<GCStats>(`${ADMIN_BASE}/system/gc/config`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
     }),
 }

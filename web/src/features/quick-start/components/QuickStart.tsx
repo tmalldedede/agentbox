@@ -7,8 +7,7 @@ import {
   Sparkles,
   Box,
   ListTodo,
-  Layers,
-  RefreshCw,
+  Bot,
   Cpu,
   BookOpen,
   Zap,
@@ -16,42 +15,13 @@ import {
   Sun,
   Moon,
 } from 'lucide-react'
-import type { Agent, Profile } from '@/types'
+import type { Agent } from '@/types'
 import { api } from '@/services/api'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useTheme } from '@/context/theme-provider'
 import CreateSessionModal from '@/features/sessions/components/CreateSessionModal'
 
-// Agent 颜色配置
-const agentColors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
-  'claude-code': {
-    bg: 'bg-purple-500/10',
-    text: 'text-purple-400',
-    border: 'border-purple-500/30 hover:border-purple-400',
-    icon: 'bg-purple-500/20',
-  },
-  'codex': {
-    bg: 'bg-emerald-500/10',
-    text: 'text-emerald-400',
-    border: 'border-emerald-500/30 hover:border-emerald-400',
-    icon: 'bg-emerald-500/20',
-  },
-  'opencode': {
-    bg: 'bg-blue-500/10',
-    text: 'text-blue-400',
-    border: 'border-blue-500/30 hover:border-blue-400',
-    icon: 'bg-blue-500/20',
-  },
-}
-
-const defaultColors = {
-  bg: 'bg-gray-500/10',
-  text: 'text-gray-400',
-  border: 'border-gray-500/30 hover:border-gray-400',
-  icon: 'bg-gray-500/20',
-}
-
-// Agent 卡片
+// Agent card
 function AgentCard({
   agent,
   onClick,
@@ -61,7 +31,35 @@ function AgentCard({
   onClick: () => void
   language: string
 }) {
-  const colors = agentColors[agent.name] || defaultColors
+  const adapterColors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+    'claude-code': {
+      bg: 'bg-purple-500/10',
+      text: 'text-purple-400',
+      border: 'border-purple-500/30 hover:border-purple-400',
+      icon: 'bg-purple-500/20',
+    },
+    'codex': {
+      bg: 'bg-emerald-500/10',
+      text: 'text-emerald-400',
+      border: 'border-emerald-500/30 hover:border-emerald-400',
+      icon: 'bg-emerald-500/20',
+    },
+    'opencode': {
+      bg: 'bg-blue-500/10',
+      text: 'text-blue-400',
+      border: 'border-blue-500/30 hover:border-blue-400',
+      icon: 'bg-blue-500/20',
+    },
+  }
+
+  const defaultColors = {
+    bg: 'bg-gray-500/10',
+    text: 'text-gray-400',
+    border: 'border-gray-500/30 hover:border-gray-400',
+    icon: 'bg-gray-500/20',
+  }
+
+  const colors = adapterColors[agent.adapter] || defaultColors
 
   return (
     <button
@@ -70,16 +68,20 @@ function AgentCard({
     >
       <div className="flex items-start justify-between mb-4">
         <div className={`w-14 h-14 rounded-xl ${colors.icon} flex items-center justify-center`}>
-          <Terminal className={`w-7 h-7 ${colors.text}`} />
+          {agent.icon ? (
+            <span className="text-2xl">{agent.icon}</span>
+          ) : (
+            <Terminal className={`w-7 h-7 ${colors.text}`} />
+          )}
         </div>
         <ArrowRight className={`w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all ${colors.text}`} />
       </div>
-      <h3 className="text-lg font-bold text-foreground mb-1">{agent.display_name}</h3>
-      <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{agent.description}</p>
+      <h3 className="text-lg font-bold text-foreground mb-1">{agent.name}</h3>
+      <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{agent.description || agent.adapter}</p>
       <div className="flex items-center justify-between">
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
           <Sparkles className="w-3 h-3" />
-          Ready
+          {agent.adapter}
         </span>
         <span className={`text-sm font-medium ${colors.text} opacity-0 group-hover:opacity-100 transition-opacity`}>
           {language === 'zh' ? '点击开始 →' : 'Click to start →'}
@@ -89,12 +91,11 @@ function AgentCard({
   )
 }
 
-// 概念卡片
+// Concept card
 function ConceptCard({
   icon,
   title,
   description,
-  color,
 }: {
   icon: React.ReactNode
   title: string
@@ -102,9 +103,9 @@ function ConceptCard({
   color: string
 }) {
   return (
-    <div className={`p-4 rounded-xl border border-border bg-card`}>
+    <div className="p-4 rounded-xl border border-border bg-card">
       <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center flex-shrink-0`}>
+        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
           {icon}
         </div>
         <div>
@@ -122,7 +123,6 @@ export default function QuickStart() {
   const { theme, setTheme } = useTheme()
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
   const [agents, setAgents] = useState<Agent[]>([])
-  const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
@@ -130,12 +130,8 @@ export default function QuickStart() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [agentsData, profilesData] = await Promise.all([
-          api.listAgents(),
-          api.listProfiles(),
-        ])
+        const agentsData = await api.listAgents()
         setAgents(agentsData || [])
-        setProfiles(profilesData || [])
       } catch {
         // Ignore
       } finally {
@@ -152,9 +148,15 @@ export default function QuickStart() {
 
   const concepts = language === 'zh' ? [
     {
+      icon: <Bot className="w-5 h-5 text-purple-400" />,
+      title: 'Agent（智能体）',
+      description: '组合 Provider + Runtime + Skills + 系统提示词的可部署 AI 助手',
+      color: 'bg-purple-500/10',
+    },
+    {
       icon: <Terminal className="w-5 h-5 text-emerald-400" />,
       title: 'Session（会话）',
-      description: '一个运行中的 Agent 容器，包含独立的工作目录和执行环境',
+      description: '一个运行中的 Agent 容器实例，包含独立的工作目录和执行环境',
       color: 'bg-emerald-500/10',
     },
     {
@@ -163,17 +165,17 @@ export default function QuickStart() {
       description: '异步执行的后台任务，可以批量处理，自动通知结果',
       color: 'bg-blue-500/10',
     },
+  ] : [
     {
-      icon: <Layers className="w-5 h-5 text-purple-400" />,
-      title: 'Profile（配置）',
-      description: 'Agent 的预设配置模板，包含模型、MCP 服务器、权限等',
+      icon: <Bot className="w-5 h-5 text-purple-400" />,
+      title: 'Agent',
+      description: 'A deployable AI assistant combining Provider + Runtime + Skills + system prompt',
       color: 'bg-purple-500/10',
     },
-  ] : [
     {
       icon: <Terminal className="w-5 h-5 text-emerald-400" />,
       title: 'Session',
-      description: 'A running Agent container with isolated workspace and execution environment',
+      description: 'A running Agent container instance with isolated workspace and execution environment',
       color: 'bg-emerald-500/10',
     },
     {
@@ -181,12 +183,6 @@ export default function QuickStart() {
       title: 'Task',
       description: 'Async background job that can be batched and auto-notifies on completion',
       color: 'bg-blue-500/10',
-    },
-    {
-      icon: <Layers className="w-5 h-5 text-purple-400" />,
-      title: 'Profile',
-      description: 'Pre-configured template with model, MCP servers, permissions, etc.',
-      color: 'bg-purple-500/10',
     },
   ]
 
@@ -248,21 +244,20 @@ export default function QuickStart() {
                   {language === 'zh' ? '没有可用的 Agent' : 'No agents available'}
                 </p>
                 <p className="text-muted-foreground text-sm mt-1">
-                  {language === 'zh' ? '请检查 Docker 连接' : 'Check your Docker connection'}
+                  {language === 'zh' ? '请先创建一个 Agent' : 'Create an agent first'}
                 </p>
                 <button
-                  onClick={() => window.location.reload()}
-                  className="btn btn-secondary mt-4"
+                  onClick={() => navigate({ to: '/agents/new' })}
+                  className="btn btn-primary mt-4"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  {language === 'zh' ? '刷新' : 'Refresh'}
+                  {language === 'zh' ? '创建 Agent' : 'Create Agent'}
                 </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {agents.map(agent => (
+                {agents.slice(0, 6).map(agent => (
                   <AgentCard
-                    key={agent.name}
+                    key={agent.id}
                     agent={agent}
                     language={language}
                     onClick={() => handleAgentClick(agent)}
@@ -294,25 +289,25 @@ export default function QuickStart() {
           {/* Quick Links */}
           <div className="flex items-center justify-center gap-4">
             <button
-              onClick={() => navigate({ to: '/' })}
+              onClick={() => navigate({ to: '/sessions' })}
               className="btn btn-secondary"
             >
               <Terminal className="w-4 h-4" />
               {language === 'zh' ? '查看会话列表' : 'View Sessions'}
             </button>
             <button
-              onClick={() => navigate({ to: '/tasks' })}
+              onClick={() => navigate({ to: '/agents' })}
               className="btn btn-secondary"
             >
-              <ListTodo className="w-4 h-4" />
-              {language === 'zh' ? '异步任务' : 'Async Tasks'}
+              <Bot className="w-4 h-4" />
+              {language === 'zh' ? '管理 Agent' : 'Manage Agents'}
             </button>
             <button
-              onClick={() => navigate({ to: '/profiles' })}
+              onClick={() => navigate({ to: '/providers' })}
               className="btn btn-secondary"
             >
               <Box className="w-4 h-4" />
-              {language === 'zh' ? '配置模板' : 'Profiles'}
+              {language === 'zh' ? '配置 Provider' : 'Providers'}
             </button>
           </div>
         </div>
@@ -322,8 +317,7 @@ export default function QuickStart() {
       {showCreate && (
         <CreateSessionModal
           agents={agents}
-          profiles={profiles}
-          defaultAgent={selectedAgent?.name}
+          defaultAgentId={selectedAgent?.id}
           onClose={() => {
             setShowCreate(false)
             setSelectedAgent(null)
@@ -331,7 +325,7 @@ export default function QuickStart() {
           onCreated={() => {
             setShowCreate(false)
             setSelectedAgent(null)
-            navigate({ to: '/' })
+            navigate({ to: '/sessions' })
           }}
         />
       )}

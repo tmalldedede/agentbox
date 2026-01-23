@@ -1,8 +1,5 @@
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import MCPServerDetail from './components/MCPServerDetail'
 
 type MCPServerDetailPageProps = {
@@ -12,14 +9,8 @@ type MCPServerDetailPageProps = {
 export function MCPServerDetailPage({ serverId }: MCPServerDetailPageProps) {
   return (
     <>
-      <Header>
-        <Search />
-        <div className="ml-auto flex items-center gap-4">
-          <ThemeSwitch />
-          <ProfileDropdown />
-        </div>
-      </Header>
-      <Main>
+      <Header fixed className='md:hidden' />
+      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <MCPServerDetail serverId={serverId} />
       </Main>
     </>
