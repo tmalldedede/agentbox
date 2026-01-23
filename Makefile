@@ -25,6 +25,19 @@ dev:
 	@command -v air > /dev/null || (echo "Installing air..." && go install github.com/air-verse/air@latest)
 	air
 
+# 前后端同时启动
+dev-all:
+	@echo "Cleaning up old processes..."
+	@-lsof -ti :5173 | xargs kill 2>/dev/null || true
+	@-lsof -ti :18080 | xargs kill 2>/dev/null || true
+	@echo "Cleaning up old agent containers..."
+	@-docker rm -f $$(docker ps -aq --filter "ancestor=agentbox/agent:latest") 2>/dev/null || true
+	@echo "Starting backend and frontend..."
+	@trap 'kill 0' EXIT; \
+	(cd web && pnpm dev) & \
+	(command -v air > /dev/null || go install github.com/air-verse/air@latest; air) & \
+	wait
+
 # 测试
 test:
 	$(GO) test -v ./...
