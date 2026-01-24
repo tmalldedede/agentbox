@@ -11,6 +11,14 @@ import (
 	"github.com/tmalldedede/agentbox/internal/session"
 )
 
+// truncateID safely truncates an ID to maxLen characters
+func truncateID(id string, maxLen int) string {
+	if len(id) <= maxLen {
+		return id
+	}
+	return id[:maxLen]
+}
+
 // SystemHandler 系统维护 API 处理器
 type SystemHandler struct {
 	containerMgr container.Manager
@@ -284,10 +292,11 @@ func (h *SystemHandler) CleanupContainers(c *gin.Context) {
 		if !sessionContainerIDs[ctr.ID] {
 			// 先停止再删除
 			_ = h.containerMgr.Stop(ctx, ctr.ID)
+			shortID := truncateID(ctr.ID, 12)
 			if err := h.containerMgr.Remove(ctx, ctr.ID); err != nil {
-				resp.Errors = append(resp.Errors, ctr.ID[:12]+": "+err.Error())
+				resp.Errors = append(resp.Errors, shortID+": "+err.Error())
 			} else {
-				resp.Removed = append(resp.Removed, ctr.ID[:12])
+				resp.Removed = append(resp.Removed, shortID)
 			}
 		}
 	}

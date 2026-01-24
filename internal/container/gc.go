@@ -169,8 +169,9 @@ func (gc *GarbageCollector) RunOnce(ctx context.Context) error {
 		}
 
 		if shouldRemove {
+			shortID := truncateContainerID(ctr.ID)
 			gc.logger.Info("removing container",
-				"container_id", ctr.ID[:12],
+				"container_id", shortID,
 				"reason", reason,
 				"status", ctr.Status,
 			)
@@ -178,8 +179,8 @@ func (gc *GarbageCollector) RunOnce(ctx context.Context) error {
 			// 先停止再删除
 			_ = gc.containerMgr.Stop(ctx, ctr.ID)
 			if err := gc.containerMgr.Remove(ctx, ctr.ID); err != nil {
-				gc.recordError("remove " + ctr.ID[:12] + ": " + err.Error())
-				gc.logger.Error("failed to remove container", "container_id", ctr.ID[:12], "error", err)
+				gc.recordError("remove " + shortID + ": " + err.Error())
+				gc.logger.Error("failed to remove container", "container_id", shortID, "error", err)
 			} else {
 				removed++
 			}
@@ -310,4 +311,12 @@ func (gc *GarbageCollector) recordError(msg string) {
 	if len(gc.stats.Errors) > 20 {
 		gc.stats.Errors = gc.stats.Errors[len(gc.stats.Errors)-20:]
 	}
+}
+
+// truncateContainerID safely truncates a container ID to 12 characters for display
+func truncateContainerID(id string) string {
+	if len(id) <= 12 {
+		return id
+	}
+	return id[:12]
 }
