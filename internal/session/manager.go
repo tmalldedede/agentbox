@@ -174,8 +174,12 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	containerConfig.Resources.CPULimit = session.Config.CPULimit
 	containerConfig.Resources.MemoryLimit = session.Config.MemoryLimit
 
-	// 应用 Runtime 的网络和特权配置（覆盖适配器默认值）
+	// 应用 Runtime 配置（覆盖适配器默认值）
 	if fullConfig != nil && fullConfig.Runtime != nil {
+		// 镜像覆盖（关键：允许使用预装依赖的技能镜像）
+		if fullConfig.Runtime.Image != "" {
+			containerConfig.Image = fullConfig.Runtime.Image
+		}
 		if fullConfig.Runtime.Network != "" {
 			containerConfig.NetworkMode = fullConfig.Runtime.Network
 		}
