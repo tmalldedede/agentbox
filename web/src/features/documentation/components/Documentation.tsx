@@ -1,274 +1,418 @@
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
-  ArrowLeft,
   BookOpen,
   Key,
   Rocket,
-  Code,
   Terminal,
   AlertCircle,
   CheckCircle2,
   Copy,
+  Bot,
+  Layers,
+  FileText,
+  Zap,
+  Shield,
+  ExternalLink,
+  ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
+import { Badge } from '@/components/ui/badge'
 
 export default function Documentation() {
-  const navigate = useNavigate()
-  const [copiedStep, setCopiedStep] = useState<string | null>(null)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
-  const copyToClipboard = async (text: string, step: string) => {
+  const copyToClipboard = async (text: string, id: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      setCopiedStep(step)
+      setCopiedCode(id)
       toast.success('Copied to clipboard')
-      setTimeout(() => setCopiedStep(null), 2000)
+      setTimeout(() => setCopiedCode(null), 2000)
     } catch {
-      toast.error('Failed to copy to clipboard')
+      toast.error('Failed to copy')
     }
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="app-header">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate({ to: '/' })} className="btn btn-ghost btn-icon">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-5 h-5 text-emerald-400" />
-            <span className="font-semibold">Getting Started with AgentBox</span>
+    <div className="space-y-8">
+      {/* Hero */}
+      <div className="rounded-lg border bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 p-8">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+            <BookOpen className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Getting Started</h1>
+            <p className="text-muted-foreground">Learn how to use AgentBox in 5 minutes</p>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-4xl mx-auto p-6 space-y-8">
-        <div className="text-center py-8">
-          <h1 className="text-4xl font-bold text-primary mb-4">Welcome to AgentBox! 🎉</h1>
-          <p className="text-lg text-secondary max-w-2xl mx-auto">
-            Run AI coding assistants in isolated containers with full control over tools,
-            skills, and permissions. Let's get you set up in 5 minutes.
-          </p>
-        </div>
+      {/* Quick Links */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <QuickLink
+          icon={Bot}
+          title="Create Task"
+          description="Run your first AI task"
+          to="/tasks"
+        />
+        <QuickLink
+          icon={Layers}
+          title="Batch Processing"
+          description="Process multiple inputs"
+          to="/batches"
+        />
+        <QuickLink
+          icon={FileText}
+          title="API Reference"
+          description="Integrate via REST API"
+          to="/api-docs"
+        />
+      </div>
 
-        <div className="card p-8 bg-gradient-to-br from-emerald-500/10 to-blue-500/10 border-emerald-500/30">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-              <Rocket className="w-6 h-6 text-emerald-400" />
+      {/* Setup Steps */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Rocket className="h-5 w-5 text-primary" />
+            Quick Setup
+          </CardTitle>
+          <CardDescription>
+            Follow these steps to start using AgentBox
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Step 1 */}
+          <SetupStep
+            number={1}
+            title="Configure a Provider"
+            icon={Key}
+            iconColor="text-amber-500"
+          >
+            <p className="text-sm text-muted-foreground mb-3">
+              Add your LLM API key in the Providers settings. AgentBox supports multiple providers:
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ProviderCard
+                name="Anthropic (Claude)"
+                description="Best for code understanding"
+                url="https://console.anthropic.com"
+                badge="Recommended"
+              />
+              <ProviderCard
+                name="OpenAI"
+                description="GPT-4 and GPT-3.5"
+                url="https://platform.openai.com"
+              />
+              <ProviderCard
+                name="智谱 AI"
+                description="GLM-4 系列模型"
+                url="https://open.bigmodel.cn"
+              />
+              <ProviderCard
+                name="DeepSeek"
+                description="DeepSeek Coder"
+                url="https://platform.deepseek.com"
+              />
             </div>
-            <h2 className="text-2xl font-bold text-primary">Quick Setup (5 minutes)</h2>
-          </div>
+          </SetupStep>
 
-          <div className="space-y-6">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-lg">
-                1
-              </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-primary mb-2 flex items-center gap-2">
-                  <Key className="w-5 h-5 text-amber-400" />
-                  Get Your API Key
-                </h3>
-                <p className="text-secondary mb-4">
-                  You need an API key from Anthropic (Claude) or OpenAI. Choose one based on your preference:
-                </p>
+          {/* Step 2 */}
+          <SetupStep
+            number={2}
+            title="Create an Agent"
+            icon={Bot}
+            iconColor="text-blue-500"
+          >
+            <p className="text-sm text-muted-foreground mb-3">
+              Agents define how tasks are executed. Configure:
+            </p>
+            <ul className="text-sm text-muted-foreground space-y-1.5 list-disc list-inside">
+              <li><strong>Adapter</strong>: claude-code, codex, or custom</li>
+              <li><strong>Model</strong>: Which LLM to use</li>
+              <li><strong>System Prompt</strong>: Instructions for the agent</li>
+              <li><strong>Permissions</strong>: What tools the agent can use</li>
+            </ul>
+          </SetupStep>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-secondary border border-default">
-                    <h4 className="font-semibold text-primary mb-2">Anthropic (Recommended)</h4>
-                    <p className="text-sm text-secondary mb-3">
-                      Get Claude API key for best reasoning and code understanding
-                    </p>
-                    <ol className="space-y-2 text-sm text-secondary list-decimal list-inside">
-                      <li>
-                        Visit{' '}
-                        <a
-                          href="https://console.anthropic.com"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-emerald-400 hover:underline"
-                        >
-                          console.anthropic.com
-                        </a>
-                      </li>
-                      <li>Sign up or log in</li>
-                      <li>Go to "API Keys" section</li>
-                      <li>Click "Create Key"</li>
-                      <li>
-                        Copy the key (starts with{' '}
-                        <code className="text-emerald-400">sk-ant-</code>)
-                      </li>
-                    </ol>
-                    <div className="mt-3 p-2 rounded bg-blue-500/10 border border-blue-500/20">
-                      <p className="text-xs text-blue-400">💡 New users get $5 free credits</p>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-lg bg-secondary border border-default">
-                    <h4 className="font-semibold text-primary mb-2">OpenAI</h4>
-                    <p className="text-sm text-secondary mb-3">
-                      Get OpenAI API key for GPT models
-                    </p>
-                    <ol className="space-y-2 text-sm text-secondary list-decimal list-inside">
-                      <li>
-                        Visit{' '}
-                        <a
-                          href="https://platform.openai.com"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-emerald-400 hover:underline"
-                        >
-                          platform.openai.com
-                        </a>
-                      </li>
-                      <li>Sign up or log in</li>
-                      <li>Navigate to "API Keys"</li>
-                      <li>Create a new secret key</li>
-                      <li>
-                        Copy the key (starts with{' '}
-                        <code className="text-emerald-400">sk-</code>)
-                      </li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-lg">
-                2
-              </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-primary mb-2 flex items-center gap-2">
-                  <Terminal className="w-5 h-5 text-blue-400" />
-                  Add Your API Key
-                </h3>
-                <p className="text-secondary mb-4">Go to Settings and add your API key:</p>
-                <div className="bg-secondary p-4 rounded-lg border border-default">
-                  <ol className="space-y-2 text-sm text-secondary list-decimal list-inside">
-                    <li>Click the Settings gear icon in the sidebar</li>
-                    <li>Find the API Keys section</li>
-                    <li>Paste your key in the appropriate field</li>
-                    <li>Click Save</li>
-                  </ol>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-lg">
-                3
-              </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-primary mb-2 flex items-center gap-2">
-                  <Code className="w-5 h-5 text-purple-400" />
-                  Create Your First Session
-                </h3>
-                <p className="text-secondary mb-4">Start a new coding session:</p>
-                <div className="bg-secondary p-4 rounded-lg border border-default">
-                  <ol className="space-y-2 text-sm text-secondary list-decimal list-inside">
-                    <li>Go to the Sessions page</li>
-                    <li>Click "New Session"</li>
-                    <li>Choose your agent (Claude Code recommended)</li>
-                    <li>Select your workspace directory</li>
-                    <li>Click Create</li>
-                  </ol>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-              <Terminal className="w-6 h-6 text-blue-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-primary">Common Commands</h2>
-          </div>
-
-          <div className="space-y-4">
-            <CommandCard
-              title="Create a commit"
-              description="Generate a conventional commit message based on your staged changes"
-              command="/commit"
-              onCopy={() => copyToClipboard('/commit', 'commit')}
-              copied={copiedStep === 'commit'}
+          {/* Step 3 */}
+          <SetupStep
+            number={3}
+            title="Run a Task"
+            icon={Zap}
+            iconColor="text-green-500"
+          >
+            <p className="text-sm text-muted-foreground mb-3">
+              Submit a prompt to your agent via UI or API:
+            </p>
+            <CodeBlock
+              code={`curl -X POST http://localhost:18080/api/v1/tasks \\
+  -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_id": "agent-xxx", "prompt": "Hello, world!"}'`}
+              onCopy={() => copyToClipboard('curl...', 'task')}
+              copied={copiedCode === 'task'}
             />
-            <CommandCard
-              title="Review a PR"
-              description="Analyze a pull request and provide feedback"
-              command="/review-pr"
-              onCopy={() => copyToClipboard('/review-pr', 'review-pr')}
-              copied={copiedStep === 'review-pr'}
+          </SetupStep>
+        </CardContent>
+      </Card>
+
+      {/* Features */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            Key Features
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FeatureCard
+              icon={Bot}
+              title="Multi-Engine Support"
+              description="Use Claude Code, Codex, or custom adapters. Switch engines without changing your code."
             />
-            <CommandCard
-              title="Summarize changes"
-              description="Get a summary of your git diff"
-              command="/summarize"
-              onCopy={() => copyToClipboard('/summarize', 'summarize')}
-              copied={copiedStep === 'summarize'}
+            <FeatureCard
+              icon={Layers}
+              title="Batch Processing"
+              description="Process thousands of tasks in parallel with rate limiting, retries, and progress tracking."
+            />
+            <FeatureCard
+              icon={Terminal}
+              title="Real-time Streaming"
+              description="Watch task execution in real-time via SSE. See agent thinking, tool calls, and results."
+            />
+            <FeatureCard
+              icon={Shield}
+              title="Enterprise Security"
+              description="Role-based access control, isolated containers, and audit logging for compliance."
             />
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="card p-8 bg-amber-500/5 border-amber-500/20">
+      {/* FAQ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-primary" />
+            FAQ
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="docker">
+              <AccordionTrigger>Do I need Docker?</AccordionTrigger>
+              <AccordionContent>
+                Yes, AgentBox runs each task in an isolated Docker container for security.
+                Make sure Docker Desktop is running before creating tasks.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="models">
+              <AccordionTrigger>Which models are supported?</AccordionTrigger>
+              <AccordionContent>
+                Any OpenAI-compatible API works. We recommend Claude Sonnet 3.5/4 for best results.
+                Also supports GPT-4, DeepSeek, GLM-4, and local models via Ollama.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="pricing">
+              <AccordionTrigger>How much does it cost?</AccordionTrigger>
+              <AccordionContent>
+                AgentBox is open source and free. You only pay for the LLM API calls to your provider.
+                Most tasks cost $0.01-0.10 depending on the model and complexity.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="security">
+              <AccordionTrigger>Is it secure for production?</AccordionTrigger>
+              <AccordionContent>
+                Yes. Each task runs in an isolated container with restricted permissions.
+                API keys are encrypted, and role-based access control prevents unauthorized access.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
+
+      {/* Next Steps */}
+      <Card className="border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+        <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0" />
             <div>
-              <h3 className="font-semibold text-primary mb-2">Need Help?</h3>
-              <p className="text-secondary mb-3">
-                If you run into issues, check the following:
+              <h3 className="font-semibold mb-2">Ready to Start!</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                You now have everything you need. Create your first task and watch the magic happen.
               </p>
-              <ul className="space-y-2 text-sm text-secondary">
-                <li>• Make sure Docker is running</li>
-                <li>• Verify your API key is valid</li>
-                <li>• Check that your workspace path exists</li>
-                <li>• Review logs in the session detail page</li>
-              </ul>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild>
+                  <Link to="/tasks">
+                    Create Task
+                    <ChevronRight className="ml-1 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link to="/api-docs">View API Docs</Link>
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
-        <div className="card p-8 bg-emerald-500/5 border-emerald-500/20">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-primary mb-2">You're Ready to Go!</h3>
-              <p className="text-secondary">
-                Start by creating a session and asking your agent to help with your coding tasks.
-                You can customize profiles, add MCP servers, and create custom skills as you go.
-              </p>
-            </div>
+function QuickLink({
+  icon: Icon,
+  title,
+  description,
+  to,
+}: {
+  icon: React.ElementType
+  title: string
+  description: string
+  to: string
+}) {
+  return (
+    <Link to={to}>
+      <Card className="h-full transition-colors hover:bg-muted/50">
+        <CardContent className="flex items-center gap-3 p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Icon className="h-5 w-5 text-primary" />
           </div>
-        </div>
+          <div>
+            <h3 className="font-medium">{title}</h3>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+          <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
+function SetupStep({
+  number,
+  title,
+  icon: Icon,
+  iconColor,
+  children,
+}: {
+  number: number
+  title: string
+  icon: React.ElementType
+  iconColor: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex gap-4">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+        {number}
+      </div>
+      <div className="flex-1 space-y-3">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Icon className={cn('h-4 w-4', iconColor)} />
+          {title}
+        </h3>
+        {children}
       </div>
     </div>
   )
 }
 
-function CommandCard({
+function ProviderCard({
+  name,
+  description,
+  url,
+  badge,
+}: {
+  name: string
+  description: string
+  url: string
+  badge?: string
+}) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-lg border p-3 transition-colors hover:bg-muted/50"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-medium text-sm">{name}</span>
+        {badge && <Badge variant="secondary" className="text-xs">{badge}</Badge>}
+      </div>
+      <p className="text-xs text-muted-foreground flex items-center gap-1">
+        {description}
+        <ExternalLink className="h-3 w-3" />
+      </p>
+    </a>
+  )
+}
+
+function FeatureCard({
+  icon: Icon,
   title,
   description,
-  command: _command,
+}: {
+  icon: React.ElementType
+  title: string
+  description: string
+}) {
+  return (
+    <div className="flex gap-3 p-3 rounded-lg border">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div>
+        <h4 className="font-medium text-sm">{title}</h4>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+function CodeBlock({
+  code,
   onCopy,
   copied,
 }: {
-  title: string
-  description: string
-  command: string
+  code: string
   onCopy: () => void
   copied: boolean
 }) {
   return (
-    <div className="p-4 rounded-lg bg-secondary border border-default flex items-center justify-between">
-      <div>
-        <h4 className="font-semibold text-primary mb-1">{title}</h4>
-        <p className="text-sm text-secondary">{description}</p>
-      </div>
-      <button onClick={onCopy} className="btn btn-ghost btn-icon">
-        {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-      </button>
+    <div className="relative">
+      <pre className="rounded-lg bg-muted p-4 text-xs overflow-x-auto">
+        <code>{code}</code>
+      </pre>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="absolute top-2 right-2 h-7 w-7"
+        onClick={onCopy}
+      >
+        {copied ? (
+          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </Button>
     </div>
   )
 }
