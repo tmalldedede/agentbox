@@ -72,6 +72,11 @@ func BadRequest(c *gin.Context, message string) {
 	Error(c, http.StatusBadRequest, message)
 }
 
+// Forbidden 403 错误
+func Forbidden(c *gin.Context, message string) {
+	Error(c, http.StatusForbidden, message)
+}
+
 // NotFound 404 错误
 func NotFound(c *gin.Context, message string) {
 	Error(c, http.StatusNotFound, message)

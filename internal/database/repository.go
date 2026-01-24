@@ -285,7 +285,7 @@ func (r *BatchRepository) Get(id string) (*BatchModel, error) {
 }
 
 // List retrieves batches with optional filters
-func (r *BatchRepository) List(status string, agentID string, limit, offset int) ([]BatchModel, int64, error) {
+func (r *BatchRepository) List(status string, agentID string, userID string, limit, offset int) ([]BatchModel, int64, error) {
 	var models []BatchModel
 	var total int64
 
@@ -295,6 +295,9 @@ func (r *BatchRepository) List(status string, agentID string, limit, offset int)
 	}
 	if agentID != "" {
 		query = query.Where("agent_id = ?", agentID)
+	}
+	if userID != "" {
+		query = query.Where("user_id = ?", userID)
 	}
 
 	// Count total

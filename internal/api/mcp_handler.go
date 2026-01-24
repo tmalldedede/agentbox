@@ -1,10 +1,24 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/tmalldedede/agentbox/internal/apperr"
 	"github.com/tmalldedede/agentbox/internal/mcp"
 )
+
+// isValidationError checks if an error is a validation error based on message content
+func isValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "is required") ||
+		strings.Contains(msg, "invalid") ||
+		strings.Contains(msg, "must be") ||
+		strings.Contains(msg, "cannot be empty")
+}
 
 // MCPHandler MCP Server API 处理器
 type MCPHandler struct {
@@ -75,6 +89,11 @@ func (h *MCPHandler) Create(c *gin.Context) {
 
 	server, err := h.manager.Create(&req)
 	if err != nil {
+		// Wrap validation errors from Server.Validate()
+		if isValidationError(err) {
+			HandleError(c, apperr.Validation(err.Error()))
+			return
+		}
 		HandleError(c, err)
 		return
 	}
@@ -95,6 +114,10 @@ func (h *MCPHandler) Update(c *gin.Context) {
 
 	server, err := h.manager.Update(id, &req)
 	if err != nil {
+		if isValidationError(err) {
+			HandleError(c, apperr.Validation(err.Error()))
+			return
+		}
 		HandleError(c, err)
 		return
 	}
@@ -131,6 +154,10 @@ func (h *MCPHandler) Clone(c *gin.Context) {
 
 	server, err := h.manager.Clone(id, req.NewID, req.NewName)
 	if err != nil {
+		if isValidationError(err) {
+			HandleError(c, apperr.Validation(err.Error()))
+			return
+		}
 		HandleError(c, err)
 		return
 	}
