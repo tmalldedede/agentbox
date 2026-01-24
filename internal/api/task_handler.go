@@ -60,6 +60,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		AgentID:     req.AgentID,
 		Prompt:      req.Prompt,
 		TaskID:      req.TaskID,
+		UserID:      c.GetString("user_id"),
 		Attachments: req.Attachments,
 		WebhookURL:  req.WebhookURL,
 		Timeout:     req.Timeout,
@@ -84,6 +85,11 @@ type ListTasksResponse struct {
 func (h *TaskHandler) List(c *gin.Context) {
 	filter := &task.ListFilter{
 		OrderDesc: true,
+	}
+
+	// 非 admin 用户只能看自己的任务
+	if role := c.GetString("role"); role != "admin" {
+		filter.UserID = c.GetString("user_id")
 	}
 
 	if status := c.Query("status"); status != "" {
@@ -120,6 +126,7 @@ func (h *TaskHandler) List(c *gin.Context) {
 
 	// 使用 Count 高效获取总数
 	countFilter := &task.ListFilter{
+		UserID:  filter.UserID,
 		Status:  filter.Status,
 		AgentID: filter.AgentID,
 		Search:  filter.Search,
@@ -132,40 +139,64 @@ func (h *TaskHandler) List(c *gin.Context) {
 	})
 }
 
+// checkTaskOwnership 检查任务归属权（非 admin 用户只能访问自己的任务）
+func (h *TaskHandler) checkTaskOwnership(c *gin.Context, taskID string) (*task.Task, bool) {
+	t, err := h.manager.GetTask(taskID)
+	if err != nil {
+		HandleError(c, err)
+		return nil, false
+	}
+
+	// admin 可以访问所有任务
+	if c.GetString("role") == "admin" {
+		return t, true
+	}
+
+	// 非 admin 只能访问自己的任务
+	if t.UserID != c.GetString("user_id") {
+		Forbidden(c, "access denied: not your task")
+		return nil, false
+	}
+
+	return t, true
+}
+
 // Get 获取任务详情
 // GET /api/v1/tasks/:id
 func (h *TaskHandler) Get(c *gin.Context) {
-	id := c.Param("id")
-
-	t, err := h.manager.GetTask(id)
-	if err != nil {
-		HandleError(c, err)
+	t, ok := h.checkTaskOwnership(c, c.Param("id"))
+	if !ok {
 		return
 	}
-
 	Success(c, t)
 }
 
 // Cancel 取消任务
 // POST /api/v1/tasks/:id/cancel
 func (h *TaskHandler) Cancel(c *gin.Context) {
-	id := c.Param("id")
+	t, ok := h.checkTaskOwnership(c, c.Param("id"))
+	if !ok {
+		return
+	}
 
-	if err := h.manager.CancelTask(id); err != nil {
+	if err := h.manager.CancelTask(t.ID); err != nil {
 		HandleError(c, err)
 		return
 	}
 
-	t, _ := h.manager.GetTask(id)
+	t, _ = h.manager.GetTask(t.ID)
 	Success(c, t)
 }
 
 // Delete 删除任务
 // DELETE /api/v1/tasks/:id
 func (h *TaskHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
+	t, ok := h.checkTaskOwnership(c, c.Param("id"))
+	if !ok {
+		return
+	}
 
-	if err := h.manager.DeleteTask(id); err != nil {
+	if err := h.manager.DeleteTask(t.ID); err != nil {
 		HandleError(c, err)
 		return
 	}
@@ -176,9 +207,12 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 // Retry 重试任务
 // POST /api/v1/tasks/:id/retry
 func (h *TaskHandler) Retry(c *gin.Context) {
-	id := c.Param("id")
+	oldTask, ok := h.checkTaskOwnership(c, c.Param("id"))
+	if !ok {
+		return
+	}
 
-	t, err := h.manager.RetryTask(id)
+	t, err := h.manager.RetryTask(oldTask.ID)
 	if err != nil {
 		HandleError(c, err)
 		return
@@ -226,14 +260,12 @@ func (h *TaskHandler) Cleanup(c *gin.Context) {
 // StreamEvents SSE 实时事件流
 // GET /api/v1/tasks/:id/events
 func (h *TaskHandler) StreamEvents(c *gin.Context) {
-	taskID := c.Param("id")
-
-	// 验证 task 存在
-	t, err := h.manager.GetTask(taskID)
-	if err != nil {
-		HandleError(c, err)
+	// 验证 task 存在且有权限
+	t, ok := h.checkTaskOwnership(c, c.Param("id"))
+	if !ok {
 		return
 	}
+	taskID := t.ID
 
 	// 如果任务已经完成，直接返回最终事件
 	if t.Status.IsTerminal() {
@@ -303,11 +335,8 @@ func (h *TaskHandler) StreamEvents(c *gin.Context) {
 // GetOutput 获取任务输出
 // GET /api/v1/tasks/:id/output
 func (h *TaskHandler) GetOutput(c *gin.Context) {
-	id := c.Param("id")
-
-	t, err := h.manager.GetTask(id)
-	if err != nil {
-		HandleError(c, err)
+	t, ok := h.checkTaskOwnership(c, c.Param("id"))
+	if !ok {
 		return
 	}
 

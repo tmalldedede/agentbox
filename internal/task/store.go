@@ -38,6 +38,7 @@ type Store interface {
 
 // ListFilter 列表过滤器
 type ListFilter struct {
+	UserID    string   // 按用户过滤（空则不过滤）
 	Status    []Status // 按状态过滤
 	AgentID   string   // 按 Agent 过滤
 	Search    string   // 搜索 prompt 关键字

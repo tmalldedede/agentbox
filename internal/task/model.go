@@ -29,6 +29,7 @@ var (
 type Task struct {
 	// 基本信息
 	ID        string `json:"id"`
+	UserID    string `json:"user_id,omitempty"`    // 归属用户
 	AgentID   string `json:"agent_id"`             // 引用 Agent
 	AgentName string `json:"agent_name,omitempty"` // 冗余，方便展示
 	AgentType string `json:"agent_type,omitempty"` // claude-code / codex

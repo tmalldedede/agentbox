@@ -289,6 +289,9 @@ type CreateTaskRequest struct {
 	Prompt  string `json:"prompt" binding:"required"`
 	TaskID  string `json:"task_id,omitempty"` // 多轮时传入已有 task_id
 
+	// 归属用户
+	UserID string `json:"-"` // 由中间件注入，不从请求体读取
+
 	// 附件
 	Attachments []string `json:"attachments,omitempty"` // file IDs
 
@@ -321,6 +324,7 @@ func (m *Manager) CreateTask(req *CreateTaskRequest) (*Task, error) {
 	now := time.Now()
 	task := &Task{
 		ID:          "task-" + uuid.New().String()[:8],
+		UserID:      req.UserID,
 		AgentID:     req.AgentID,
 		AgentName:   ag.Name,
 		AgentType:   ag.Adapter,

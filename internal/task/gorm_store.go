@@ -282,6 +282,11 @@ func (s *GormStore) buildQuery(filter *ListFilter) *gorm.DB {
 		return query
 	}
 
+	// 用户过滤
+	if filter.UserID != "" {
+		query = query.Where("user_id = ?", filter.UserID)
+	}
+
 	// 状态过滤
 	if len(filter.Status) > 0 {
 		statusStrs := make([]string, len(filter.Status))
@@ -317,6 +322,7 @@ func taskToModel(task *Task) *database.TaskModel {
 			ID:        task.ID,
 			CreatedAt: task.CreatedAt,
 		},
+		UserID:          task.UserID,
 		AgentID:         task.AgentID,
 		AgentName:       task.AgentName,
 		AgentType:       task.AgentType,
@@ -343,6 +349,7 @@ func taskToModel(task *Task) *database.TaskModel {
 func modelToTask(model *database.TaskModel) *Task {
 	task := &Task{
 		ID:           model.ID,
+		UserID:       model.UserID,
 		AgentID:      model.AgentID,
 		AgentName:    model.AgentName,
 		AgentType:    model.AgentType,

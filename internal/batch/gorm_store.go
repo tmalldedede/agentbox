@@ -55,17 +55,18 @@ func (s *GormStore) DeleteBatch(id string) error {
 
 // ListBatches returns batches matching the filter.
 func (s *GormStore) ListBatches(filter *ListBatchFilter) ([]*Batch, int, error) {
-	var status, agentID string
+	var status, agentID, userID string
 	var limit, offset int
 
 	if filter != nil {
 		status = string(filter.Status)
 		agentID = filter.AgentID
+		userID = filter.UserID
 		limit = filter.Limit
 		offset = filter.Offset
 	}
 
-	models, total, err := s.batchRepo.List(status, agentID, limit, offset)
+	models, total, err := s.batchRepo.List(status, agentID, userID, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -251,6 +252,7 @@ func (s *GormStore) batchToModel(b *Batch) *database.BatchModel {
 			ID:        b.ID,
 			CreatedAt: b.CreatedAt,
 		},
+		UserID:           b.UserID,
 		Name:             b.Name,
 		AgentID:          b.AgentID,
 		TemplateJSON:     string(templateJSON),
@@ -270,6 +272,7 @@ func (s *GormStore) batchToModel(b *Batch) *database.BatchModel {
 func (s *GormStore) modelToBatch(m *database.BatchModel) *Batch {
 	b := &Batch{
 		ID:          m.ID,
+		UserID:      m.UserID,
 		Name:        m.Name,
 		AgentID:     m.AgentID,
 		Concurrency: m.Concurrency,

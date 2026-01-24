@@ -219,6 +219,7 @@ func (m *Manager) Create(req *CreateBatchRequest) (*Batch, error) {
 
 	batch := &Batch{
 		ID:          batchID,
+		UserID:      req.UserID,
 		Name:        req.Name,
 		AgentID:     req.AgentID,
 		Template: BatchTemplate{

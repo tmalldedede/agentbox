@@ -30,8 +30,9 @@ const (
 
 // Batch represents a batch of homogeneous tasks sharing the same configuration.
 type Batch struct {
-	ID   string `json:"id"`   // batch-{uuid}
-	Name string `json:"name"` // User-defined name
+	ID     string `json:"id"`                // batch-{uuid}
+	UserID string `json:"user_id,omitempty"` // Owner user ID
+	Name   string `json:"name"`              // User-defined name
 
 	// Agent configuration
 	AgentID string `json:"agent_id"` // Agent to use for execution
@@ -132,6 +133,7 @@ type CreateBatchRequest struct {
 	MaxRetries     int                      `json:"max_retries"`     // Retry count
 	RuntimeID      string                   `json:"runtime_id"`      // Optional runtime
 	AutoStart      bool                     `json:"auto_start"`      // Start immediately after creation
+	UserID         string                   `json:"-"`               // Injected by middleware
 }
 
 // UpdateBatchRequest is the request to update batch settings.
@@ -142,6 +144,7 @@ type UpdateBatchRequest struct {
 
 // ListBatchFilter defines filtering options for listing batches.
 type ListBatchFilter struct {
+	UserID  string      `json:"user_id,omitempty"`
 	Status  BatchStatus `json:"status,omitempty"`
 	AgentID string      `json:"agent_id,omitempty"`
 	Limit   int         `json:"limit,omitempty"`
