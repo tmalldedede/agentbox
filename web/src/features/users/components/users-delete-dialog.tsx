@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { toast } from 'sonner'
+import { api } from '@/services/api'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,20 +14,29 @@ type UserDeleteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow: User
+  onSuccess?: () => void
 }
 
 export function UsersDeleteDialog({
   open,
   onOpenChange,
   currentRow,
+  onSuccess,
 }: UserDeleteDialogProps) {
   const [value, setValue] = useState('')
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (value.trim() !== currentRow.username) return
 
-    onOpenChange(false)
-    showSubmittedData(currentRow, 'The following user has been deleted:')
+    try {
+      await api.deleteUser(currentRow.id)
+      toast.success('User deleted successfully')
+      onOpenChange(false)
+      onSuccess?.()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete user'
+      toast.error(message)
+    }
   }
 
   return (

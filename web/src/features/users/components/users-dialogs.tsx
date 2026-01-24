@@ -1,22 +1,16 @@
 import { UsersActionDialog } from './users-action-dialog'
 import { UsersDeleteDialog } from './users-delete-dialog'
-import { UsersInviteDialog } from './users-invite-dialog'
 import { useUsers } from './users-provider'
 
 export function UsersDialogs() {
-  const { open, setOpen, currentRow, setCurrentRow } = useUsers()
+  const { open, setOpen, currentRow, setCurrentRow, onRefresh } = useUsers()
   return (
     <>
       <UsersActionDialog
         key='user-add'
         open={open === 'add'}
         onOpenChange={() => setOpen('add')}
-      />
-
-      <UsersInviteDialog
-        key='user-invite'
-        open={open === 'invite'}
-        onOpenChange={() => setOpen('invite')}
+        onSuccess={onRefresh}
       />
 
       {currentRow && (
@@ -31,6 +25,7 @@ export function UsersDialogs() {
               }, 500)
             }}
             currentRow={currentRow}
+            onSuccess={onRefresh}
           />
 
           <UsersDeleteDialog
@@ -43,6 +38,7 @@ export function UsersDialogs() {
               }, 500)
             }}
             currentRow={currentRow}
+            onSuccess={onRefresh}
           />
         </>
       )}

@@ -53,57 +53,6 @@ export const usersColumns: ColumnDef<User>[] = [
     enableHiding: false,
   },
   {
-    id: 'fullName',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Name' />
-    ),
-    cell: ({ row }) => {
-      const { firstName, lastName } = row.original
-      const fullName = `${firstName} ${lastName}`
-      return <LongText className='max-w-36'>{fullName}</LongText>
-    },
-    meta: { className: 'w-36' },
-  },
-  {
-    accessorKey: 'email',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Email' />
-    ),
-    cell: ({ row }) => (
-      <div className='w-fit ps-2 text-nowrap'>{row.getValue('email')}</div>
-    ),
-  },
-  {
-    accessorKey: 'phoneNumber',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Phone Number' />
-    ),
-    cell: ({ row }) => <div>{row.getValue('phoneNumber')}</div>,
-    enableSorting: false,
-  },
-  {
-    accessorKey: 'status',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Status' />
-    ),
-    cell: ({ row }) => {
-      const { status } = row.original
-      const badgeColor = callTypes.get(status)
-      return (
-        <div className='flex space-x-2'>
-          <Badge variant='outline' className={cn('capitalize', badgeColor)}>
-            {row.getValue('status')}
-          </Badge>
-        </div>
-      )
-    },
-    filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id))
-    },
-    enableHiding: false,
-    enableSorting: false,
-  },
-  {
     accessorKey: 'role',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Role' />
@@ -112,16 +61,12 @@ export const usersColumns: ColumnDef<User>[] = [
       const { role } = row.original
       const userType = roles.find(({ value }) => value === role)
 
-      if (!userType) {
-        return null
-      }
-
       return (
         <div className='flex items-center gap-x-2'>
-          {userType.icon && (
+          {userType?.icon && (
             <userType.icon size={16} className='text-muted-foreground' />
           )}
-          <span className='text-sm capitalize'>{row.getValue('role')}</span>
+          <span className='text-sm capitalize'>{role}</span>
         </div>
       )
     },
@@ -130,6 +75,46 @@ export const usersColumns: ColumnDef<User>[] = [
     },
     enableSorting: false,
     enableHiding: false,
+  },
+  {
+    id: 'status',
+    accessorKey: 'is_active',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Status' />
+    ),
+    cell: ({ row }) => {
+      const isActive = row.original.is_active
+      const status = isActive ? 'active' : 'inactive'
+      const badgeColor = callTypes.get(status)
+      return (
+        <div className='flex space-x-2'>
+          <Badge variant='outline' className={cn('capitalize', badgeColor)}>
+            {status}
+          </Badge>
+        </div>
+      )
+    },
+    filterFn: (row, _id, value) => {
+      const isActive = row.original.is_active
+      const status = isActive ? 'active' : 'inactive'
+      return value.includes(status)
+    },
+    enableHiding: false,
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'created_at',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Created' />
+    ),
+    cell: ({ row }) => {
+      const createdAt = row.original.created_at
+      return (
+        <div className='text-sm text-muted-foreground'>
+          {new Date(createdAt).toLocaleDateString()}
+        </div>
+      )
+    },
   },
   {
     id: 'actions',
