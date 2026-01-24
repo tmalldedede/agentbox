@@ -8,6 +8,15 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   {
+    title: 'Authentication',
+    items: [
+      { path: '/api-docs/login', label: 'Login', method: 'POST' },
+      { path: '/api-docs/api-keys', label: 'API Keys', method: 'GET' },
+      { path: '/api-docs/create-api-key', label: 'Create API Key', method: 'POST' },
+      { path: '/api-docs/delete-api-key', label: 'Delete API Key', method: 'DELETE' },
+    ],
+  },
+  {
     title: 'Tasks',
     items: [
       { path: '/api-docs/create-task', label: 'Create Task', method: 'POST' },

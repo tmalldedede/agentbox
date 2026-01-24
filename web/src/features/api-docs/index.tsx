@@ -25,10 +25,17 @@ export function ApiDocsPage() {
 }
 
 export { OverviewPage } from './components/OverviewPage'
+// Auth
+export { LoginPage } from './components/LoginPage'
+export { ApiKeysPage } from './components/ApiKeysPage'
+export { CreateApiKeyPage } from './components/CreateApiKeyPage'
+export { DeleteApiKeyPage } from './components/DeleteApiKeyPage'
+// Tasks
 export { CreateTaskPage } from './components/CreateTaskPage'
 export { GetTasksPage } from './components/GetTasksPage'
 export { GetTaskPage } from './components/GetTaskPage'
 export { CancelTaskPage } from './components/CancelTaskPage'
+export { StreamEventsPage } from './components/StreamEventsPage'
 // Files
 export { UploadFilePage } from './components/UploadFilePage'
 export { ListFilesPage } from './components/ListFilesPage'

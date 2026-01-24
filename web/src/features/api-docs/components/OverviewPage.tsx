@@ -19,21 +19,60 @@ export function OverviewPage() {
       <section id="auth">
         <h3 className="text-xl font-bold mb-4">Authentication</h3>
         <p className="text-muted-foreground mb-4">
-          Include your API key in the request header for agents configured with <code className="bg-muted px-1.5 py-0.5 rounded text-sm">api_key</code> access.
+          AgentBox supports two authentication methods: <strong>API Keys</strong> (recommended for programmatic access)
+          and <strong>JWT Tokens</strong> (for interactive sessions).
         </p>
-        <CodeBlock code={`Authorization: Bearer YOUR_API_KEY`} />
-        <div className="mt-4 rounded-lg border p-4 space-y-3">
+        <CodeBlock code={`Authorization: Bearer YOUR_API_KEY_OR_JWT_TOKEN`} />
+
+        {/* Auth Methods */}
+        <div className="mt-6 space-y-4">
+          <div className="rounded-lg border p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="inline-block bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold px-2 py-0.5 rounded">Recommended</span>
+              <h4 className="font-semibold">API Keys</h4>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">
+              Long-lived credentials starting with <code className="bg-muted px-1 rounded">ab_</code>.
+              Ideal for scripts, CI/CD pipelines, and backend integrations.
+            </p>
+            <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+              <li>Create via <a href="/api-keys" className="text-primary underline">API Keys page</a> or <a href="/api-docs/create-api-key" className="text-primary underline">API</a></li>
+              <li>Never expire (unless configured)</li>
+              <li>Can be revoked instantly</li>
+              <li>Inherit your user permissions</li>
+            </ul>
+          </div>
+
+          <div className="rounded-lg border p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h4 className="font-semibold">JWT Tokens</h4>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">
+              Short-lived tokens obtained via <a href="/api-docs/login" className="text-primary underline">login endpoint</a>.
+              Suitable for web applications and interactive sessions.
+            </p>
+            <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+              <li>Expire after 24 hours</li>
+              <li>Obtained via username/password login</li>
+              <li>Used internally by the web UI</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Access Levels */}
+        <h4 className="font-semibold mt-6 mb-3">Access Levels</h4>
+        <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-start gap-3">
             <span className="shrink-0 inline-block bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold px-2 py-0.5 rounded">public</span>
-            <p className="text-sm text-muted-foreground">No authentication required. Anyone can call the endpoint.</p>
+            <p className="text-sm text-muted-foreground">No authentication required. Only login and health endpoints.</p>
           </div>
           <div className="flex items-start gap-3">
-            <span className="shrink-0 inline-block bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-0.5 rounded">api_key</span>
-            <p className="text-sm text-muted-foreground">Requires <code className="bg-muted px-1 rounded">Authorization: Bearer</code> header with valid API key.</p>
+            <span className="shrink-0 inline-block bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-0.5 rounded">user</span>
+            <p className="text-sm text-muted-foreground">Requires valid API Key or JWT. Access to tasks, batches, files, and webhooks.</p>
           </div>
           <div className="flex items-start gap-3">
-            <span className="shrink-0 inline-block bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400 text-xs font-bold px-2 py-0.5 rounded">private</span>
-            <p className="text-sm text-muted-foreground">Admin-only access via dashboard. Not available for external API calls.</p>
+            <span className="shrink-0 inline-block bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs font-bold px-2 py-0.5 rounded">admin</span>
+            <p className="text-sm text-muted-foreground">Full system access including user management, agents, providers, and settings.</p>
           </div>
         </div>
       </section>
