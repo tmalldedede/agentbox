@@ -57,6 +57,7 @@ func (SkillModel) TableName() string {
 // SessionModel represents a session in the database
 type SessionModel struct {
 	BaseModel
+	UserID      string     `gorm:"size:64;index" json:"user_id"`
 	AgentID     string     `gorm:"size:64;index" json:"agent_id"`
 	Agent       string     `gorm:"size:64;not null" json:"agent"`
 	Status      string     `gorm:"size:32;not null;index" json:"status"`
@@ -75,6 +76,7 @@ func (SessionModel) TableName() string {
 // TaskModel represents a task in the database
 type TaskModel struct {
 	BaseModel
+	UserID      string `gorm:"size:64;index" json:"user_id"`
 	AgentID     string `gorm:"size:64;index;not null" json:"agent_id"`
 	AgentName   string `gorm:"size:255" json:"agent_name"`
 	AgentType   string `gorm:"size:64" json:"agent_type"`
@@ -192,6 +194,7 @@ func (HistoryModel) TableName() string {
 // BatchModel represents a batch job in the database
 type BatchModel struct {
 	BaseModel
+	UserID           string     `gorm:"size:64;index" json:"user_id"`
 	Name             string     `gorm:"size:255;not null" json:"name"`
 	AgentID          string     `gorm:"size:64;index;not null" json:"agent_id"`
 	TemplateJSON     string     `gorm:"type:text" json:"template_json"`       // JSON
@@ -250,4 +253,32 @@ type FileModel struct {
 
 func (FileModel) TableName() string {
 	return "files"
+}
+
+// UserModel represents a user in the database
+type UserModel struct {
+	BaseModel
+	Username     string `gorm:"uniqueIndex;size:64" json:"username"`
+	PasswordHash string `gorm:"size:256" json:"-"`
+	Role         string `gorm:"size:16;default:user" json:"role"` // admin | user
+	IsActive     bool   `gorm:"default:true" json:"is_active"`
+}
+
+func (UserModel) TableName() string {
+	return "users"
+}
+
+// APIKeyModel represents an API key in the database
+type APIKeyModel struct {
+	BaseModel
+	UserID     string     `gorm:"size:64;index;not null" json:"user_id"`
+	Name       string     `gorm:"size:255;not null" json:"name"`
+	KeyPrefix  string     `gorm:"size:16;not null" json:"key_prefix"`  // 显示用前缀 (如 "ab_xxx...")
+	KeyHash    string     `gorm:"size:256;not null" json:"-"`          // bcrypt hash
+	LastUsedAt *time.Time `json:"last_used_at"`
+	ExpiresAt  *time.Time `json:"expires_at"` // nil = 永不过期
+}
+
+func (APIKeyModel) TableName() string {
+	return "api_keys"
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/auth"
 	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
@@ -25,6 +26,8 @@ import (
 type Server struct {
 	httpServer        *http.Server
 	engine            *gin.Engine
+	authHandler       *AuthHandler
+	authManager       *auth.Manager
 	handler           *Handler
 	fileHandler       *FileHandler
 	publicFileHandler *PublicFileHandler
@@ -46,6 +49,7 @@ type Server struct {
 
 // Deps 服务器依赖（从 App 容器注入）
 type Deps struct {
+	Auth        *auth.Manager
 	Session     *session.Manager
 	Registry    *engine.Registry
 	Container   container.Manager
@@ -72,6 +76,7 @@ func NewServer(deps *Deps) *Server {
 	engine.Use(corsMiddleware())
 	engine.Use(loggerMiddleware())
 
+	authHandler := NewAuthHandler(deps.Auth)
 	handler := NewHandler(deps.Session, deps.Registry)
 	fileHandler := NewFileHandler(deps.Session)
 	publicFileHandler := NewPublicFileHandler(deps.FilesConfig, deps.FileStore)
@@ -92,6 +97,8 @@ func NewServer(deps *Deps) *Server {
 
 	s := &Server{
 		engine:            engine,
+		authHandler:       authHandler,
+		authManager:       deps.Auth,
 		handler:           handler,
 		fileHandler:       fileHandler,
 		publicFileHandler: publicFileHandler,
@@ -121,37 +128,58 @@ func NewServer(deps *Deps) *Server {
 
 // setupRoutes 设置路由
 func (s *Server) setupRoutes() {
-	// ==================== Public API ====================
-	// Task-Centric 设计，对齐 Manus API
 	v1 := s.engine.Group("/api/v1")
+
+	// ==================== 公开路由（无需认证）====================
+	v1.GET("/health", s.handler.HealthCheck)
+	v1.POST("/auth/login", s.authHandler.Login)
+
+	// ==================== 认证路由 ====================
+	authenticated := v1.Group("")
+	authenticated.Use(authMiddleware(s.authManager))
 	{
-		// Health
-		v1.GET("/health", s.handler.HealthCheck)
+		// Auth - 当前用户信息 & 修改密码
+		authenticated.GET("/auth/me", s.authHandler.Me)
+		authenticated.PUT("/auth/password", s.authHandler.ChangePassword)
+
+		// API Keys - 用户自己的 API Key 管理
+		authenticated.POST("/auth/api-keys", s.authHandler.CreateAPIKey)
+		authenticated.GET("/auth/api-keys", s.authHandler.ListAPIKeys)
+		authenticated.DELETE("/auth/api-keys/:id", s.authHandler.DeleteAPIKey)
 
 		// Tasks (核心) - 创建/多轮/取消/SSE 事件流
-		s.taskHandler.RegisterRoutes(v1)
+		s.taskHandler.RegisterRoutes(authenticated)
 
 		// Batches (批量任务) - Worker 池模式批量处理
-		s.batchHandler.RegisterRoutes(v1)
+		s.batchHandler.RegisterRoutes(authenticated)
 
 		// Files (附件) - 独立文件上传
-		s.publicFileHandler.RegisterRoutes(v1)
+		s.publicFileHandler.RegisterRoutes(authenticated)
 
 		// Agents (只读) - 列表可用 Agent
-		v1.GET("/agents", s.agentHandler.ListPublic)
-		v1.GET("/agents/:id", s.agentHandler.GetPublic)
+		authenticated.GET("/agents", s.agentHandler.ListPublic)
+		authenticated.GET("/agents/:id", s.agentHandler.GetPublic)
 
 		// Webhooks (CRUD) - Webhook 管理
-		s.webhookHandler.RegisterRoutes(v1)
+		s.webhookHandler.RegisterRoutes(authenticated)
 
 		// Engines (只读) - 底层引擎适配器列表
-		v1.GET("/engines", s.handler.ListAgents)
+		authenticated.GET("/engines", s.handler.ListAgents)
+
+		// History (只读) - 执行历史记录
+		s.historyHandler.RegisterRoutes(authenticated)
 	}
 
-	// ==================== Admin API ====================
-	// 平台管理接口，调试和配置用
-	admin := s.engine.Group("/api/v1/admin")
+	// ==================== Admin API（需要 admin 角色）====================
+	admin := v1.Group("/admin")
+	admin.Use(authMiddleware(s.authManager))
+	admin.Use(adminOnly())
 	{
+		// Users 管理
+		admin.POST("/users", s.authHandler.CreateUser)
+		admin.GET("/users", s.authHandler.ListUsers)
+		admin.DELETE("/users/:id", s.authHandler.DeleteUser)
+
 		// Sessions (调试用) - 完整的 Session CRUD
 		sessions := admin.Group("/sessions")
 		{
@@ -199,9 +227,6 @@ func (s *Server) setupRoutes() {
 
 		// System 管理
 		s.systemHandler.RegisterRoutes(admin)
-
-		// History (只读) - 执行历史记录
-		s.historyHandler.RegisterRoutes(admin)
 
 		// Dashboard (态势感知大屏)
 		s.dashboardHandler.RegisterRoutes(admin)

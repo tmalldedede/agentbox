@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import { useLayout } from '@/context/layout-provider'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   Sidebar,
   SidebarContent,
@@ -7,32 +9,44 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { sidebarData } from './data/sidebar-data'
+import { getSidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
+  const { auth } = useAuthStore()
+
+  const data = useMemo(() => {
+    const role = auth.user?.role || 'user'
+    const sidebar = getSidebarData(role)
+    // Override user info from auth state
+    if (auth.user) {
+      sidebar.user = {
+        name: auth.user.username,
+        email: `${auth.user.username}@agentbox`,
+        avatar: '/avatars/shadcn.jpg',
+      }
+    }
+    return sidebar
+  }, [auth.user])
+
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
-        <TeamSwitcher teams={sidebarData.teams} />
-
-        {/* Replace <TeamSwitch /> with the following <AppTitle />
-         /* if you want to use the normal app title instead of TeamSwitch dropdown */}
-        {/* <AppTitle /> */}
+        <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        {sidebarData.navGroups.map((props) => (
-          <NavGroup key={props.title} {...props} />
+        {data.navGroups.map((props, index) => (
+          <NavGroup key={props.title || `nav-group-${index}`} {...props} />
         ))}
       </SidebarContent>
       <SidebarFooter>
         <div className='flex items-center justify-end px-2'>
           <ThemeSwitch />
         </div>
-        <NavUser user={sidebarData.user} />
+        <NavUser user={data.user} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

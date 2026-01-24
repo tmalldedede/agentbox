@@ -151,6 +151,7 @@ func main() {
 
 	// 创建 HTTP 服务器
 	server := api.NewServer(&api.Deps{
+		Auth:        application.Auth,
 		Session:     application.Session,
 		Registry:    application.AgentRegistry,
 		Container:   application.Container,

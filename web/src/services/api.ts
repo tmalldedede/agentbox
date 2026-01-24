@@ -71,14 +71,36 @@ import type {
 
 const API_BASE = '/api/v1'
 const ADMIN_BASE = '/api/v1/admin'
+const TOKEN_KEY = 'agentbox_token'
+
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    }
+  }
+  return { 'Content-Type': 'application/json' }
+}
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     ...options,
   })
+
+  // Handle 401 - redirect to login
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_KEY)
+    window.location.href = '/sign-in'
+    throw new Error('Unauthorized')
+  }
+
+  // Handle 403 - forbidden
+  if (response.status === 403) {
+    throw new Error('Access denied: admin privileges required')
+  }
 
   const data: ApiResponse<T> = await response.json()
 
@@ -89,7 +111,96 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return data.data as T
 }
 
+// Auth types
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+export interface LoginResponse {
+  token: string
+  expires_at: number
+  user: {
+    id: string
+    username: string
+    role: string
+  }
+}
+
+export interface UserInfo {
+  id: string
+  username: string
+  role: string
+}
+
+export interface UserResponse {
+  id: string
+  username: string
+  role: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface CreateUserRequest {
+  username: string
+  password: string
+  role?: string
+}
+
+export interface APIKeyResponse {
+  id: string
+  name: string
+  key_prefix: string
+  key?: string // 仅创建时返回
+  last_used_at?: string
+  expires_at?: string
+  created_at: string
+}
+
 export const api = {
+  // ==================== Auth API ====================
+  login: (req: LoginRequest) =>
+    request<LoginResponse>(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  me: () => request<UserInfo>(`${API_BASE}/auth/me`),
+
+  changePassword: (req: { old_password: string; new_password: string }) =>
+    request<{ message: string }>(`${API_BASE}/auth/password`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  // API Keys
+  listAPIKeys: () => request<APIKeyResponse[]>(`${API_BASE}/auth/api-keys`),
+
+  createAPIKey: (req: { name: string; expires_in?: number }) =>
+    request<APIKeyResponse>(`${API_BASE}/auth/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  deleteAPIKey: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`${API_BASE}/auth/api-keys/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Admin: User management
+  listUsers: () => request<UserResponse[]>(`${ADMIN_BASE}/users`),
+
+  createUser: (req: CreateUserRequest) =>
+    request<UserResponse>(`${ADMIN_BASE}/users`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  deleteUser: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`${ADMIN_BASE}/users/${id}`, {
+      method: 'DELETE',
+    }),
+
   // ==================== Public API (Task-Centric) ====================
 
   // Health
@@ -149,8 +260,13 @@ export const api = {
     request<unknown>(`${API_BASE}/tasks/${id}/output`),
 
   // SSE 事件流
-  streamTaskEvents: (id: string): EventSource =>
-    new EventSource(`${API_BASE}/tasks/${id}/events`),
+  streamTaskEvents: (id: string): EventSource => {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const url = token
+      ? `${API_BASE}/tasks/${id}/events?token=${token}`
+      : `${API_BASE}/tasks/${id}/events`
+    return new EventSource(url)
+  },
 
   // Batches (批量任务 API) - Worker 池模式
   listBatches: (filter?: ListBatchFilter) => {
@@ -218,8 +334,13 @@ export const api = {
     request<BatchStats>(`${API_BASE}/batches/${id}/stats`),
 
   // Batch SSE 事件流
-  streamBatchEvents: (id: string): EventSource =>
-    new EventSource(`${API_BASE}/batches/${id}/events`),
+  streamBatchEvents: (id: string): EventSource => {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const url = token
+      ? `${API_BASE}/batches/${id}/events?token=${token}`
+      : `${API_BASE}/batches/${id}/events`
+    return new EventSource(url)
+  },
 
   // Batch 结果导出
   getBatchExportUrl: (id: string, format: 'json' | 'csv' = 'json') =>
@@ -243,10 +364,21 @@ export const api = {
   uploadFile: async (file: File): Promise<UploadedFile> => {
     const formData = new FormData()
     formData.append('file', file)
+    const token = localStorage.getItem(TOKEN_KEY)
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
     const response = await fetch(`${API_BASE}/files`, {
       method: 'POST',
+      headers,
       body: formData,
     })
+    if (response.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      window.location.href = '/sign-in'
+      throw new Error('Unauthorized')
+    }
     const data: ApiResponse<UploadedFile> = await response.json()
     if (data.code !== 0) {
       throw new Error(data.message)
@@ -283,7 +415,7 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // History (admin 只读) - 统一执行历史
+  // History (认证用户可用) - 统一执行历史
   listHistory: (filter?: HistoryFilter) => {
     const params = new URLSearchParams()
     if (filter?.source_type) params.set('source_type', filter.source_type)
@@ -294,13 +426,13 @@ export const api = {
     if (filter?.limit) params.set('limit', filter.limit.toString())
     if (filter?.offset) params.set('offset', filter.offset.toString())
     const query = params.toString()
-    return request<HistoryListResponse>(`${ADMIN_BASE}/history${query ? `?${query}` : ''}`)
+    return request<HistoryListResponse>(`${API_BASE}/history${query ? `?${query}` : ''}`)
   },
 
-  getHistoryEntry: (id: string) => request<HistoryEntry>(`${ADMIN_BASE}/history/${id}`),
+  getHistoryEntry: (id: string) => request<HistoryEntry>(`${API_BASE}/history/${id}`),
 
   deleteHistoryEntry: (id: string) =>
-    request<{ id: string; deleted: boolean }>(`${ADMIN_BASE}/history/${id}`, {
+    request<{ id: string; deleted: boolean }>(`${API_BASE}/history/${id}`, {
       method: 'DELETE',
     }),
 
@@ -310,7 +442,7 @@ export const api = {
     if (filter?.agent_id) params.set('agent_id', filter.agent_id)
     if (filter?.engine) params.set('engine', filter.engine)
     const query = params.toString()
-    return request<HistoryStats>(`${ADMIN_BASE}/history/stats${query ? `?${query}` : ''}`)
+    return request<HistoryStats>(`${API_BASE}/history/stats${query ? `?${query}` : ''}`)
   },
 
   // ==================== Admin API ====================
@@ -548,8 +680,12 @@ export const api = {
       body: JSON.stringify(req),
     }),
 
-  exportSkill: (id: string) =>
-    fetch(`${ADMIN_BASE}/skills/${id}/export`).then(res => res.text()),
+  exportSkill: (id: string) => {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    return fetch(`${ADMIN_BASE}/skills/${id}/export`, { headers }).then(res => res.text())
+  },
 
   // Skill Store API
   listSkillSources: () => request<SkillSource[]>(`${ADMIN_BASE}/skill-store/sources`),

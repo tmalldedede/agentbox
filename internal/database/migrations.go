@@ -11,6 +11,8 @@ func AutoMigrate() error {
 	migLog.Info("running database migrations...")
 
 	models := []interface{}{
+		&UserModel{},
+		&APIKeyModel{},
 		&MCPServerModel{},
 		&SkillModel{},
 		&SessionModel{},

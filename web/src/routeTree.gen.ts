@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
@@ -22,8 +21,6 @@ import { Route as authSignIn2RouteImport } from './routes/(auth)/sign-in-2'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authOtpRouteImport } from './routes/(auth)/otp'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
-import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_authenticated/route'
-import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
 import { Route as AuthenticatedApiDocsRouteRouteImport } from './routes/_authenticated/api-docs/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
@@ -47,11 +44,9 @@ import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedBatchesIndexRouteImport } from './routes/_authenticated/batches/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedApiPlaygroundIndexRouteImport } from './routes/_authenticated/api-playground/index'
+import { Route as AuthenticatedApiKeysIndexRouteImport } from './routes/_authenticated/api-keys/index'
 import { Route as AuthenticatedApiDocsIndexRouteImport } from './routes/_authenticated/api-docs/index'
 import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents/index'
-import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
-import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
-import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks/$id'
 import { Route as AuthenticatedSkillsNewRouteImport } from './routes/_authenticated/skills/new'
 import { Route as AuthenticatedSkillsIdRouteImport } from './routes/_authenticated/skills/$id'
@@ -65,6 +60,7 @@ import { Route as AuthenticatedApiDocsStreamEventsRouteImport } from './routes/_
 import { Route as AuthenticatedApiDocsStreamBatchEventsRouteImport } from './routes/_authenticated/api-docs/stream-batch-events'
 import { Route as AuthenticatedApiDocsStartBatchRouteImport } from './routes/_authenticated/api-docs/start-batch'
 import { Route as AuthenticatedApiDocsPauseBatchRouteImport } from './routes/_authenticated/api-docs/pause-batch'
+import { Route as AuthenticatedApiDocsLoginRouteImport } from './routes/_authenticated/api-docs/login'
 import { Route as AuthenticatedApiDocsListWebhooksRouteImport } from './routes/_authenticated/api-docs/list-webhooks'
 import { Route as AuthenticatedApiDocsListFilesRouteImport } from './routes/_authenticated/api-docs/list-files'
 import { Route as AuthenticatedApiDocsListBatchesRouteImport } from './routes/_authenticated/api-docs/list-batches'
@@ -78,19 +74,17 @@ import { Route as AuthenticatedApiDocsDownloadFileRouteImport } from './routes/_
 import { Route as AuthenticatedApiDocsDeleteWebhookRouteImport } from './routes/_authenticated/api-docs/delete-webhook'
 import { Route as AuthenticatedApiDocsDeleteFileRouteImport } from './routes/_authenticated/api-docs/delete-file'
 import { Route as AuthenticatedApiDocsDeleteBatchRouteImport } from './routes/_authenticated/api-docs/delete-batch'
+import { Route as AuthenticatedApiDocsDeleteApiKeyRouteImport } from './routes/_authenticated/api-docs/delete-api-key'
 import { Route as AuthenticatedApiDocsCreateWebhookRouteImport } from './routes/_authenticated/api-docs/create-webhook'
 import { Route as AuthenticatedApiDocsCreateTaskRouteImport } from './routes/_authenticated/api-docs/create-task'
 import { Route as AuthenticatedApiDocsCreateBatchRouteImport } from './routes/_authenticated/api-docs/create-batch'
+import { Route as AuthenticatedApiDocsCreateApiKeyRouteImport } from './routes/_authenticated/api-docs/create-api-key'
 import { Route as AuthenticatedApiDocsCancelTaskRouteImport } from './routes/_authenticated/api-docs/cancel-task'
 import { Route as AuthenticatedApiDocsCancelBatchRouteImport } from './routes/_authenticated/api-docs/cancel-batch'
+import { Route as AuthenticatedApiDocsApiKeysRouteImport } from './routes/_authenticated/api-docs/api-keys'
 import { Route as AuthenticatedAgentsNewRouteImport } from './routes/_authenticated/agents/new'
 import { Route as AuthenticatedAgentsIdRouteImport } from './routes/_authenticated/agents/$id'
 
-const ClerkRouteRoute = ClerkRouteRouteImport.update({
-  id: '/clerk',
-  path: '/clerk',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -149,14 +143,6 @@ const authForgotPasswordRoute = authForgotPasswordRouteImport.update({
   id: '/(auth)/forgot-password',
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
-} as any)
-const ClerkAuthenticatedRouteRoute = ClerkAuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => ClerkRouteRoute,
-} as any)
-const ClerkauthRouteRoute = ClerkauthRouteRouteImport.update({
-  id: '/(auth)',
-  getParentRoute: () => ClerkRouteRoute,
 } as any)
 const AuthenticatedApiDocsRouteRoute =
   AuthenticatedApiDocsRouteRouteImport.update({
@@ -290,6 +276,12 @@ const AuthenticatedApiPlaygroundIndexRoute =
     path: '/api-playground/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedApiKeysIndexRoute =
+  AuthenticatedApiKeysIndexRouteImport.update({
+    id: '/api-keys/',
+    path: '/api-keys/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedApiDocsIndexRoute =
   AuthenticatedApiDocsIndexRouteImport.update({
     id: '/',
@@ -302,22 +294,6 @@ const AuthenticatedAgentsIndexRoute =
     path: '/agents/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const ClerkAuthenticatedUserManagementRoute =
-  ClerkAuthenticatedUserManagementRouteImport.update({
-    id: '/user-management',
-    path: '/user-management',
-    getParentRoute: () => ClerkAuthenticatedRouteRoute,
-  } as any)
-const ClerkauthSignUpRoute = ClerkauthSignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => ClerkauthRouteRoute,
-} as any)
-const ClerkauthSignInRoute = ClerkauthSignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => ClerkauthRouteRoute,
-} as any)
 const AuthenticatedTasksIdRoute = AuthenticatedTasksIdRouteImport.update({
   id: '/tasks/$id',
   path: '/tasks/$id',
@@ -390,6 +366,12 @@ const AuthenticatedApiDocsPauseBatchRoute =
   AuthenticatedApiDocsPauseBatchRouteImport.update({
     id: '/pause-batch',
     path: '/pause-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsLoginRoute =
+  AuthenticatedApiDocsLoginRouteImport.update({
+    id: '/login',
+    path: '/login',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
 const AuthenticatedApiDocsListWebhooksRoute =
@@ -470,6 +452,12 @@ const AuthenticatedApiDocsDeleteBatchRoute =
     path: '/delete-batch',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
+const AuthenticatedApiDocsDeleteApiKeyRoute =
+  AuthenticatedApiDocsDeleteApiKeyRouteImport.update({
+    id: '/delete-api-key',
+    path: '/delete-api-key',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedApiDocsCreateWebhookRoute =
   AuthenticatedApiDocsCreateWebhookRouteImport.update({
     id: '/create-webhook',
@@ -488,6 +476,12 @@ const AuthenticatedApiDocsCreateBatchRoute =
     path: '/create-batch',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
+const AuthenticatedApiDocsCreateApiKeyRoute =
+  AuthenticatedApiDocsCreateApiKeyRouteImport.update({
+    id: '/create-api-key',
+    path: '/create-api-key',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedApiDocsCancelTaskRoute =
   AuthenticatedApiDocsCancelTaskRouteImport.update({
     id: '/cancel-task',
@@ -498,6 +492,12 @@ const AuthenticatedApiDocsCancelBatchRoute =
   AuthenticatedApiDocsCancelBatchRouteImport.update({
     id: '/cancel-batch',
     path: '/cancel-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsApiKeysRoute =
+  AuthenticatedApiDocsApiKeysRouteImport.update({
+    id: '/api-keys',
+    path: '/api-keys',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
 const AuthenticatedAgentsNewRoute = AuthenticatedAgentsNewRouteImport.update({
@@ -512,7 +512,6 @@ const AuthenticatedAgentsIdRoute = AuthenticatedAgentsIdRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
   '/api-docs': typeof AuthenticatedApiDocsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
@@ -527,11 +526,14 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/api-docs/api-keys': typeof AuthenticatedApiDocsApiKeysRoute
   '/api-docs/cancel-batch': typeof AuthenticatedApiDocsCancelBatchRoute
   '/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/api-docs/create-api-key': typeof AuthenticatedApiDocsCreateApiKeyRoute
   '/api-docs/create-batch': typeof AuthenticatedApiDocsCreateBatchRoute
   '/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
   '/api-docs/create-webhook': typeof AuthenticatedApiDocsCreateWebhookRoute
+  '/api-docs/delete-api-key': typeof AuthenticatedApiDocsDeleteApiKeyRoute
   '/api-docs/delete-batch': typeof AuthenticatedApiDocsDeleteBatchRoute
   '/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
   '/api-docs/delete-webhook': typeof AuthenticatedApiDocsDeleteWebhookRoute
@@ -545,6 +547,7 @@ export interface FileRoutesByFullPath {
   '/api-docs/list-batches': typeof AuthenticatedApiDocsListBatchesRoute
   '/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
   '/api-docs/list-webhooks': typeof AuthenticatedApiDocsListWebhooksRoute
+  '/api-docs/login': typeof AuthenticatedApiDocsLoginRoute
   '/api-docs/pause-batch': typeof AuthenticatedApiDocsPauseBatchRoute
   '/api-docs/start-batch': typeof AuthenticatedApiDocsStartBatchRoute
   '/api-docs/stream-batch-events': typeof AuthenticatedApiDocsStreamBatchEventsRoute
@@ -558,11 +561,9 @@ export interface FileRoutesByFullPath {
   '/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/skills/new': typeof AuthenticatedSkillsNewRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
-  '/clerk/sign-in': typeof ClerkauthSignInRoute
-  '/clerk/sign-up': typeof ClerkauthSignUpRoute
-  '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/api-docs/': typeof AuthenticatedApiDocsIndexRoute
+  '/api-keys': typeof AuthenticatedApiKeysIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/batches': typeof AuthenticatedBatchesIndexRoute
@@ -587,7 +588,6 @@ export interface FileRoutesByFullPath {
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
 }
 export interface FileRoutesByTo {
-  '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
@@ -601,11 +601,14 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/api-docs/api-keys': typeof AuthenticatedApiDocsApiKeysRoute
   '/api-docs/cancel-batch': typeof AuthenticatedApiDocsCancelBatchRoute
   '/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/api-docs/create-api-key': typeof AuthenticatedApiDocsCreateApiKeyRoute
   '/api-docs/create-batch': typeof AuthenticatedApiDocsCreateBatchRoute
   '/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
   '/api-docs/create-webhook': typeof AuthenticatedApiDocsCreateWebhookRoute
+  '/api-docs/delete-api-key': typeof AuthenticatedApiDocsDeleteApiKeyRoute
   '/api-docs/delete-batch': typeof AuthenticatedApiDocsDeleteBatchRoute
   '/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
   '/api-docs/delete-webhook': typeof AuthenticatedApiDocsDeleteWebhookRoute
@@ -619,6 +622,7 @@ export interface FileRoutesByTo {
   '/api-docs/list-batches': typeof AuthenticatedApiDocsListBatchesRoute
   '/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
   '/api-docs/list-webhooks': typeof AuthenticatedApiDocsListWebhooksRoute
+  '/api-docs/login': typeof AuthenticatedApiDocsLoginRoute
   '/api-docs/pause-batch': typeof AuthenticatedApiDocsPauseBatchRoute
   '/api-docs/start-batch': typeof AuthenticatedApiDocsStartBatchRoute
   '/api-docs/stream-batch-events': typeof AuthenticatedApiDocsStreamBatchEventsRoute
@@ -632,11 +636,9 @@ export interface FileRoutesByTo {
   '/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/skills/new': typeof AuthenticatedSkillsNewRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
-  '/clerk/sign-in': typeof ClerkauthSignInRoute
-  '/clerk/sign-up': typeof ClerkauthSignUpRoute
-  '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/api-docs': typeof AuthenticatedApiDocsIndexRoute
+  '/api-keys': typeof AuthenticatedApiKeysIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/batches': typeof AuthenticatedBatchesIndexRoute
@@ -663,10 +665,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/clerk': typeof ClerkRouteRouteWithChildren
   '/_authenticated/api-docs': typeof AuthenticatedApiDocsRouteRouteWithChildren
-  '/clerk/(auth)': typeof ClerkauthRouteRouteWithChildren
-  '/clerk/_authenticated': typeof ClerkAuthenticatedRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
   '/(auth)/otp': typeof authOtpRoute
   '/(auth)/sign-in': typeof authSignInRoute
@@ -680,11 +679,14 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/_authenticated/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/_authenticated/api-docs/api-keys': typeof AuthenticatedApiDocsApiKeysRoute
   '/_authenticated/api-docs/cancel-batch': typeof AuthenticatedApiDocsCancelBatchRoute
   '/_authenticated/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/_authenticated/api-docs/create-api-key': typeof AuthenticatedApiDocsCreateApiKeyRoute
   '/_authenticated/api-docs/create-batch': typeof AuthenticatedApiDocsCreateBatchRoute
   '/_authenticated/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
   '/_authenticated/api-docs/create-webhook': typeof AuthenticatedApiDocsCreateWebhookRoute
+  '/_authenticated/api-docs/delete-api-key': typeof AuthenticatedApiDocsDeleteApiKeyRoute
   '/_authenticated/api-docs/delete-batch': typeof AuthenticatedApiDocsDeleteBatchRoute
   '/_authenticated/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
   '/_authenticated/api-docs/delete-webhook': typeof AuthenticatedApiDocsDeleteWebhookRoute
@@ -698,6 +700,7 @@ export interface FileRoutesById {
   '/_authenticated/api-docs/list-batches': typeof AuthenticatedApiDocsListBatchesRoute
   '/_authenticated/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
   '/_authenticated/api-docs/list-webhooks': typeof AuthenticatedApiDocsListWebhooksRoute
+  '/_authenticated/api-docs/login': typeof AuthenticatedApiDocsLoginRoute
   '/_authenticated/api-docs/pause-batch': typeof AuthenticatedApiDocsPauseBatchRoute
   '/_authenticated/api-docs/start-batch': typeof AuthenticatedApiDocsStartBatchRoute
   '/_authenticated/api-docs/stream-batch-events': typeof AuthenticatedApiDocsStreamBatchEventsRoute
@@ -711,11 +714,9 @@ export interface FileRoutesById {
   '/_authenticated/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/_authenticated/skills/new': typeof AuthenticatedSkillsNewRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
-  '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
-  '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
-  '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/_authenticated/api-docs/': typeof AuthenticatedApiDocsIndexRoute
+  '/_authenticated/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/_authenticated/api-playground/': typeof AuthenticatedApiPlaygroundIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/batches/': typeof AuthenticatedBatchesIndexRoute
@@ -742,7 +743,6 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/clerk'
     | '/api-docs'
     | '/forgot-password'
     | '/otp'
@@ -757,11 +757,14 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$id'
     | '/agents/new'
+    | '/api-docs/api-keys'
     | '/api-docs/cancel-batch'
     | '/api-docs/cancel-task'
+    | '/api-docs/create-api-key'
     | '/api-docs/create-batch'
     | '/api-docs/create-task'
     | '/api-docs/create-webhook'
+    | '/api-docs/delete-api-key'
     | '/api-docs/delete-batch'
     | '/api-docs/delete-file'
     | '/api-docs/delete-webhook'
@@ -775,6 +778,7 @@ export interface FileRouteTypes {
     | '/api-docs/list-batches'
     | '/api-docs/list-files'
     | '/api-docs/list-webhooks'
+    | '/api-docs/login'
     | '/api-docs/pause-batch'
     | '/api-docs/start-batch'
     | '/api-docs/stream-batch-events'
@@ -788,11 +792,9 @@ export interface FileRouteTypes {
     | '/skills/$id'
     | '/skills/new'
     | '/tasks/$id'
-    | '/clerk/sign-in'
-    | '/clerk/sign-up'
-    | '/clerk/user-management'
     | '/agents'
     | '/api-docs/'
+    | '/api-keys'
     | '/api-playground'
     | '/apps'
     | '/batches'
@@ -817,7 +819,6 @@ export interface FileRouteTypes {
     | '/webhooks'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/clerk'
     | '/forgot-password'
     | '/otp'
     | '/sign-in'
@@ -831,11 +832,14 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$id'
     | '/agents/new'
+    | '/api-docs/api-keys'
     | '/api-docs/cancel-batch'
     | '/api-docs/cancel-task'
+    | '/api-docs/create-api-key'
     | '/api-docs/create-batch'
     | '/api-docs/create-task'
     | '/api-docs/create-webhook'
+    | '/api-docs/delete-api-key'
     | '/api-docs/delete-batch'
     | '/api-docs/delete-file'
     | '/api-docs/delete-webhook'
@@ -849,6 +853,7 @@ export interface FileRouteTypes {
     | '/api-docs/list-batches'
     | '/api-docs/list-files'
     | '/api-docs/list-webhooks'
+    | '/api-docs/login'
     | '/api-docs/pause-batch'
     | '/api-docs/start-batch'
     | '/api-docs/stream-batch-events'
@@ -862,11 +867,9 @@ export interface FileRouteTypes {
     | '/skills/$id'
     | '/skills/new'
     | '/tasks/$id'
-    | '/clerk/sign-in'
-    | '/clerk/sign-up'
-    | '/clerk/user-management'
     | '/agents'
     | '/api-docs'
+    | '/api-keys'
     | '/api-playground'
     | '/apps'
     | '/batches'
@@ -892,10 +895,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
-    | '/clerk'
     | '/_authenticated/api-docs'
-    | '/clerk/(auth)'
-    | '/clerk/_authenticated'
     | '/(auth)/forgot-password'
     | '/(auth)/otp'
     | '/(auth)/sign-in'
@@ -909,11 +909,14 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/agents/$id'
     | '/_authenticated/agents/new'
+    | '/_authenticated/api-docs/api-keys'
     | '/_authenticated/api-docs/cancel-batch'
     | '/_authenticated/api-docs/cancel-task'
+    | '/_authenticated/api-docs/create-api-key'
     | '/_authenticated/api-docs/create-batch'
     | '/_authenticated/api-docs/create-task'
     | '/_authenticated/api-docs/create-webhook'
+    | '/_authenticated/api-docs/delete-api-key'
     | '/_authenticated/api-docs/delete-batch'
     | '/_authenticated/api-docs/delete-file'
     | '/_authenticated/api-docs/delete-webhook'
@@ -927,6 +930,7 @@ export interface FileRouteTypes {
     | '/_authenticated/api-docs/list-batches'
     | '/_authenticated/api-docs/list-files'
     | '/_authenticated/api-docs/list-webhooks'
+    | '/_authenticated/api-docs/login'
     | '/_authenticated/api-docs/pause-batch'
     | '/_authenticated/api-docs/start-batch'
     | '/_authenticated/api-docs/stream-batch-events'
@@ -940,11 +944,9 @@ export interface FileRouteTypes {
     | '/_authenticated/skills/$id'
     | '/_authenticated/skills/new'
     | '/_authenticated/tasks/$id'
-    | '/clerk/(auth)/sign-in'
-    | '/clerk/(auth)/sign-up'
-    | '/clerk/_authenticated/user-management'
     | '/_authenticated/agents/'
     | '/_authenticated/api-docs/'
+    | '/_authenticated/api-keys/'
     | '/_authenticated/api-playground/'
     | '/_authenticated/apps/'
     | '/_authenticated/batches/'
@@ -971,7 +973,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  ClerkRouteRoute: typeof ClerkRouteRouteWithChildren
   authForgotPasswordRoute: typeof authForgotPasswordRoute
   authOtpRoute: typeof authOtpRoute
   authSignInRoute: typeof authSignInRoute
@@ -986,13 +987,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/clerk': {
-      id: '/clerk'
-      path: '/clerk'
-      fullPath: '/clerk'
-      preLoaderRoute: typeof ClerkRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -1076,20 +1070,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/forgot-password'
       preLoaderRoute: typeof authForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/clerk/_authenticated': {
-      id: '/clerk/_authenticated'
-      path: ''
-      fullPath: '/clerk'
-      preLoaderRoute: typeof ClerkAuthenticatedRouteRouteImport
-      parentRoute: typeof ClerkRouteRoute
-    }
-    '/clerk/(auth)': {
-      id: '/clerk/(auth)'
-      path: ''
-      fullPath: '/clerk'
-      preLoaderRoute: typeof ClerkauthRouteRouteImport
-      parentRoute: typeof ClerkRouteRoute
     }
     '/_authenticated/api-docs': {
       id: '/_authenticated/api-docs'
@@ -1252,6 +1232,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiPlaygroundIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/api-keys/': {
+      id: '/_authenticated/api-keys/'
+      path: '/api-keys'
+      fullPath: '/api-keys'
+      preLoaderRoute: typeof AuthenticatedApiKeysIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/api-docs/': {
       id: '/_authenticated/api-docs/'
       path: '/'
@@ -1265,27 +1252,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/agents'
       preLoaderRoute: typeof AuthenticatedAgentsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/clerk/_authenticated/user-management': {
-      id: '/clerk/_authenticated/user-management'
-      path: '/user-management'
-      fullPath: '/clerk/user-management'
-      preLoaderRoute: typeof ClerkAuthenticatedUserManagementRouteImport
-      parentRoute: typeof ClerkAuthenticatedRouteRoute
-    }
-    '/clerk/(auth)/sign-up': {
-      id: '/clerk/(auth)/sign-up'
-      path: '/sign-up'
-      fullPath: '/clerk/sign-up'
-      preLoaderRoute: typeof ClerkauthSignUpRouteImport
-      parentRoute: typeof ClerkauthRouteRoute
-    }
-    '/clerk/(auth)/sign-in': {
-      id: '/clerk/(auth)/sign-in'
-      path: '/sign-in'
-      fullPath: '/clerk/sign-in'
-      preLoaderRoute: typeof ClerkauthSignInRouteImport
-      parentRoute: typeof ClerkauthRouteRoute
     }
     '/_authenticated/tasks/$id': {
       id: '/_authenticated/tasks/$id'
@@ -1376,6 +1342,13 @@ declare module '@tanstack/react-router' {
       path: '/pause-batch'
       fullPath: '/api-docs/pause-batch'
       preLoaderRoute: typeof AuthenticatedApiDocsPauseBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/login': {
+      id: '/_authenticated/api-docs/login'
+      path: '/login'
+      fullPath: '/api-docs/login'
+      preLoaderRoute: typeof AuthenticatedApiDocsLoginRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
     '/_authenticated/api-docs/list-webhooks': {
@@ -1469,6 +1442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiDocsDeleteBatchRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
+    '/_authenticated/api-docs/delete-api-key': {
+      id: '/_authenticated/api-docs/delete-api-key'
+      path: '/delete-api-key'
+      fullPath: '/api-docs/delete-api-key'
+      preLoaderRoute: typeof AuthenticatedApiDocsDeleteApiKeyRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/api-docs/create-webhook': {
       id: '/_authenticated/api-docs/create-webhook'
       path: '/create-webhook'
@@ -1490,6 +1470,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiDocsCreateBatchRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
+    '/_authenticated/api-docs/create-api-key': {
+      id: '/_authenticated/api-docs/create-api-key'
+      path: '/create-api-key'
+      fullPath: '/api-docs/create-api-key'
+      preLoaderRoute: typeof AuthenticatedApiDocsCreateApiKeyRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/api-docs/cancel-task': {
       id: '/_authenticated/api-docs/cancel-task'
       path: '/cancel-task'
@@ -1502,6 +1489,13 @@ declare module '@tanstack/react-router' {
       path: '/cancel-batch'
       fullPath: '/api-docs/cancel-batch'
       preLoaderRoute: typeof AuthenticatedApiDocsCancelBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/api-keys': {
+      id: '/_authenticated/api-docs/api-keys'
+      path: '/api-keys'
+      fullPath: '/api-docs/api-keys'
+      preLoaderRoute: typeof AuthenticatedApiDocsApiKeysRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
     '/_authenticated/agents/new': {
@@ -1522,11 +1516,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedApiDocsRouteRouteChildren {
+  AuthenticatedApiDocsApiKeysRoute: typeof AuthenticatedApiDocsApiKeysRoute
   AuthenticatedApiDocsCancelBatchRoute: typeof AuthenticatedApiDocsCancelBatchRoute
   AuthenticatedApiDocsCancelTaskRoute: typeof AuthenticatedApiDocsCancelTaskRoute
+  AuthenticatedApiDocsCreateApiKeyRoute: typeof AuthenticatedApiDocsCreateApiKeyRoute
   AuthenticatedApiDocsCreateBatchRoute: typeof AuthenticatedApiDocsCreateBatchRoute
   AuthenticatedApiDocsCreateTaskRoute: typeof AuthenticatedApiDocsCreateTaskRoute
   AuthenticatedApiDocsCreateWebhookRoute: typeof AuthenticatedApiDocsCreateWebhookRoute
+  AuthenticatedApiDocsDeleteApiKeyRoute: typeof AuthenticatedApiDocsDeleteApiKeyRoute
   AuthenticatedApiDocsDeleteBatchRoute: typeof AuthenticatedApiDocsDeleteBatchRoute
   AuthenticatedApiDocsDeleteFileRoute: typeof AuthenticatedApiDocsDeleteFileRoute
   AuthenticatedApiDocsDeleteWebhookRoute: typeof AuthenticatedApiDocsDeleteWebhookRoute
@@ -1540,6 +1537,7 @@ interface AuthenticatedApiDocsRouteRouteChildren {
   AuthenticatedApiDocsListBatchesRoute: typeof AuthenticatedApiDocsListBatchesRoute
   AuthenticatedApiDocsListFilesRoute: typeof AuthenticatedApiDocsListFilesRoute
   AuthenticatedApiDocsListWebhooksRoute: typeof AuthenticatedApiDocsListWebhooksRoute
+  AuthenticatedApiDocsLoginRoute: typeof AuthenticatedApiDocsLoginRoute
   AuthenticatedApiDocsPauseBatchRoute: typeof AuthenticatedApiDocsPauseBatchRoute
   AuthenticatedApiDocsStartBatchRoute: typeof AuthenticatedApiDocsStartBatchRoute
   AuthenticatedApiDocsStreamBatchEventsRoute: typeof AuthenticatedApiDocsStreamBatchEventsRoute
@@ -1550,12 +1548,17 @@ interface AuthenticatedApiDocsRouteRouteChildren {
 
 const AuthenticatedApiDocsRouteRouteChildren: AuthenticatedApiDocsRouteRouteChildren =
   {
+    AuthenticatedApiDocsApiKeysRoute: AuthenticatedApiDocsApiKeysRoute,
     AuthenticatedApiDocsCancelBatchRoute: AuthenticatedApiDocsCancelBatchRoute,
     AuthenticatedApiDocsCancelTaskRoute: AuthenticatedApiDocsCancelTaskRoute,
+    AuthenticatedApiDocsCreateApiKeyRoute:
+      AuthenticatedApiDocsCreateApiKeyRoute,
     AuthenticatedApiDocsCreateBatchRoute: AuthenticatedApiDocsCreateBatchRoute,
     AuthenticatedApiDocsCreateTaskRoute: AuthenticatedApiDocsCreateTaskRoute,
     AuthenticatedApiDocsCreateWebhookRoute:
       AuthenticatedApiDocsCreateWebhookRoute,
+    AuthenticatedApiDocsDeleteApiKeyRoute:
+      AuthenticatedApiDocsDeleteApiKeyRoute,
     AuthenticatedApiDocsDeleteBatchRoute: AuthenticatedApiDocsDeleteBatchRoute,
     AuthenticatedApiDocsDeleteFileRoute: AuthenticatedApiDocsDeleteFileRoute,
     AuthenticatedApiDocsDeleteWebhookRoute:
@@ -1573,6 +1576,7 @@ const AuthenticatedApiDocsRouteRouteChildren: AuthenticatedApiDocsRouteRouteChil
     AuthenticatedApiDocsListFilesRoute: AuthenticatedApiDocsListFilesRoute,
     AuthenticatedApiDocsListWebhooksRoute:
       AuthenticatedApiDocsListWebhooksRoute,
+    AuthenticatedApiDocsLoginRoute: AuthenticatedApiDocsLoginRoute,
     AuthenticatedApiDocsPauseBatchRoute: AuthenticatedApiDocsPauseBatchRoute,
     AuthenticatedApiDocsStartBatchRoute: AuthenticatedApiDocsStartBatchRoute,
     AuthenticatedApiDocsStreamBatchEventsRoute:
@@ -1602,6 +1606,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSkillsNewRoute: typeof AuthenticatedSkillsNewRoute
   AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
   AuthenticatedAgentsIndexRoute: typeof AuthenticatedAgentsIndexRoute
+  AuthenticatedApiKeysIndexRoute: typeof AuthenticatedApiKeysIndexRoute
   AuthenticatedApiPlaygroundIndexRoute: typeof AuthenticatedApiPlaygroundIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedBatchesIndexRoute: typeof AuthenticatedBatchesIndexRoute
@@ -1640,6 +1645,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSkillsNewRoute: AuthenticatedSkillsNewRoute,
   AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
   AuthenticatedAgentsIndexRoute: AuthenticatedAgentsIndexRoute,
+  AuthenticatedApiKeysIndexRoute: AuthenticatedApiKeysIndexRoute,
   AuthenticatedApiPlaygroundIndexRoute: AuthenticatedApiPlaygroundIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedBatchesIndexRoute: AuthenticatedBatchesIndexRoute,
@@ -1667,52 +1673,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
-interface ClerkauthRouteRouteChildren {
-  ClerkauthSignInRoute: typeof ClerkauthSignInRoute
-  ClerkauthSignUpRoute: typeof ClerkauthSignUpRoute
-}
-
-const ClerkauthRouteRouteChildren: ClerkauthRouteRouteChildren = {
-  ClerkauthSignInRoute: ClerkauthSignInRoute,
-  ClerkauthSignUpRoute: ClerkauthSignUpRoute,
-}
-
-const ClerkauthRouteRouteWithChildren = ClerkauthRouteRoute._addFileChildren(
-  ClerkauthRouteRouteChildren,
-)
-
-interface ClerkAuthenticatedRouteRouteChildren {
-  ClerkAuthenticatedUserManagementRoute: typeof ClerkAuthenticatedUserManagementRoute
-}
-
-const ClerkAuthenticatedRouteRouteChildren: ClerkAuthenticatedRouteRouteChildren =
-  {
-    ClerkAuthenticatedUserManagementRoute:
-      ClerkAuthenticatedUserManagementRoute,
-  }
-
-const ClerkAuthenticatedRouteRouteWithChildren =
-  ClerkAuthenticatedRouteRoute._addFileChildren(
-    ClerkAuthenticatedRouteRouteChildren,
-  )
-
-interface ClerkRouteRouteChildren {
-  ClerkauthRouteRoute: typeof ClerkauthRouteRouteWithChildren
-  ClerkAuthenticatedRouteRoute: typeof ClerkAuthenticatedRouteRouteWithChildren
-}
-
-const ClerkRouteRouteChildren: ClerkRouteRouteChildren = {
-  ClerkauthRouteRoute: ClerkauthRouteRouteWithChildren,
-  ClerkAuthenticatedRouteRoute: ClerkAuthenticatedRouteRouteWithChildren,
-}
-
-const ClerkRouteRouteWithChildren = ClerkRouteRoute._addFileChildren(
-  ClerkRouteRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  ClerkRouteRoute: ClerkRouteRouteWithChildren,
   authForgotPasswordRoute: authForgotPasswordRoute,
   authOtpRoute: authOtpRoute,
   authSignInRoute: authSignInRoute,

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/auth"
 	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
@@ -40,6 +41,9 @@ func init() {
 type App struct {
 	// 配置
 	Config *config.Config
+
+	// 认证
+	Auth *auth.Manager
 
 	// 核心组件
 	Container     container.Manager
@@ -108,6 +112,10 @@ func (a *App) initialize() error {
 			log.Info("Docker connection OK")
 		}
 	}
+
+	// 1.5. 初始化认证管理器
+	a.Auth = auth.NewManager(database.GetDB())
+	log.Info("auth manager initialized")
 
 	// 2. 获取 Agent 注册表
 	a.AgentRegistry = engine.DefaultRegistry()
