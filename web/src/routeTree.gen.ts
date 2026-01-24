@@ -24,7 +24,6 @@ import { Route as authOtpRouteImport } from './routes/(auth)/otp'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_authenticated/route'
 import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
-import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedApiDocsRouteRouteImport } from './routes/_authenticated/api-docs/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
@@ -45,6 +44,7 @@ import { Route as AuthenticatedFilesIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedDemoIndexRouteImport } from './routes/_authenticated/demo/index'
 import { Route as AuthenticatedCommandCenterIndexRouteImport } from './routes/_authenticated/command-center/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
+import { Route as AuthenticatedBatchesIndexRouteImport } from './routes/_authenticated/batches/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedApiPlaygroundIndexRouteImport } from './routes/_authenticated/api-playground/index'
 import { Route as AuthenticatedApiDocsIndexRouteImport } from './routes/_authenticated/api-docs/index'
@@ -55,24 +55,34 @@ import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks/$id'
 import { Route as AuthenticatedSkillsNewRouteImport } from './routes/_authenticated/skills/new'
 import { Route as AuthenticatedSkillsIdRouteImport } from './routes/_authenticated/skills/$id'
-import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
-import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
-import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
-import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedSessionsIdRouteImport } from './routes/_authenticated/sessions/$id'
 import { Route as AuthenticatedMcpServersNewRouteImport } from './routes/_authenticated/mcp-servers/new'
 import { Route as AuthenticatedMcpServersIdRouteImport } from './routes/_authenticated/mcp-servers/$id'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedBatchesBatchIdRouteImport } from './routes/_authenticated/batches/$batchId'
 import { Route as AuthenticatedApiDocsUploadFileRouteImport } from './routes/_authenticated/api-docs/upload-file'
 import { Route as AuthenticatedApiDocsStreamEventsRouteImport } from './routes/_authenticated/api-docs/stream-events'
+import { Route as AuthenticatedApiDocsStreamBatchEventsRouteImport } from './routes/_authenticated/api-docs/stream-batch-events'
+import { Route as AuthenticatedApiDocsStartBatchRouteImport } from './routes/_authenticated/api-docs/start-batch'
+import { Route as AuthenticatedApiDocsPauseBatchRouteImport } from './routes/_authenticated/api-docs/pause-batch'
+import { Route as AuthenticatedApiDocsListWebhooksRouteImport } from './routes/_authenticated/api-docs/list-webhooks'
 import { Route as AuthenticatedApiDocsListFilesRouteImport } from './routes/_authenticated/api-docs/list-files'
+import { Route as AuthenticatedApiDocsListBatchesRouteImport } from './routes/_authenticated/api-docs/list-batches'
+import { Route as AuthenticatedApiDocsListBatchTasksRouteImport } from './routes/_authenticated/api-docs/list-batch-tasks'
+import { Route as AuthenticatedApiDocsGetWebhookRouteImport } from './routes/_authenticated/api-docs/get-webhook'
 import { Route as AuthenticatedApiDocsGetTasksRouteImport } from './routes/_authenticated/api-docs/get-tasks'
 import { Route as AuthenticatedApiDocsGetTaskRouteImport } from './routes/_authenticated/api-docs/get-task'
 import { Route as AuthenticatedApiDocsGetFileRouteImport } from './routes/_authenticated/api-docs/get-file'
+import { Route as AuthenticatedApiDocsGetBatchRouteImport } from './routes/_authenticated/api-docs/get-batch'
 import { Route as AuthenticatedApiDocsDownloadFileRouteImport } from './routes/_authenticated/api-docs/download-file'
+import { Route as AuthenticatedApiDocsDeleteWebhookRouteImport } from './routes/_authenticated/api-docs/delete-webhook'
 import { Route as AuthenticatedApiDocsDeleteFileRouteImport } from './routes/_authenticated/api-docs/delete-file'
+import { Route as AuthenticatedApiDocsDeleteBatchRouteImport } from './routes/_authenticated/api-docs/delete-batch'
+import { Route as AuthenticatedApiDocsCreateWebhookRouteImport } from './routes/_authenticated/api-docs/create-webhook'
 import { Route as AuthenticatedApiDocsCreateTaskRouteImport } from './routes/_authenticated/api-docs/create-task'
+import { Route as AuthenticatedApiDocsCreateBatchRouteImport } from './routes/_authenticated/api-docs/create-batch'
 import { Route as AuthenticatedApiDocsCancelTaskRouteImport } from './routes/_authenticated/api-docs/cancel-task'
+import { Route as AuthenticatedApiDocsCancelBatchRouteImport } from './routes/_authenticated/api-docs/cancel-batch'
 import { Route as AuthenticatedAgentsNewRouteImport } from './routes/_authenticated/agents/new'
 import { Route as AuthenticatedAgentsIdRouteImport } from './routes/_authenticated/agents/$id'
 
@@ -148,12 +158,6 @@ const ClerkauthRouteRoute = ClerkauthRouteRouteImport.update({
   id: '/(auth)',
   getParentRoute: () => ClerkRouteRoute,
 } as any)
-const AuthenticatedSettingsRouteRoute =
-  AuthenticatedSettingsRouteRouteImport.update({
-    id: '/settings',
-    path: '/settings',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedApiDocsRouteRoute =
   AuthenticatedApiDocsRouteRouteImport.update({
     id: '/api-docs',
@@ -196,9 +200,9 @@ const AuthenticatedSkillStoreIndexRoute =
   } as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+    id: '/settings/',
+    path: '/settings/',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSessionsIndexRoute =
   AuthenticatedSessionsIndexRouteImport.update({
@@ -269,6 +273,12 @@ const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
   path: '/chats/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBatchesIndexRoute =
+  AuthenticatedBatchesIndexRouteImport.update({
+    id: '/batches/',
+    path: '/batches/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexRouteImport.update({
   id: '/apps/',
   path: '/apps/',
@@ -323,30 +333,6 @@ const AuthenticatedSkillsIdRoute = AuthenticatedSkillsIdRouteImport.update({
   path: '/skills/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedSettingsNotificationsRoute =
-  AuthenticatedSettingsNotificationsRouteImport.update({
-    id: '/notifications',
-    path: '/notifications',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
-  } as any)
-const AuthenticatedSettingsDisplayRoute =
-  AuthenticatedSettingsDisplayRouteImport.update({
-    id: '/display',
-    path: '/display',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
-  } as any)
-const AuthenticatedSettingsAppearanceRoute =
-  AuthenticatedSettingsAppearanceRouteImport.update({
-    id: '/appearance',
-    path: '/appearance',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
-  } as any)
-const AuthenticatedSettingsAccountRoute =
-  AuthenticatedSettingsAccountRouteImport.update({
-    id: '/account',
-    path: '/account',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
-  } as any)
 const AuthenticatedSessionsIdRoute = AuthenticatedSessionsIdRouteImport.update({
   id: '/sessions/$id',
   path: '/sessions/$id',
@@ -370,6 +356,12 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedBatchesBatchIdRoute =
+  AuthenticatedBatchesBatchIdRouteImport.update({
+    id: '/batches/$batchId',
+    path: '/batches/$batchId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedApiDocsUploadFileRoute =
   AuthenticatedApiDocsUploadFileRouteImport.update({
     id: '/upload-file',
@@ -382,10 +374,52 @@ const AuthenticatedApiDocsStreamEventsRoute =
     path: '/stream-events',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
+const AuthenticatedApiDocsStreamBatchEventsRoute =
+  AuthenticatedApiDocsStreamBatchEventsRouteImport.update({
+    id: '/stream-batch-events',
+    path: '/stream-batch-events',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsStartBatchRoute =
+  AuthenticatedApiDocsStartBatchRouteImport.update({
+    id: '/start-batch',
+    path: '/start-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsPauseBatchRoute =
+  AuthenticatedApiDocsPauseBatchRouteImport.update({
+    id: '/pause-batch',
+    path: '/pause-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsListWebhooksRoute =
+  AuthenticatedApiDocsListWebhooksRouteImport.update({
+    id: '/list-webhooks',
+    path: '/list-webhooks',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedApiDocsListFilesRoute =
   AuthenticatedApiDocsListFilesRouteImport.update({
     id: '/list-files',
     path: '/list-files',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsListBatchesRoute =
+  AuthenticatedApiDocsListBatchesRouteImport.update({
+    id: '/list-batches',
+    path: '/list-batches',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsListBatchTasksRoute =
+  AuthenticatedApiDocsListBatchTasksRouteImport.update({
+    id: '/list-batch-tasks',
+    path: '/list-batch-tasks',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsGetWebhookRoute =
+  AuthenticatedApiDocsGetWebhookRouteImport.update({
+    id: '/get-webhook',
+    path: '/get-webhook',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
 const AuthenticatedApiDocsGetTasksRoute =
@@ -406,10 +440,22 @@ const AuthenticatedApiDocsGetFileRoute =
     path: '/get-file',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
+const AuthenticatedApiDocsGetBatchRoute =
+  AuthenticatedApiDocsGetBatchRouteImport.update({
+    id: '/get-batch',
+    path: '/get-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedApiDocsDownloadFileRoute =
   AuthenticatedApiDocsDownloadFileRouteImport.update({
     id: '/download-file',
     path: '/download-file',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsDeleteWebhookRoute =
+  AuthenticatedApiDocsDeleteWebhookRouteImport.update({
+    id: '/delete-webhook',
+    path: '/delete-webhook',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
 const AuthenticatedApiDocsDeleteFileRoute =
@@ -418,16 +464,40 @@ const AuthenticatedApiDocsDeleteFileRoute =
     path: '/delete-file',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
+const AuthenticatedApiDocsDeleteBatchRoute =
+  AuthenticatedApiDocsDeleteBatchRouteImport.update({
+    id: '/delete-batch',
+    path: '/delete-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsCreateWebhookRoute =
+  AuthenticatedApiDocsCreateWebhookRouteImport.update({
+    id: '/create-webhook',
+    path: '/create-webhook',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedApiDocsCreateTaskRoute =
   AuthenticatedApiDocsCreateTaskRouteImport.update({
     id: '/create-task',
     path: '/create-task',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
+const AuthenticatedApiDocsCreateBatchRoute =
+  AuthenticatedApiDocsCreateBatchRouteImport.update({
+    id: '/create-batch',
+    path: '/create-batch',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
 const AuthenticatedApiDocsCancelTaskRoute =
   AuthenticatedApiDocsCancelTaskRouteImport.update({
     id: '/cancel-task',
     path: '/cancel-task',
+    getParentRoute: () => AuthenticatedApiDocsRouteRoute,
+  } as any)
+const AuthenticatedApiDocsCancelBatchRoute =
+  AuthenticatedApiDocsCancelBatchRouteImport.update({
+    id: '/cancel-batch',
+    path: '/cancel-batch',
     getParentRoute: () => AuthenticatedApiDocsRouteRoute,
   } as any)
 const AuthenticatedAgentsNewRoute = AuthenticatedAgentsNewRouteImport.update({
@@ -444,7 +514,6 @@ const AuthenticatedAgentsIdRoute = AuthenticatedAgentsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
   '/api-docs': typeof AuthenticatedApiDocsRouteRouteWithChildren
-  '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
@@ -458,24 +527,34 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/api-docs/cancel-batch': typeof AuthenticatedApiDocsCancelBatchRoute
   '/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/api-docs/create-batch': typeof AuthenticatedApiDocsCreateBatchRoute
   '/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
+  '/api-docs/create-webhook': typeof AuthenticatedApiDocsCreateWebhookRoute
+  '/api-docs/delete-batch': typeof AuthenticatedApiDocsDeleteBatchRoute
   '/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
+  '/api-docs/delete-webhook': typeof AuthenticatedApiDocsDeleteWebhookRoute
   '/api-docs/download-file': typeof AuthenticatedApiDocsDownloadFileRoute
+  '/api-docs/get-batch': typeof AuthenticatedApiDocsGetBatchRoute
   '/api-docs/get-file': typeof AuthenticatedApiDocsGetFileRoute
   '/api-docs/get-task': typeof AuthenticatedApiDocsGetTaskRoute
   '/api-docs/get-tasks': typeof AuthenticatedApiDocsGetTasksRoute
+  '/api-docs/get-webhook': typeof AuthenticatedApiDocsGetWebhookRoute
+  '/api-docs/list-batch-tasks': typeof AuthenticatedApiDocsListBatchTasksRoute
+  '/api-docs/list-batches': typeof AuthenticatedApiDocsListBatchesRoute
   '/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
+  '/api-docs/list-webhooks': typeof AuthenticatedApiDocsListWebhooksRoute
+  '/api-docs/pause-batch': typeof AuthenticatedApiDocsPauseBatchRoute
+  '/api-docs/start-batch': typeof AuthenticatedApiDocsStartBatchRoute
+  '/api-docs/stream-batch-events': typeof AuthenticatedApiDocsStreamBatchEventsRoute
   '/api-docs/stream-events': typeof AuthenticatedApiDocsStreamEventsRoute
   '/api-docs/upload-file': typeof AuthenticatedApiDocsUploadFileRoute
+  '/batches/$batchId': typeof AuthenticatedBatchesBatchIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
-  '/settings/account': typeof AuthenticatedSettingsAccountRoute
-  '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/settings/display': typeof AuthenticatedSettingsDisplayRoute
-  '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/skills/new': typeof AuthenticatedSkillsNewRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
@@ -486,6 +565,7 @@ export interface FileRoutesByFullPath {
   '/api-docs/': typeof AuthenticatedApiDocsIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/batches': typeof AuthenticatedBatchesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/command-center': typeof AuthenticatedCommandCenterIndexRoute
   '/demo': typeof AuthenticatedDemoIndexRoute
@@ -498,7 +578,7 @@ export interface FileRoutesByFullPath {
   '/providers': typeof AuthenticatedProvidersIndexRoute
   '/runtimes': typeof AuthenticatedRuntimesIndexRoute
   '/sessions': typeof AuthenticatedSessionsIndexRoute
-  '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-store': typeof AuthenticatedSkillStoreIndexRoute
   '/skills': typeof AuthenticatedSkillsIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
@@ -521,24 +601,34 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/api-docs/cancel-batch': typeof AuthenticatedApiDocsCancelBatchRoute
   '/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/api-docs/create-batch': typeof AuthenticatedApiDocsCreateBatchRoute
   '/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
+  '/api-docs/create-webhook': typeof AuthenticatedApiDocsCreateWebhookRoute
+  '/api-docs/delete-batch': typeof AuthenticatedApiDocsDeleteBatchRoute
   '/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
+  '/api-docs/delete-webhook': typeof AuthenticatedApiDocsDeleteWebhookRoute
   '/api-docs/download-file': typeof AuthenticatedApiDocsDownloadFileRoute
+  '/api-docs/get-batch': typeof AuthenticatedApiDocsGetBatchRoute
   '/api-docs/get-file': typeof AuthenticatedApiDocsGetFileRoute
   '/api-docs/get-task': typeof AuthenticatedApiDocsGetTaskRoute
   '/api-docs/get-tasks': typeof AuthenticatedApiDocsGetTasksRoute
+  '/api-docs/get-webhook': typeof AuthenticatedApiDocsGetWebhookRoute
+  '/api-docs/list-batch-tasks': typeof AuthenticatedApiDocsListBatchTasksRoute
+  '/api-docs/list-batches': typeof AuthenticatedApiDocsListBatchesRoute
   '/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
+  '/api-docs/list-webhooks': typeof AuthenticatedApiDocsListWebhooksRoute
+  '/api-docs/pause-batch': typeof AuthenticatedApiDocsPauseBatchRoute
+  '/api-docs/start-batch': typeof AuthenticatedApiDocsStartBatchRoute
+  '/api-docs/stream-batch-events': typeof AuthenticatedApiDocsStreamBatchEventsRoute
   '/api-docs/stream-events': typeof AuthenticatedApiDocsStreamEventsRoute
   '/api-docs/upload-file': typeof AuthenticatedApiDocsUploadFileRoute
+  '/batches/$batchId': typeof AuthenticatedBatchesBatchIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
-  '/settings/account': typeof AuthenticatedSettingsAccountRoute
-  '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/settings/display': typeof AuthenticatedSettingsDisplayRoute
-  '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/skills/new': typeof AuthenticatedSkillsNewRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
@@ -549,6 +639,7 @@ export interface FileRoutesByTo {
   '/api-docs': typeof AuthenticatedApiDocsIndexRoute
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/batches': typeof AuthenticatedBatchesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/command-center': typeof AuthenticatedCommandCenterIndexRoute
   '/demo': typeof AuthenticatedDemoIndexRoute
@@ -574,7 +665,6 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/clerk': typeof ClerkRouteRouteWithChildren
   '/_authenticated/api-docs': typeof AuthenticatedApiDocsRouteRouteWithChildren
-  '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/clerk/(auth)': typeof ClerkauthRouteRouteWithChildren
   '/clerk/_authenticated': typeof ClerkAuthenticatedRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -590,24 +680,34 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/agents/$id': typeof AuthenticatedAgentsIdRoute
   '/_authenticated/agents/new': typeof AuthenticatedAgentsNewRoute
+  '/_authenticated/api-docs/cancel-batch': typeof AuthenticatedApiDocsCancelBatchRoute
   '/_authenticated/api-docs/cancel-task': typeof AuthenticatedApiDocsCancelTaskRoute
+  '/_authenticated/api-docs/create-batch': typeof AuthenticatedApiDocsCreateBatchRoute
   '/_authenticated/api-docs/create-task': typeof AuthenticatedApiDocsCreateTaskRoute
+  '/_authenticated/api-docs/create-webhook': typeof AuthenticatedApiDocsCreateWebhookRoute
+  '/_authenticated/api-docs/delete-batch': typeof AuthenticatedApiDocsDeleteBatchRoute
   '/_authenticated/api-docs/delete-file': typeof AuthenticatedApiDocsDeleteFileRoute
+  '/_authenticated/api-docs/delete-webhook': typeof AuthenticatedApiDocsDeleteWebhookRoute
   '/_authenticated/api-docs/download-file': typeof AuthenticatedApiDocsDownloadFileRoute
+  '/_authenticated/api-docs/get-batch': typeof AuthenticatedApiDocsGetBatchRoute
   '/_authenticated/api-docs/get-file': typeof AuthenticatedApiDocsGetFileRoute
   '/_authenticated/api-docs/get-task': typeof AuthenticatedApiDocsGetTaskRoute
   '/_authenticated/api-docs/get-tasks': typeof AuthenticatedApiDocsGetTasksRoute
+  '/_authenticated/api-docs/get-webhook': typeof AuthenticatedApiDocsGetWebhookRoute
+  '/_authenticated/api-docs/list-batch-tasks': typeof AuthenticatedApiDocsListBatchTasksRoute
+  '/_authenticated/api-docs/list-batches': typeof AuthenticatedApiDocsListBatchesRoute
   '/_authenticated/api-docs/list-files': typeof AuthenticatedApiDocsListFilesRoute
+  '/_authenticated/api-docs/list-webhooks': typeof AuthenticatedApiDocsListWebhooksRoute
+  '/_authenticated/api-docs/pause-batch': typeof AuthenticatedApiDocsPauseBatchRoute
+  '/_authenticated/api-docs/start-batch': typeof AuthenticatedApiDocsStartBatchRoute
+  '/_authenticated/api-docs/stream-batch-events': typeof AuthenticatedApiDocsStreamBatchEventsRoute
   '/_authenticated/api-docs/stream-events': typeof AuthenticatedApiDocsStreamEventsRoute
   '/_authenticated/api-docs/upload-file': typeof AuthenticatedApiDocsUploadFileRoute
+  '/_authenticated/batches/$batchId': typeof AuthenticatedBatchesBatchIdRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/mcp-servers/$id': typeof AuthenticatedMcpServersIdRoute
   '/_authenticated/mcp-servers/new': typeof AuthenticatedMcpServersNewRoute
   '/_authenticated/sessions/$id': typeof AuthenticatedSessionsIdRoute
-  '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
-  '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
-  '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/skills/$id': typeof AuthenticatedSkillsIdRoute
   '/_authenticated/skills/new': typeof AuthenticatedSkillsNewRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
@@ -618,6 +718,7 @@ export interface FileRoutesById {
   '/_authenticated/api-docs/': typeof AuthenticatedApiDocsIndexRoute
   '/_authenticated/api-playground/': typeof AuthenticatedApiPlaygroundIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
+  '/_authenticated/batches/': typeof AuthenticatedBatchesIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/command-center/': typeof AuthenticatedCommandCenterIndexRoute
   '/_authenticated/demo/': typeof AuthenticatedDemoIndexRoute
@@ -643,7 +744,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/clerk'
     | '/api-docs'
-    | '/settings'
     | '/forgot-password'
     | '/otp'
     | '/sign-in'
@@ -657,24 +757,34 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$id'
     | '/agents/new'
+    | '/api-docs/cancel-batch'
     | '/api-docs/cancel-task'
+    | '/api-docs/create-batch'
     | '/api-docs/create-task'
+    | '/api-docs/create-webhook'
+    | '/api-docs/delete-batch'
     | '/api-docs/delete-file'
+    | '/api-docs/delete-webhook'
     | '/api-docs/download-file'
+    | '/api-docs/get-batch'
     | '/api-docs/get-file'
     | '/api-docs/get-task'
     | '/api-docs/get-tasks'
+    | '/api-docs/get-webhook'
+    | '/api-docs/list-batch-tasks'
+    | '/api-docs/list-batches'
     | '/api-docs/list-files'
+    | '/api-docs/list-webhooks'
+    | '/api-docs/pause-batch'
+    | '/api-docs/start-batch'
+    | '/api-docs/stream-batch-events'
     | '/api-docs/stream-events'
     | '/api-docs/upload-file'
+    | '/batches/$batchId'
     | '/errors/$error'
     | '/mcp-servers/$id'
     | '/mcp-servers/new'
     | '/sessions/$id'
-    | '/settings/account'
-    | '/settings/appearance'
-    | '/settings/display'
-    | '/settings/notifications'
     | '/skills/$id'
     | '/skills/new'
     | '/tasks/$id'
@@ -685,6 +795,7 @@ export interface FileRouteTypes {
     | '/api-docs/'
     | '/api-playground'
     | '/apps'
+    | '/batches'
     | '/chats'
     | '/command-center'
     | '/demo'
@@ -697,7 +808,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/runtimes'
     | '/sessions'
-    | '/settings/'
+    | '/settings'
     | '/skill-store'
     | '/skills'
     | '/system'
@@ -720,24 +831,34 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$id'
     | '/agents/new'
+    | '/api-docs/cancel-batch'
     | '/api-docs/cancel-task'
+    | '/api-docs/create-batch'
     | '/api-docs/create-task'
+    | '/api-docs/create-webhook'
+    | '/api-docs/delete-batch'
     | '/api-docs/delete-file'
+    | '/api-docs/delete-webhook'
     | '/api-docs/download-file'
+    | '/api-docs/get-batch'
     | '/api-docs/get-file'
     | '/api-docs/get-task'
     | '/api-docs/get-tasks'
+    | '/api-docs/get-webhook'
+    | '/api-docs/list-batch-tasks'
+    | '/api-docs/list-batches'
     | '/api-docs/list-files'
+    | '/api-docs/list-webhooks'
+    | '/api-docs/pause-batch'
+    | '/api-docs/start-batch'
+    | '/api-docs/stream-batch-events'
     | '/api-docs/stream-events'
     | '/api-docs/upload-file'
+    | '/batches/$batchId'
     | '/errors/$error'
     | '/mcp-servers/$id'
     | '/mcp-servers/new'
     | '/sessions/$id'
-    | '/settings/account'
-    | '/settings/appearance'
-    | '/settings/display'
-    | '/settings/notifications'
     | '/skills/$id'
     | '/skills/new'
     | '/tasks/$id'
@@ -748,6 +869,7 @@ export interface FileRouteTypes {
     | '/api-docs'
     | '/api-playground'
     | '/apps'
+    | '/batches'
     | '/chats'
     | '/command-center'
     | '/demo'
@@ -772,7 +894,6 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/clerk'
     | '/_authenticated/api-docs'
-    | '/_authenticated/settings'
     | '/clerk/(auth)'
     | '/clerk/_authenticated'
     | '/(auth)/forgot-password'
@@ -788,24 +909,34 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/agents/$id'
     | '/_authenticated/agents/new'
+    | '/_authenticated/api-docs/cancel-batch'
     | '/_authenticated/api-docs/cancel-task'
+    | '/_authenticated/api-docs/create-batch'
     | '/_authenticated/api-docs/create-task'
+    | '/_authenticated/api-docs/create-webhook'
+    | '/_authenticated/api-docs/delete-batch'
     | '/_authenticated/api-docs/delete-file'
+    | '/_authenticated/api-docs/delete-webhook'
     | '/_authenticated/api-docs/download-file'
+    | '/_authenticated/api-docs/get-batch'
     | '/_authenticated/api-docs/get-file'
     | '/_authenticated/api-docs/get-task'
     | '/_authenticated/api-docs/get-tasks'
+    | '/_authenticated/api-docs/get-webhook'
+    | '/_authenticated/api-docs/list-batch-tasks'
+    | '/_authenticated/api-docs/list-batches'
     | '/_authenticated/api-docs/list-files'
+    | '/_authenticated/api-docs/list-webhooks'
+    | '/_authenticated/api-docs/pause-batch'
+    | '/_authenticated/api-docs/start-batch'
+    | '/_authenticated/api-docs/stream-batch-events'
     | '/_authenticated/api-docs/stream-events'
     | '/_authenticated/api-docs/upload-file'
+    | '/_authenticated/batches/$batchId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/mcp-servers/$id'
     | '/_authenticated/mcp-servers/new'
     | '/_authenticated/sessions/$id'
-    | '/_authenticated/settings/account'
-    | '/_authenticated/settings/appearance'
-    | '/_authenticated/settings/display'
-    | '/_authenticated/settings/notifications'
     | '/_authenticated/skills/$id'
     | '/_authenticated/skills/new'
     | '/_authenticated/tasks/$id'
@@ -816,6 +947,7 @@ export interface FileRouteTypes {
     | '/_authenticated/api-docs/'
     | '/_authenticated/api-playground/'
     | '/_authenticated/apps/'
+    | '/_authenticated/batches/'
     | '/_authenticated/chats/'
     | '/_authenticated/command-center/'
     | '/_authenticated/demo/'
@@ -959,13 +1091,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClerkauthRouteRouteImport
       parentRoute: typeof ClerkRouteRoute
     }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/api-docs': {
       id: '/_authenticated/api-docs'
       path: '/api-docs'
@@ -1017,10 +1142,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
-      path: '/'
-      fullPath: '/settings/'
+      path: '/settings'
+      fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/sessions/': {
       id: '/_authenticated/sessions/'
@@ -1106,6 +1231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/batches/': {
+      id: '/_authenticated/batches/'
+      path: '/batches'
+      fullPath: '/batches'
+      preLoaderRoute: typeof AuthenticatedBatchesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/apps/': {
       id: '/_authenticated/apps/'
       path: '/apps'
@@ -1176,34 +1308,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSkillsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/settings/notifications': {
-      id: '/_authenticated/settings/notifications'
-      path: '/notifications'
-      fullPath: '/settings/notifications'
-      preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
-    }
-    '/_authenticated/settings/display': {
-      id: '/_authenticated/settings/display'
-      path: '/display'
-      fullPath: '/settings/display'
-      preLoaderRoute: typeof AuthenticatedSettingsDisplayRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
-    }
-    '/_authenticated/settings/appearance': {
-      id: '/_authenticated/settings/appearance'
-      path: '/appearance'
-      fullPath: '/settings/appearance'
-      preLoaderRoute: typeof AuthenticatedSettingsAppearanceRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
-    }
-    '/_authenticated/settings/account': {
-      id: '/_authenticated/settings/account'
-      path: '/account'
-      fullPath: '/settings/account'
-      preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
-    }
     '/_authenticated/sessions/$id': {
       id: '/_authenticated/sessions/$id'
       path: '/sessions/$id'
@@ -1232,6 +1336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/batches/$batchId': {
+      id: '/_authenticated/batches/$batchId'
+      path: '/batches/$batchId'
+      fullPath: '/batches/$batchId'
+      preLoaderRoute: typeof AuthenticatedBatchesBatchIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/api-docs/upload-file': {
       id: '/_authenticated/api-docs/upload-file'
       path: '/upload-file'
@@ -1246,11 +1357,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiDocsStreamEventsRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
+    '/_authenticated/api-docs/stream-batch-events': {
+      id: '/_authenticated/api-docs/stream-batch-events'
+      path: '/stream-batch-events'
+      fullPath: '/api-docs/stream-batch-events'
+      preLoaderRoute: typeof AuthenticatedApiDocsStreamBatchEventsRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/start-batch': {
+      id: '/_authenticated/api-docs/start-batch'
+      path: '/start-batch'
+      fullPath: '/api-docs/start-batch'
+      preLoaderRoute: typeof AuthenticatedApiDocsStartBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/pause-batch': {
+      id: '/_authenticated/api-docs/pause-batch'
+      path: '/pause-batch'
+      fullPath: '/api-docs/pause-batch'
+      preLoaderRoute: typeof AuthenticatedApiDocsPauseBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/list-webhooks': {
+      id: '/_authenticated/api-docs/list-webhooks'
+      path: '/list-webhooks'
+      fullPath: '/api-docs/list-webhooks'
+      preLoaderRoute: typeof AuthenticatedApiDocsListWebhooksRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/api-docs/list-files': {
       id: '/_authenticated/api-docs/list-files'
       path: '/list-files'
       fullPath: '/api-docs/list-files'
       preLoaderRoute: typeof AuthenticatedApiDocsListFilesRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/list-batches': {
+      id: '/_authenticated/api-docs/list-batches'
+      path: '/list-batches'
+      fullPath: '/api-docs/list-batches'
+      preLoaderRoute: typeof AuthenticatedApiDocsListBatchesRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/list-batch-tasks': {
+      id: '/_authenticated/api-docs/list-batch-tasks'
+      path: '/list-batch-tasks'
+      fullPath: '/api-docs/list-batch-tasks'
+      preLoaderRoute: typeof AuthenticatedApiDocsListBatchTasksRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/get-webhook': {
+      id: '/_authenticated/api-docs/get-webhook'
+      path: '/get-webhook'
+      fullPath: '/api-docs/get-webhook'
+      preLoaderRoute: typeof AuthenticatedApiDocsGetWebhookRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
     '/_authenticated/api-docs/get-tasks': {
@@ -1274,11 +1434,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiDocsGetFileRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
+    '/_authenticated/api-docs/get-batch': {
+      id: '/_authenticated/api-docs/get-batch'
+      path: '/get-batch'
+      fullPath: '/api-docs/get-batch'
+      preLoaderRoute: typeof AuthenticatedApiDocsGetBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/api-docs/download-file': {
       id: '/_authenticated/api-docs/download-file'
       path: '/download-file'
       fullPath: '/api-docs/download-file'
       preLoaderRoute: typeof AuthenticatedApiDocsDownloadFileRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/delete-webhook': {
+      id: '/_authenticated/api-docs/delete-webhook'
+      path: '/delete-webhook'
+      fullPath: '/api-docs/delete-webhook'
+      preLoaderRoute: typeof AuthenticatedApiDocsDeleteWebhookRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
     '/_authenticated/api-docs/delete-file': {
@@ -1288,6 +1462,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiDocsDeleteFileRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
+    '/_authenticated/api-docs/delete-batch': {
+      id: '/_authenticated/api-docs/delete-batch'
+      path: '/delete-batch'
+      fullPath: '/api-docs/delete-batch'
+      preLoaderRoute: typeof AuthenticatedApiDocsDeleteBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/create-webhook': {
+      id: '/_authenticated/api-docs/create-webhook'
+      path: '/create-webhook'
+      fullPath: '/api-docs/create-webhook'
+      preLoaderRoute: typeof AuthenticatedApiDocsCreateWebhookRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/api-docs/create-task': {
       id: '/_authenticated/api-docs/create-task'
       path: '/create-task'
@@ -1295,11 +1483,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApiDocsCreateTaskRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
+    '/_authenticated/api-docs/create-batch': {
+      id: '/_authenticated/api-docs/create-batch'
+      path: '/create-batch'
+      fullPath: '/api-docs/create-batch'
+      preLoaderRoute: typeof AuthenticatedApiDocsCreateBatchRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
     '/_authenticated/api-docs/cancel-task': {
       id: '/_authenticated/api-docs/cancel-task'
       path: '/cancel-task'
       fullPath: '/api-docs/cancel-task'
       preLoaderRoute: typeof AuthenticatedApiDocsCancelTaskRouteImport
+      parentRoute: typeof AuthenticatedApiDocsRouteRoute
+    }
+    '/_authenticated/api-docs/cancel-batch': {
+      id: '/_authenticated/api-docs/cancel-batch'
+      path: '/cancel-batch'
+      fullPath: '/api-docs/cancel-batch'
+      preLoaderRoute: typeof AuthenticatedApiDocsCancelBatchRouteImport
       parentRoute: typeof AuthenticatedApiDocsRouteRoute
     }
     '/_authenticated/agents/new': {
@@ -1320,14 +1522,27 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedApiDocsRouteRouteChildren {
+  AuthenticatedApiDocsCancelBatchRoute: typeof AuthenticatedApiDocsCancelBatchRoute
   AuthenticatedApiDocsCancelTaskRoute: typeof AuthenticatedApiDocsCancelTaskRoute
+  AuthenticatedApiDocsCreateBatchRoute: typeof AuthenticatedApiDocsCreateBatchRoute
   AuthenticatedApiDocsCreateTaskRoute: typeof AuthenticatedApiDocsCreateTaskRoute
+  AuthenticatedApiDocsCreateWebhookRoute: typeof AuthenticatedApiDocsCreateWebhookRoute
+  AuthenticatedApiDocsDeleteBatchRoute: typeof AuthenticatedApiDocsDeleteBatchRoute
   AuthenticatedApiDocsDeleteFileRoute: typeof AuthenticatedApiDocsDeleteFileRoute
+  AuthenticatedApiDocsDeleteWebhookRoute: typeof AuthenticatedApiDocsDeleteWebhookRoute
   AuthenticatedApiDocsDownloadFileRoute: typeof AuthenticatedApiDocsDownloadFileRoute
+  AuthenticatedApiDocsGetBatchRoute: typeof AuthenticatedApiDocsGetBatchRoute
   AuthenticatedApiDocsGetFileRoute: typeof AuthenticatedApiDocsGetFileRoute
   AuthenticatedApiDocsGetTaskRoute: typeof AuthenticatedApiDocsGetTaskRoute
   AuthenticatedApiDocsGetTasksRoute: typeof AuthenticatedApiDocsGetTasksRoute
+  AuthenticatedApiDocsGetWebhookRoute: typeof AuthenticatedApiDocsGetWebhookRoute
+  AuthenticatedApiDocsListBatchTasksRoute: typeof AuthenticatedApiDocsListBatchTasksRoute
+  AuthenticatedApiDocsListBatchesRoute: typeof AuthenticatedApiDocsListBatchesRoute
   AuthenticatedApiDocsListFilesRoute: typeof AuthenticatedApiDocsListFilesRoute
+  AuthenticatedApiDocsListWebhooksRoute: typeof AuthenticatedApiDocsListWebhooksRoute
+  AuthenticatedApiDocsPauseBatchRoute: typeof AuthenticatedApiDocsPauseBatchRoute
+  AuthenticatedApiDocsStartBatchRoute: typeof AuthenticatedApiDocsStartBatchRoute
+  AuthenticatedApiDocsStreamBatchEventsRoute: typeof AuthenticatedApiDocsStreamBatchEventsRoute
   AuthenticatedApiDocsStreamEventsRoute: typeof AuthenticatedApiDocsStreamEventsRoute
   AuthenticatedApiDocsUploadFileRoute: typeof AuthenticatedApiDocsUploadFileRoute
   AuthenticatedApiDocsIndexRoute: typeof AuthenticatedApiDocsIndexRoute
@@ -1335,15 +1550,33 @@ interface AuthenticatedApiDocsRouteRouteChildren {
 
 const AuthenticatedApiDocsRouteRouteChildren: AuthenticatedApiDocsRouteRouteChildren =
   {
+    AuthenticatedApiDocsCancelBatchRoute: AuthenticatedApiDocsCancelBatchRoute,
     AuthenticatedApiDocsCancelTaskRoute: AuthenticatedApiDocsCancelTaskRoute,
+    AuthenticatedApiDocsCreateBatchRoute: AuthenticatedApiDocsCreateBatchRoute,
     AuthenticatedApiDocsCreateTaskRoute: AuthenticatedApiDocsCreateTaskRoute,
+    AuthenticatedApiDocsCreateWebhookRoute:
+      AuthenticatedApiDocsCreateWebhookRoute,
+    AuthenticatedApiDocsDeleteBatchRoute: AuthenticatedApiDocsDeleteBatchRoute,
     AuthenticatedApiDocsDeleteFileRoute: AuthenticatedApiDocsDeleteFileRoute,
+    AuthenticatedApiDocsDeleteWebhookRoute:
+      AuthenticatedApiDocsDeleteWebhookRoute,
     AuthenticatedApiDocsDownloadFileRoute:
       AuthenticatedApiDocsDownloadFileRoute,
+    AuthenticatedApiDocsGetBatchRoute: AuthenticatedApiDocsGetBatchRoute,
     AuthenticatedApiDocsGetFileRoute: AuthenticatedApiDocsGetFileRoute,
     AuthenticatedApiDocsGetTaskRoute: AuthenticatedApiDocsGetTaskRoute,
     AuthenticatedApiDocsGetTasksRoute: AuthenticatedApiDocsGetTasksRoute,
+    AuthenticatedApiDocsGetWebhookRoute: AuthenticatedApiDocsGetWebhookRoute,
+    AuthenticatedApiDocsListBatchTasksRoute:
+      AuthenticatedApiDocsListBatchTasksRoute,
+    AuthenticatedApiDocsListBatchesRoute: AuthenticatedApiDocsListBatchesRoute,
     AuthenticatedApiDocsListFilesRoute: AuthenticatedApiDocsListFilesRoute,
+    AuthenticatedApiDocsListWebhooksRoute:
+      AuthenticatedApiDocsListWebhooksRoute,
+    AuthenticatedApiDocsPauseBatchRoute: AuthenticatedApiDocsPauseBatchRoute,
+    AuthenticatedApiDocsStartBatchRoute: AuthenticatedApiDocsStartBatchRoute,
+    AuthenticatedApiDocsStreamBatchEventsRoute:
+      AuthenticatedApiDocsStreamBatchEventsRoute,
     AuthenticatedApiDocsStreamEventsRoute:
       AuthenticatedApiDocsStreamEventsRoute,
     AuthenticatedApiDocsUploadFileRoute: AuthenticatedApiDocsUploadFileRoute,
@@ -1355,35 +1588,12 @@ const AuthenticatedApiDocsRouteRouteWithChildren =
     AuthenticatedApiDocsRouteRouteChildren,
   )
 
-interface AuthenticatedSettingsRouteRouteChildren {
-  AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
-  AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
-  AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
-  AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
-  AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
-}
-
-const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteChildren =
-  {
-    AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
-    AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
-    AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
-    AuthenticatedSettingsNotificationsRoute:
-      AuthenticatedSettingsNotificationsRoute,
-    AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
-  }
-
-const AuthenticatedSettingsRouteRouteWithChildren =
-  AuthenticatedSettingsRouteRoute._addFileChildren(
-    AuthenticatedSettingsRouteRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedApiDocsRouteRoute: typeof AuthenticatedApiDocsRouteRouteWithChildren
-  AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAgentsIdRoute: typeof AuthenticatedAgentsIdRoute
   AuthenticatedAgentsNewRoute: typeof AuthenticatedAgentsNewRoute
+  AuthenticatedBatchesBatchIdRoute: typeof AuthenticatedBatchesBatchIdRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedMcpServersIdRoute: typeof AuthenticatedMcpServersIdRoute
   AuthenticatedMcpServersNewRoute: typeof AuthenticatedMcpServersNewRoute
@@ -1394,6 +1604,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgentsIndexRoute: typeof AuthenticatedAgentsIndexRoute
   AuthenticatedApiPlaygroundIndexRoute: typeof AuthenticatedApiPlaygroundIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
+  AuthenticatedBatchesIndexRoute: typeof AuthenticatedBatchesIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCommandCenterIndexRoute: typeof AuthenticatedCommandCenterIndexRoute
   AuthenticatedDemoIndexRoute: typeof AuthenticatedDemoIndexRoute
@@ -1406,6 +1617,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProvidersIndexRoute: typeof AuthenticatedProvidersIndexRoute
   AuthenticatedRuntimesIndexRoute: typeof AuthenticatedRuntimesIndexRoute
   AuthenticatedSessionsIndexRoute: typeof AuthenticatedSessionsIndexRoute
+  AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
   AuthenticatedSkillStoreIndexRoute: typeof AuthenticatedSkillStoreIndexRoute
   AuthenticatedSkillsIndexRoute: typeof AuthenticatedSkillsIndexRoute
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
@@ -1416,10 +1628,10 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApiDocsRouteRoute: AuthenticatedApiDocsRouteRouteWithChildren,
-  AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAgentsIdRoute: AuthenticatedAgentsIdRoute,
   AuthenticatedAgentsNewRoute: AuthenticatedAgentsNewRoute,
+  AuthenticatedBatchesBatchIdRoute: AuthenticatedBatchesBatchIdRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedMcpServersIdRoute: AuthenticatedMcpServersIdRoute,
   AuthenticatedMcpServersNewRoute: AuthenticatedMcpServersNewRoute,
@@ -1430,6 +1642,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgentsIndexRoute: AuthenticatedAgentsIndexRoute,
   AuthenticatedApiPlaygroundIndexRoute: AuthenticatedApiPlaygroundIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
+  AuthenticatedBatchesIndexRoute: AuthenticatedBatchesIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCommandCenterIndexRoute: AuthenticatedCommandCenterIndexRoute,
   AuthenticatedDemoIndexRoute: AuthenticatedDemoIndexRoute,
@@ -1442,6 +1655,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProvidersIndexRoute: AuthenticatedProvidersIndexRoute,
   AuthenticatedRuntimesIndexRoute: AuthenticatedRuntimesIndexRoute,
   AuthenticatedSessionsIndexRoute: AuthenticatedSessionsIndexRoute,
+  AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   AuthenticatedSkillStoreIndexRoute: AuthenticatedSkillStoreIndexRoute,
   AuthenticatedSkillsIndexRoute: AuthenticatedSkillsIndexRoute,
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,

@@ -15,6 +15,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func setupFileRouter(t *testing.T) (*gin.Engine, string) {
@@ -23,8 +26,14 @@ func setupFileRouter(t *testing.T) (*gin.Engine, string) {
 	tmpDir, err := os.MkdirTemp("", "agentbox-file-test-*")
 	require.NoError(t, err)
 
+	// 创建临时 SQLite 数据库
 	dbPath := filepath.Join(tmpDir, "test-files.db")
-	store, err := NewSQLiteFileStore(dbPath)
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+
+	store, err := NewGormFileStore(db)
 	require.NoError(t, err)
 	t.Cleanup(func() { store.Close() })
 

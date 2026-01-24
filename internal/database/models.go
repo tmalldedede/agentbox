@@ -75,14 +75,31 @@ func (SessionModel) TableName() string {
 // TaskModel represents a task in the database
 type TaskModel struct {
 	BaseModel
-	SessionID   string     `gorm:"size:64;index" json:"session_id"`
-	AgentID     string     `gorm:"size:64;index" json:"agent_id"`
-	Status      string     `gorm:"size:32;not null;index" json:"status"`
-	Prompt      string     `gorm:"type:text" json:"prompt"`
-	Input       string     `gorm:"type:text" json:"input"`    // JSON
-	Output      string     `gorm:"type:text" json:"output"`   // JSON
-	Metadata    string     `gorm:"type:text" json:"metadata"` // JSON
-	Error       string     `gorm:"type:text" json:"error"`
+	AgentID     string `gorm:"size:64;index;not null" json:"agent_id"`
+	AgentName   string `gorm:"size:255" json:"agent_name"`
+	AgentType   string `gorm:"size:64" json:"agent_type"`
+	Prompt      string `gorm:"type:text;not null" json:"prompt"`
+
+	// JSON fields
+	AttachmentsJSON string `gorm:"type:text" json:"attachments_json"` // []string
+	OutputFilesJSON string `gorm:"type:text" json:"output_files_json"` // []OutputFile
+	TurnsJSON       string `gorm:"type:text" json:"turns_json"`        // []Turn
+	TurnCount       int    `gorm:"default:0" json:"turn_count"`
+
+	// Config
+	WebhookURL string `gorm:"size:1024" json:"webhook_url"`
+	Timeout    int    `gorm:"default:0" json:"timeout"`
+
+	// Runtime state
+	Status       string `gorm:"size:32;not null;index;default:'pending'" json:"status"`
+	SessionID    string `gorm:"size:64;index" json:"session_id"`
+	ThreadID     string `gorm:"size:128" json:"thread_id"`
+	ErrorMessage string `gorm:"type:text" json:"error_message"`
+	ResultJSON   string `gorm:"type:text" json:"result_json"` // *Result
+	MetadataJSON string `gorm:"type:text" json:"metadata_json"` // map[string]string
+
+	// Timestamps
+	QueuedAt    *time.Time `json:"queued_at"`
 	StartedAt   *time.Time `json:"started_at"`
 	CompletedAt *time.Time `json:"completed_at"`
 }
@@ -100,6 +117,7 @@ type ExecutionModel struct {
 	Status      string     `gorm:"size:32;not null" json:"status"`
 	Output      string     `gorm:"type:text" json:"output"`
 	Error       string     `gorm:"type:text" json:"error"`
+	ExitCode    int        `json:"exit_code"`
 	TokensIn    int        `json:"tokens_in"`
 	TokensOut   int        `json:"tokens_out"`
 	DurationMs  int64      `json:"duration_ms"`
@@ -148,11 +166,88 @@ type HistoryModel struct {
 	BaseModel
 	SessionID string `gorm:"size:64;index" json:"session_id"`
 	TaskID    string `gorm:"size:64;index" json:"task_id"`
-	Action    string `gorm:"size:64;not null" json:"action"`
+	Action    string `gorm:"size:64" json:"action"`
 	Details   string `gorm:"type:text" json:"details"` // JSON
 	UserID    string `gorm:"size:64" json:"user_id"`
+
+	SourceType string     `gorm:"size:32;index" json:"source_type"`
+	SourceID   string     `gorm:"size:64;index" json:"source_id"`
+	SourceName string     `gorm:"size:255" json:"source_name"`
+	Engine     string     `gorm:"size:64;index" json:"engine"`
+	Status     string     `gorm:"size:32;index" json:"status"`
+	Prompt     string     `gorm:"type:text" json:"prompt"`
+	Output     string     `gorm:"type:text" json:"output"`
+	Error      string     `gorm:"type:text" json:"error"`
+	ExitCode   int        `json:"exit_code"`
+	Usage      string     `gorm:"type:text" json:"usage"`    // JSON
+	Metadata   string     `gorm:"type:text" json:"metadata"` // JSON
+	StartedAt  time.Time  `gorm:"index" json:"started_at"`
+	EndedAt    *time.Time `json:"ended_at"`
 }
 
 func (HistoryModel) TableName() string {
 	return "history"
+}
+
+// BatchModel represents a batch job in the database
+type BatchModel struct {
+	BaseModel
+	Name             string     `gorm:"size:255;not null" json:"name"`
+	AgentID          string     `gorm:"size:64;index;not null" json:"agent_id"`
+	TemplateJSON     string     `gorm:"type:text" json:"template_json"`       // JSON
+	Concurrency      int        `gorm:"default:5" json:"concurrency"`
+	Status           string     `gorm:"size:32;not null;index" json:"status"`
+	TotalTasks       int        `json:"total_tasks"`
+	Completed        int        `json:"completed"`
+	Failed           int        `json:"failed"`
+	Dead             int        `json:"dead"`
+	WorkersJSON      string     `gorm:"type:text" json:"workers_json"`        // JSON
+	ErrorSummaryJSON string     `gorm:"type:text" json:"error_summary_json"`  // JSON
+	StartedAt        *time.Time `json:"started_at"`
+	CompletedAt      *time.Time `json:"completed_at"`
+}
+
+func (BatchModel) TableName() string {
+	return "batches"
+}
+
+// BatchTaskModel represents a task within a batch
+type BatchTaskModel struct {
+	BaseModel
+	BatchID    string     `gorm:"size:64;index;not null" json:"batch_id"`
+	TaskIndex  int        `gorm:"index" json:"task_index"`
+	InputJSON  string     `gorm:"type:text" json:"input_json"`      // JSON
+	Prompt     string     `gorm:"type:text" json:"prompt"`
+	Status     string     `gorm:"size:32;not null;index" json:"status"`
+	WorkerID   string     `gorm:"size:64" json:"worker_id"`
+	Result     string     `gorm:"type:text" json:"result"`
+	Error      string     `gorm:"type:text" json:"error"`
+	Attempts   int        `gorm:"default:0" json:"attempts"`
+	ClaimedAt  *time.Time `json:"claimed_at"`
+	ClaimedBy  string     `gorm:"size:64" json:"claimed_by"`
+	DeadAt     *time.Time `json:"dead_at"`
+	DeadReason string     `gorm:"size:512" json:"dead_reason"`
+	StartedAt  *time.Time `json:"started_at"`
+	DurationMs int64      `json:"duration_ms"`
+}
+
+func (BatchTaskModel) TableName() string {
+	return "batch_tasks"
+}
+
+// FileModel represents an uploaded file in the database
+type FileModel struct {
+	BaseModel
+	Name      string     `gorm:"size:512;not null" json:"name"`
+	Size      int64      `gorm:"default:0" json:"size"`
+	MimeType  string     `gorm:"size:128;not null;default:'application/octet-stream'" json:"mime_type"`
+	Path      string     `gorm:"size:1024;not null" json:"path"`
+	TaskID    string     `gorm:"size:64;index" json:"task_id"`
+	Purpose   string     `gorm:"size:32;not null;default:'general'" json:"purpose"`
+	Status    string     `gorm:"size:32;not null;index;default:'active'" json:"status"`
+	ExpiresAt *time.Time `gorm:"index" json:"expires_at"`
+}
+
+func (FileModel) TableName() string {
+	return "files"
 }

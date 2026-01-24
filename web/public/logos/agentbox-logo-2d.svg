@@ -1,0 +1,23 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield/Warrior hexagon -->
+  <path d="M20 2 L36 10 L36 26 L20 38 L4 26 L4 10 Z" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+
+  <!-- Inner armor plate -->
+  <path d="M20 8 L30 14 L30 24 L20 32 L10 24 L10 14 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+
+  <!-- Central eye/core -->
+  <ellipse cx="20" cy="18" rx="5" ry="4" fill="currentColor"/>
+
+  <!-- Bottom chevron (warrior badge) -->
+  <path d="M14 26 L20 30 L26 26" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Top crown points -->
+  <circle cx="20" cy="5" r="2" fill="currentColor"/>
+  <line x1="20" y1="7" x2="20" y2="11" stroke="currentColor" stroke-width="1.5"/>
+
+  <!-- Side emblems -->
+  <circle cx="8" cy="18" r="1.5" fill="currentColor"/>
+  <circle cx="32" cy="18" r="1.5" fill="currentColor"/>
+  <line x1="9.5" y1="18" x2="13" y2="18" stroke="currentColor" stroke-width="1.5"/>
+  <line x1="27" y1="18" x2="30.5" y2="18" stroke="currentColor" stroke-width="1.5"/>
+</svg>

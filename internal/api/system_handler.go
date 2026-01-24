@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmalldedede/agentbox/internal/apperr"
+	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/session"
 )
@@ -14,15 +15,17 @@ import (
 type SystemHandler struct {
 	containerMgr container.Manager
 	sessionMgr   *session.Manager
+	batchMgr     *batch.Manager
 	gc           *container.GarbageCollector
 	startTime    time.Time
 }
 
 // NewSystemHandler 创建 SystemHandler
-func NewSystemHandler(containerMgr container.Manager, sessionMgr *session.Manager, gc *container.GarbageCollector) *SystemHandler {
+func NewSystemHandler(containerMgr container.Manager, sessionMgr *session.Manager, batchMgr *batch.Manager, gc *container.GarbageCollector) *SystemHandler {
 	return &SystemHandler{
 		containerMgr: containerMgr,
 		sessionMgr:   sessionMgr,
+		batchMgr:     batchMgr,
 		gc:           gc,
 		startTime:    time.Now(),
 	}
@@ -122,10 +125,11 @@ func (h *SystemHandler) Health(c *gin.Context) {
 
 // StatsResponse 系统统计响应
 type StatsResponse struct {
-	Sessions   SessionStats   `json:"sessions"`
-	Containers ContainerStats `json:"containers"`
-	Images     ImageStats     `json:"images"`
-	System     SystemStats    `json:"system"`
+	Sessions   SessionStats      `json:"sessions"`
+	Containers ContainerStats    `json:"containers"`
+	Images     ImageStats        `json:"images"`
+	Batches    *batch.PoolStats  `json:"batches"`
+	System     SystemStats       `json:"system"`
 }
 
 // SessionStats 会话统计
@@ -216,6 +220,11 @@ func (h *SystemHandler) Stats(c *gin.Context) {
 				resp.Images.InUse++
 			}
 		}
+	}
+
+	// Batch 统计
+	if h.batchMgr != nil {
+		resp.Batches = h.batchMgr.GetPoolStats()
 	}
 
 	// 系统统计

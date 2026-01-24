@@ -9,6 +9,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { useTask, useAppendTurn, useTaskEvents, useCancelTask, useRetryTask, useDeleteTask } from '@/hooks/useTasks'
+import { useDockerAvailable } from '@/hooks/useSystemHealth'
 import {
   ArrowLeft,
   Loader2,
@@ -36,6 +37,7 @@ const statusColors: Record<string, string> = {
 
 export function TaskDetail({ taskId }: { taskId: string }) {
   const navigate = useNavigate()
+  const dockerAvailable = useDockerAvailable()
   const { data: task, isLoading } = useTask(taskId)
   const appendTurn = useAppendTurn()
   const cancelTask = useCancelTask()
@@ -163,7 +165,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 onClick={() => retryTask.mutate(taskId, {
                   onSuccess: (newTask) => navigate({ to: `/tasks/${newTask.id}` }),
                 })}
-                disabled={retryTask.isPending}
+                disabled={retryTask.isPending || !dockerAvailable}
               >
                 <RotateCw className='h-3 w-3 mr-1' />
                 Retry
@@ -340,7 +342,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               />
               <Button
                 onClick={handleSubmit}
-                disabled={!prompt.trim() || appendTurn.isPending}
+                disabled={!prompt.trim() || appendTurn.isPending || !dockerAvailable}
                 size='icon'
                 className='h-[60px] w-[60px]'
               >

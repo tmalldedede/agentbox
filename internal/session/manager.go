@@ -92,6 +92,9 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	if !filepath.IsAbs(workspace) {
 		workspace = filepath.Join(m.workspaceBase, workspace)
 	}
+	if err := ensureWithinBase(workspace, m.workspaceBase); err != nil {
+		return nil, err
+	}
 
 	// 确保工作空间存在
 	if err := os.MkdirAll(workspace, 0755); err != nil {
@@ -160,7 +163,6 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 		envVars[k] = v
 	}
 
-
 	// 准备容器配置
 	containerConfig := adapter.PrepareContainer(&engine.SessionInfo{
 		ID:        sessionID,
@@ -213,12 +215,43 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 		log.Debug("config files written", "session_id", sessionID)
 	}
 
+	// 注入 Skills 文件到容器（独立于配置文件）
+	if err := m.injectSkills(ctx, ctr.ID, req); err != nil {
+		log.Warn("failed to inject skills", "session_id", sessionID, "error", err)
+	}
+
 	session.Status = StatusRunning
 	if err := m.store.Update(session); err != nil {
 		return nil, fmt.Errorf("failed to update session: %w", err)
 	}
 
 	return session, nil
+}
+
+func ensureWithinBase(path, base string) error {
+	absBase, err := filepath.Abs(base)
+	if err != nil {
+		return fmt.Errorf("invalid workspace base: %w", err)
+	}
+	realBase := absBase
+	if resolved, err := filepath.EvalSymlinks(absBase); err == nil {
+		realBase = resolved
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid workspace path: %w", err)
+	}
+	realPath := absPath
+	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+		realPath = resolved
+	}
+
+	rel, err := filepath.Rel(realBase, realPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("workspace path must be within base: %s", base)
+	}
+	return nil
 }
 
 // writeConfigFiles 写入配置文件到容器
@@ -330,18 +363,18 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, 
 		log.Debug("config file written", "path", path, "exit_code", result.ExitCode)
 	}
 
-	// 写入 Skills 文件到容器
+	return nil
+}
+
+// injectSkills 注入 Skills 到容器（独立于适配器配置）
+func (m *Manager) injectSkills(ctx context.Context, containerID string, req *CreateRequest) error {
 	var skillIDs []string
 	if req.AgentID != "" && m.agentMgr != nil {
 		if fullConfig, err := m.agentMgr.GetFullConfig(req.AgentID); err == nil {
 			skillIDs = fullConfig.Agent.SkillIDs
 		}
 	}
-	if err := m.writeSkillFiles(ctx, containerID, skillIDs); err != nil {
-		log.Warn("failed to write skill files", "error", err)
-	}
-
-	return nil
+	return m.writeSkillFiles(ctx, containerID, skillIDs)
 }
 
 // writeSkillFiles 写入 Skills 文件到容器
@@ -359,6 +392,17 @@ func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, skill
 
 	log.Debug("writing skills to container", "skill_ids", skillIDs)
 
+	// 先获取容器内用户 HOME 目录
+	homeResult, err := m.containerMgr.Exec(ctx, containerID, []string{"sh", "-c", "echo $HOME"})
+	if err != nil {
+		log.Error("failed to get container HOME", "error", err)
+		return err
+	}
+	containerHome := strings.TrimSpace(homeResult.Stdout)
+	if containerHome == "" {
+		containerHome = "/home/node" // fallback
+	}
+
 	for _, skillID := range skillIDs {
 		// 获取 Skill
 		s, err := m.skillMgr.Get(skillID)
@@ -372,14 +416,40 @@ func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, skill
 			continue
 		}
 
-		// 生成 SKILL.md 内容
-		skillContent := s.ToSkillMD()
-
 		// Skills 目录: ~/.codex/skills/{skill-id}/
 		skillDir := fmt.Sprintf("$HOME/.codex/skills/%s", skillID)
+		containerSkillDir := fmt.Sprintf("%s/.codex/skills/%s", containerHome, skillID)
+
+		// 如果有 SourceDir，先复制整个目录
+		if s.SourceDir != "" {
+			log.Debug("copying skill source directory", "skill_id", skillID, "source_dir", s.SourceDir)
+
+			// 创建目标目录
+			mkdirCmd := []string{"sh", "-c", fmt.Sprintf("mkdir -p %s/.codex/skills", containerHome)}
+			if _, err := m.containerMgr.Exec(ctx, containerID, mkdirCmd); err != nil {
+				log.Error("failed to create skills dir", "skill_id", skillID, "error", err)
+				continue
+			}
+
+			// 复制整个目录到容器
+			dstPath := fmt.Sprintf("%s/.codex/skills/", containerHome)
+			if err := m.containerMgr.CopyToContainer(ctx, containerID, s.SourceDir, dstPath); err != nil {
+				log.Error("failed to copy skill directory", "skill_id", skillID, "source_dir", s.SourceDir, "error", err)
+				continue
+			}
+			log.Debug("skill directory copied", "skill_id", skillID, "source_dir", s.SourceDir, "dest", containerSkillDir)
+
+			// 修复权限（确保容器用户可读写）
+			chownCmd := []string{"sh", "-c", fmt.Sprintf("chmod -R 755 %s", containerSkillDir)}
+			if _, err := m.containerMgr.Exec(ctx, containerID, chownCmd); err != nil {
+				log.Warn("failed to fix permissions", "skill_id", skillID, "error", err)
+			}
+		}
+
+		// 生成并写入 SKILL.md（始终动态生成，覆盖 SourceDir 中的 SKILL.md）
+		skillContent := s.ToSkillMD()
 		skillPath := fmt.Sprintf("%s/SKILL.md", skillDir)
 
-		// 写入 SKILL.md
 		escapedContent := strings.ReplaceAll(skillContent, "'", "'\"'\"'")
 		writeCmd := []string{
 			"sh", "-c",
@@ -393,21 +463,23 @@ func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, skill
 		}
 		log.Debug("skill file written", "skill_id", skillID, "path", skillPath, "exit_code", result.ExitCode)
 
-		// 写入附加文件 (references)
-		for _, file := range s.Files {
-			filePath := fmt.Sprintf("%s/%s", skillDir, file.Path)
-			fileDir := filepath.Dir(filePath)
+		// 写入附加文件 (从 Files 字段，仅当没有 SourceDir 时)
+		if s.SourceDir == "" {
+			for _, file := range s.Files {
+				filePath := fmt.Sprintf("%s/%s", skillDir, file.Path)
+				fileDir := filepath.Dir(filePath)
 
-			escapedFileContent := strings.ReplaceAll(file.Content, "'", "'\"'\"'")
-			writeFileCmd := []string{
-				"sh", "-c",
-				fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_SKILL_EOF'\n%s\nAGENTBOX_SKILL_EOF", fileDir, filePath, escapedFileContent),
-			}
+				escapedFileContent := strings.ReplaceAll(file.Content, "'", "'\"'\"'")
+				writeFileCmd := []string{
+					"sh", "-c",
+					fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_SKILL_EOF'\n%s\nAGENTBOX_SKILL_EOF", fileDir, filePath, escapedFileContent),
+				}
 
-			if _, err := m.containerMgr.Exec(ctx, containerID, writeFileCmd); err != nil {
-				log.Warn("failed to write skill file", "skill_id", skillID, "file", file.Path, "error", err)
-			} else {
-				log.Debug("skill reference file written", "skill_id", skillID, "file", file.Path)
+				if _, err := m.containerMgr.Exec(ctx, containerID, writeFileCmd); err != nil {
+					log.Warn("failed to write skill file", "skill_id", skillID, "file", file.Path, "error", err)
+				} else {
+					log.Debug("skill reference file written", "skill_id", skillID, "file", file.Path)
+				}
 			}
 		}
 	}
@@ -575,6 +647,14 @@ func (m *Manager) Exec(ctx context.Context, id string, req *ExecRequest) (*ExecR
 		WorkingDirectory: session.Workspace,
 	}
 
+	// 获取 AgentConfig (如果有 AgentID)
+	// 这样 PrepareExecWithConfig 才能使用完整的 Agent 配置（model、permissions 等）
+	if session.AgentID != "" && m.agentMgr != nil {
+		if fullConfig, err := m.agentMgr.GetFullConfig(session.AgentID); err == nil {
+			execOpts.Config = buildEngineConfig(fullConfig)
+		}
+	}
+
 	// 设置默认值
 	if execOpts.MaxTurns <= 0 {
 		execOpts.MaxTurns = 10
@@ -675,7 +755,13 @@ func (m *Manager) execDirect(ctx context.Context, executor engine.DirectExecutor
 // execViaCLI 通过 CLI 在容器中执行 (Claude Code, OpenCode, Codex)
 func (m *Manager) execViaCLI(ctx context.Context, adapter engine.Adapter, opts *engine.ExecOptions, containerID string, execution *Execution) (*ExecResponse, error) {
 	// 准备执行命令
-	cmd := adapter.PrepareExec(opts)
+	// 如果有 AgentConfig，使用 PrepareExecWithConfig 获取完整配置
+	var cmd []string
+	if opts.Config != nil {
+		cmd = adapter.PrepareExecWithConfig(opts, opts.Config)
+	} else {
+		cmd = adapter.PrepareExec(opts)
+	}
 
 	log.Debug("execViaCLI: running command", "cmd", strings.Join(cmd, " "), "thread_id", opts.ThreadID)
 
@@ -1122,16 +1208,16 @@ func (m *Manager) GetWorkspace(sessionID string) (string, error) {
 
 // ANSI color codes
 const (
-	ansiReset      = "\x1b[0m"
-	ansiBold       = "\x1b[1m"
-	ansiDim        = "\x1b[2m"
-	ansiRed        = "\x1b[31m"
-	ansiGreen      = "\x1b[32m"
-	ansiYellow     = "\x1b[33m"
-	ansiBlue       = "\x1b[34m"
-	ansiMagenta    = "\x1b[35m"
-	ansiCyan       = "\x1b[36m"
-	ansiGray       = "\x1b[90m"
+	ansiReset       = "\x1b[0m"
+	ansiBold        = "\x1b[1m"
+	ansiDim         = "\x1b[2m"
+	ansiRed         = "\x1b[31m"
+	ansiGreen       = "\x1b[32m"
+	ansiYellow      = "\x1b[33m"
+	ansiBlue        = "\x1b[34m"
+	ansiMagenta     = "\x1b[35m"
+	ansiCyan        = "\x1b[36m"
+	ansiGray        = "\x1b[90m"
 	ansiBrightWhite = "\x1b[97m"
 )
 
@@ -1233,18 +1319,18 @@ func (m *Manager) StreamLogs(ctx context.Context, id string) (io.ReadCloser, err
 func inferProviderFromBaseURL(baseURL string) string {
 	// 常见的 Provider URL 模式
 	providerPatterns := map[string][]string{
-		"openai":    {"api.openai.com"},
-		"azure":     {"azure.com", "openai.azure.com"},
-		"deepseek":  {"api.deepseek.com"},
-		"zhipu":     {"open.bigmodel.cn", "bigmodel.cn"},
-		"qwen":      {"dashscope.aliyuncs.com"},
-		"kimi":      {"api.moonshot.cn", "moonshot.cn"},
-		"minimax":   {"api.minimax.chat", "api.minimaxi.com"},
-		"baichuan":  {"api.baichuan-ai.com"},
+		"openai":     {"api.openai.com"},
+		"azure":      {"azure.com", "openai.azure.com"},
+		"deepseek":   {"api.deepseek.com"},
+		"zhipu":      {"open.bigmodel.cn", "bigmodel.cn"},
+		"qwen":       {"dashscope.aliyuncs.com"},
+		"kimi":       {"api.moonshot.cn", "moonshot.cn"},
+		"minimax":    {"api.minimax.chat", "api.minimaxi.com"},
+		"baichuan":   {"api.baichuan-ai.com"},
 		"openrouter": {"openrouter.ai"},
-		"together":  {"api.together.xyz"},
-		"groq":      {"api.groq.com"},
-		"fireworks": {"api.fireworks.ai"},
+		"together":   {"api.together.xyz"},
+		"groq":       {"api.groq.com"},
+		"fireworks":  {"api.fireworks.ai"},
 	}
 
 	baseURLLower := strings.ToLower(baseURL)
@@ -1265,4 +1351,67 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "...(truncated)"
+}
+
+// buildEngineConfig 从 AgentFullConfig 构建 engine.AgentConfig
+func buildEngineConfig(fullConfig *agent.AgentFullConfig) *engine.AgentConfig {
+	if fullConfig == nil || fullConfig.Agent == nil {
+		return nil
+	}
+
+	cfg := &engine.AgentConfig{
+		ID:      fullConfig.Agent.ID,
+		Name:    fullConfig.Agent.Name,
+		Adapter: fullConfig.Agent.Adapter,
+		Model: engine.ModelConfig{
+			Name:            fullConfig.Agent.Model,
+			ReasoningEffort: fullConfig.Agent.ModelConfig.ReasoningEffort,
+			HaikuModel:      fullConfig.Agent.ModelConfig.HaikuModel,
+			SonnetModel:     fullConfig.Agent.ModelConfig.SonnetModel,
+			OpusModel:       fullConfig.Agent.ModelConfig.OpusModel,
+			TimeoutMS:       fullConfig.Agent.ModelConfig.TimeoutMS,
+			MaxOutputTokens: fullConfig.Agent.ModelConfig.MaxOutputTokens,
+			DisableTraffic:  fullConfig.Agent.ModelConfig.DisableTraffic,
+			WireAPI:         fullConfig.Agent.ModelConfig.WireAPI,
+		},
+		Permissions: engine.PermissionConfig{
+			Mode:            fullConfig.Agent.Permissions.Mode,
+			AllowedTools:    fullConfig.Agent.Permissions.AllowedTools,
+			DisallowedTools: fullConfig.Agent.Permissions.DisallowedTools,
+			Tools:           fullConfig.Agent.Permissions.Tools,
+			SkipAll:         fullConfig.Agent.Permissions.SkipAll,
+			SandboxMode:     fullConfig.Agent.Permissions.SandboxMode,
+			ApprovalPolicy:  fullConfig.Agent.Permissions.ApprovalPolicy,
+			FullAuto:        fullConfig.Agent.Permissions.FullAuto,
+			AdditionalDirs:  fullConfig.Agent.Permissions.AdditionalDirs,
+		},
+		SystemPrompt:       fullConfig.Agent.SystemPrompt,
+		AppendSystemPrompt: fullConfig.Agent.AppendSystemPrompt,
+		OutputFormat:       fullConfig.Agent.OutputFormat,
+		CustomAgents:       fullConfig.Agent.CustomAgents,
+		ConfigOverrides:    fullConfig.Agent.ConfigOverrides,
+		OutputSchema:       fullConfig.Agent.OutputSchema,
+		Features: engine.FeaturesConfig{
+			WebSearch: fullConfig.Agent.Features.WebSearch,
+		},
+	}
+
+	// 从 Provider 填充
+	if fullConfig.Provider != nil {
+		cfg.Model.BaseURL = fullConfig.Provider.BaseURL
+		cfg.Model.Provider = fullConfig.Provider.ID
+	}
+
+	// Agent 层覆盖 base_url
+	if fullConfig.Agent.BaseURLOverride != "" {
+		cfg.Model.BaseURL = fullConfig.Agent.BaseURLOverride
+	}
+
+	// 从 Runtime 填充资源限制
+	if fullConfig.Runtime != nil {
+		cfg.Resources.CPUs = fullConfig.Runtime.CPUs
+		cfg.Resources.MemoryMB = fullConfig.Runtime.MemoryMB
+	}
+
+	return cfg
 }

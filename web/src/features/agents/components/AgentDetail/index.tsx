@@ -12,7 +12,7 @@ import {
   Copy,
   CheckCheck,
 } from 'lucide-react'
-import { useAgent, useCreateAgent, useUpdateAgent } from '@/hooks'
+import { useAgent, useCreateAgent, useUpdateAgent, useDockerAvailable } from '@/hooks'
 import { useProviders } from '@/hooks/useProviders'
 import { useRuntimes } from '@/hooks/useRuntimes'
 import { useSkills } from '@/hooks/useSkills'
@@ -115,6 +115,8 @@ export default function AgentDetail({ agentId }: AgentDetailProps) {
 
   const [formData, setFormData] = useState<FormData>(defaultFormData)
   const [step, setStep] = useState(0) // wizard step for new agents
+
+  const dockerAvailable = useDockerAvailable()
 
   // Queries
   const { data: agent, isLoading: agentLoading, error: agentError } = useAgent(id)
@@ -268,6 +270,7 @@ export default function AgentDetail({ agentId }: AgentDetailProps) {
     isSaving={isSaving}
     onBack={() => navigate({ to: '/agents' })}
     onTestRun={() => navigate({ to: '/api-playground', search: { agent: id } })}
+    dockerAvailable={dockerAvailable}
   />
 }
 
@@ -406,11 +409,12 @@ interface EditProps {
   isSaving: boolean
   onBack: () => void
   onTestRun: () => void
+  dockerAvailable: boolean
 }
 
 function EditAgentTabs({
   formData, setFormData, filteredProviders, runtimes, skills, mcpServers,
-  agentName, agentId, onSubmit, isSaving, onBack, onTestRun,
+  agentName, agentId, onSubmit, isSaving, onBack, onTestRun, dockerAvailable,
 }: EditProps) {
   const [idCopied, setIdCopied] = useState(false)
   const copyAgentId = () => {
@@ -443,7 +447,7 @@ function EditAgentTabs({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={onTestRun}>
+          <Button variant="outline" onClick={onTestRun} disabled={!dockerAvailable}>
             <Play className="w-4 h-4 mr-2" />
             Test Run
           </Button>

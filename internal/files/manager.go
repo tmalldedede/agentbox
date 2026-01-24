@@ -293,32 +293,46 @@ func (m *Manager) CreateDirectory(workspacePath, relativePath string) (*FileInfo
 
 // safePath 安全路径检查，防止路径遍历攻击
 func (m *Manager) safePath(workspacePath, relativePath string) (string, error) {
-	// 清理路径
+	// 清理路径（允许以 / 开头的相对路径）
 	cleanPath := filepath.Clean(relativePath)
-	if cleanPath == "" || cleanPath == "." {
-		cleanPath = "/"
+	if cleanPath == "." {
+		cleanPath = ""
 	}
+	cleanPath = strings.TrimPrefix(cleanPath, string(filepath.Separator))
 
-	// 移除开头的 /
-	cleanPath = strings.TrimPrefix(cleanPath, "/")
-
-	// 构建完整路径
-	fullPath := filepath.Join(workspacePath, cleanPath)
-
-	// 确保路径在工作空间内
+	// 获取工作空间真实路径（解析符号链接）
 	absWorkspace, err := filepath.Abs(workspacePath)
 	if err != nil {
 		return "", apperr.Wrap(err, "invalid workspace path")
 	}
+	realWorkspace := absWorkspace
+	if resolved, err := filepath.EvalSymlinks(absWorkspace); err == nil {
+		realWorkspace = resolved
+	}
 
+	// 构建目标路径
+	fullPath := filepath.Join(realWorkspace, cleanPath)
 	absPath, err := filepath.Abs(fullPath)
 	if err != nil {
 		return "", apperr.Wrap(err, "invalid path")
 	}
 
-	// 检查是否在工作空间内
-	if !strings.HasPrefix(absPath, absWorkspace) {
+	// 使用 Rel 校验路径是否在工作空间内（避免前缀绕过）
+	rel, err := filepath.Rel(realWorkspace, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", apperr.BadRequest("path traversal detected: " + relativePath)
+	}
+
+	// 防止通过符号链接逃逸：检查已存在的目标或其父目录
+	checkPath := absPath
+	if _, err := os.Lstat(absPath); os.IsNotExist(err) {
+		checkPath = filepath.Dir(absPath)
+	}
+	if resolved, err := filepath.EvalSymlinks(checkPath); err == nil {
+		relResolved, err := filepath.Rel(realWorkspace, resolved)
+		if err != nil || relResolved == ".." || strings.HasPrefix(relResolved, ".."+string(filepath.Separator)) {
+			return "", apperr.BadRequest("path traversal detected: " + relativePath)
+		}
 	}
 
 	return absPath, nil

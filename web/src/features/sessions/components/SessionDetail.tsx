@@ -27,6 +27,7 @@ import {
   useStopSession,
   useDeleteSession,
   useExecSession,
+  useDockerAvailable,
 } from '@/hooks'
 import TerminalViewer, { formatExecutionLogs } from './TerminalViewer'
 
@@ -44,6 +45,7 @@ export default function SessionDetail() {
   const sessionId = params?.id
   const navigate = useNavigate()
   const { t } = useLanguage()
+  const dockerAvailable = useDockerAvailable()
 
   // 使用 React Query hooks
   const {
@@ -219,7 +221,7 @@ export default function SessionDetail() {
             <button
               onClick={handleStart}
               className="btn btn-primary"
-              disabled={startSession.isPending}
+              disabled={startSession.isPending || !dockerAvailable}
             >
               {startSession.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -377,7 +379,7 @@ export default function SessionDetail() {
             />
             <button
               type="submit"
-              disabled={!prompt.trim() || session.status !== 'running' || execSession.isPending}
+              disabled={!prompt.trim() || session.status !== 'running' || execSession.isPending || !dockerAvailable}
               className="btn btn-primary"
             >
               {execSession.isPending ? (

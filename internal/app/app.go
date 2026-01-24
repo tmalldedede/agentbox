@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/database"
 	"github.com/tmalldedede/agentbox/internal/engine"
 	_ "github.com/tmalldedede/agentbox/internal/engine/claude"   // 注册 Claude Code 适配器
 	_ "github.com/tmalldedede/agentbox/internal/engine/codex"    // 注册 Codex 适配器
@@ -21,6 +23,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/runtime"
 	"github.com/tmalldedede/agentbox/internal/session"
+	"github.com/tmalldedede/agentbox/internal/settings"
 	"github.com/tmalldedede/agentbox/internal/skill"
 	"github.com/tmalldedede/agentbox/internal/task"
 	"github.com/tmalldedede/agentbox/internal/webhook"
@@ -43,6 +46,7 @@ type App struct {
 	AgentRegistry *engine.Registry
 	Session       *session.Manager
 	Task          *task.Manager
+	Batch         *batch.Manager
 	GC            *container.GarbageCollector
 
 	// 配置管理
@@ -58,8 +62,15 @@ type App struct {
 	// 执行历史
 	History *history.Manager
 
+	// 业务配置
+	Settings *settings.Manager
+
+	// Redis 队列
+	RedisQueue *batch.RedisQueue
+
 	// 内部状态
-	taskStore *task.SQLiteStore
+	taskStore  *task.GormStore
+	batchStore batch.Store
 }
 
 // New 创建应用程序实例
@@ -80,26 +91,36 @@ func New(cfg *config.Config) (*App, error) {
 func (a *App) initialize() error {
 	var err error
 
-	// 1. 初始化容器管理器
+	// 1. 初始化容器管理器（Docker 不可用时降级为 NoopManager）
 	a.Container, err = container.NewDockerManager()
 	if err != nil {
-		return fmt.Errorf("failed to initialize Docker manager: %w", err)
+		log.Warn("Docker manager initialization failed, running in degraded mode", "error", err)
+		a.Container = container.NewNoopManager()
+	} else {
+		// 测试 Docker 连接
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := a.Container.Ping(ctx); err != nil {
+			log.Warn("Docker connection failed, running in degraded mode", "error", err)
+			a.Container.Close()
+			a.Container = container.NewNoopManager()
+		} else {
+			log.Info("Docker connection OK")
+		}
 	}
-
-	// 测试 Docker 连接
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := a.Container.Ping(ctx); err != nil {
-		return fmt.Errorf("failed to connect to Docker: %w", err)
-	}
-	log.Info("Docker connection OK")
 
 	// 2. 获取 Agent 注册表
 	a.AgentRegistry = engine.DefaultRegistry()
 	log.Info("registered agents", "agents", a.AgentRegistry.Names())
 
 	// 3. 初始化 Session 管理器
-	sessionStore := session.NewMemoryStore()
+	var sessionStore session.Store
+	if dbStore, err := session.NewDBStore(database.GetDB()); err != nil {
+		log.Warn("failed to initialize DB session store, falling back to memory", "error", err)
+		sessionStore = session.NewMemoryStore()
+	} else {
+		sessionStore = dbStore
+	}
 	a.Session = session.NewManager(sessionStore, a.Container, a.AgentRegistry, a.Config.Container.WorkspaceBase)
 
 	// 3.5. 初始化 GC (依赖 Session Manager)
@@ -159,30 +180,62 @@ func (a *App) initialize() error {
 	os.MkdirAll(a.Config.Files.UploadDir, 0755)
 	log.Info("file upload directory", "path", a.Config.Files.UploadDir)
 
-	// 11. 初始化 Task Store (SQLite)
-	taskDBPath := filepath.Join(a.Config.Container.WorkspaceBase, "agentbox.db")
-	a.taskStore, err = task.NewSQLiteStore(taskDBPath)
+	// 11. 初始化 Task Store (GORM)
+	a.taskStore, err = task.NewGormStore(database.GetDB())
 	if err != nil {
 		return fmt.Errorf("failed to initialize Task store: %w", err)
 	}
-	log.Info("task database initialized", "path", taskDBPath)
+	log.Info("task store initialized (GORM)")
 
 	// 12. 初始化 Task Manager
 	a.Task = task.NewManager(a.taskStore, a.Agent, a.Session, &task.ManagerConfig{})
 
-	// 12. 初始化 Webhook Manager
-	webhookDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "webhooks")
-	a.Webhook, err = webhook.NewManager(webhookDataDir)
-	if err != nil {
-		return fmt.Errorf("failed to initialize Webhook manager: %w", err)
-	}
+	// 12. 初始化 Webhook Manager（使用数据库存储）
+	a.Webhook = webhook.NewManager()
 	webhooks, _ := a.Webhook.List()
 	log.Info("loaded webhooks", "count", len(webhooks))
 
+	// 连接 Webhook 到 Task Manager
+	a.Task.SetWebhookNotifier(a.Webhook)
+
 	// 13. 初始化 History Manager
-	historyStore := history.NewMemoryStore()
+	var historyStore history.Store
+	if dbHistStore, err := history.NewDBStore(database.GetDB()); err != nil {
+		log.Warn("failed to initialize DB history store, falling back to memory", "error", err)
+		historyStore = history.NewMemoryStore()
+	} else {
+		historyStore = dbHistStore
+	}
 	a.History = history.NewManager(historyStore)
 	log.Info("history manager initialized")
+
+	// 14. 初始化 Settings Manager
+	a.Settings, err = settings.NewManager(database.GetDB())
+	if err != nil {
+		return fmt.Errorf("failed to initialize Settings manager: %w", err)
+	}
+	log.Info("settings manager initialized")
+
+	// 15. 初始化 Batch Manager (使用 GORM + Redis)
+	a.batchStore = batch.NewGormStore()
+	log.Info("batch store initialized (GORM)")
+
+	// 初始化 Redis 队列（可选）
+	var redisQueue *batch.RedisQueue
+	if a.Config.Redis.Enabled {
+		redisQueue, err = batch.NewRedisQueue(a.Config.Redis)
+		if err != nil {
+			log.Warn("Redis queue initialization failed, running without Redis", "error", err)
+		} else {
+			a.RedisQueue = redisQueue
+			log.Info("Redis queue initialized", "addr", a.Config.Redis.Addr)
+		}
+	}
+
+	a.Batch = batch.NewManager(a.batchStore, a.Session, a.Agent, &batch.ManagerConfig{
+		RedisQueue: redisQueue,
+	})
+	log.Info("batch manager initialized")
 
 	return nil
 }
@@ -199,6 +252,18 @@ func (a *App) Close() error {
 	log.Info("closing app...")
 
 	// 按初始化的逆序关闭
+	if a.Batch != nil {
+		a.Batch.Shutdown()
+	}
+
+	if a.RedisQueue != nil {
+		a.RedisQueue.Close()
+	}
+
+	if a.batchStore != nil {
+		a.batchStore.Close()
+	}
+
 	if a.GC != nil {
 		a.GC.Stop()
 	}

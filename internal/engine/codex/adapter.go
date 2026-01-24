@@ -112,7 +112,8 @@ func (a *Adapter) PrepareContainerWithConfig(session *engine.SessionInfo, cfg *e
 
 // GenerateConfigTOML 生成 Codex 的 config.toml 内容
 // 参考 Codex 源码: codex-rs/core/src/config.rs
-func (a *Adapter) GenerateConfigTOML(cfg *engine.AgentConfig) string {
+// apiKey 参数用于非 OpenAI 提供商，通过 http_headers 直接嵌入 Authorization
+func (a *Adapter) GenerateConfigTOML(cfg *engine.AgentConfig, apiKey string) string {
 	var sb strings.Builder
 
 	// ===== 基础配置 =====
@@ -159,12 +160,17 @@ func (a *Adapter) GenerateConfigTOML(cfg *engine.AgentConfig) string {
 		}
 		sb.WriteString(fmt.Sprintf("wire_api = \"%s\"\n", wireAPI))
 
-		// requires_openai_auth
+		// requires_openai_auth 和认证方式
 		if providerName == "openai" {
+			// OpenAI 官方：使用 requires_openai_auth = true，API key 通过 auth.json 传入
 			sb.WriteString("requires_openai_auth = true\n")
 		} else {
+			// 第三方提供商：使用 http_headers 直接嵌入 Authorization 头
+			// 这是 Codex 0.89+ 推荐的方式，比 env_key 更可靠
 			sb.WriteString("requires_openai_auth = false\n")
-			sb.WriteString("env_key = \"OPENAI_API_KEY\"\n")
+			if apiKey != "" {
+				sb.WriteString(fmt.Sprintf("http_headers = {\"Authorization\" = \"Bearer %s\"}\n", apiKey))
+			}
 		}
 
 		// 重试配置
@@ -190,7 +196,7 @@ func (a *Adapter) GetConfigFiles(cfg *engine.AgentConfig, apiKey string) map[str
 	files := make(map[string]string)
 
 	// ~/.codex/config.toml
-	configTOML := a.GenerateConfigTOML(cfg)
+	configTOML := a.GenerateConfigTOML(cfg, apiKey)
 	if configTOML != "" {
 		files["~/.codex/config.toml"] = configTOML
 	}

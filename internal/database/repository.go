@@ -255,3 +255,276 @@ func FromJSON(s string, v interface{}) error {
 	}
 	return json.Unmarshal([]byte(s), v)
 }
+
+// BatchRepository handles batch database operations
+type BatchRepository struct {
+	db *gorm.DB
+}
+
+// NewBatchRepository creates a new BatchRepository
+func NewBatchRepository() *BatchRepository {
+	return &BatchRepository{db: DB}
+}
+
+// Create creates a new batch
+func (r *BatchRepository) Create(model *BatchModel) error {
+	if model.ID == "" {
+		model.ID = "batch-" + uuid.New().String()[:8]
+	}
+	return r.db.Create(model).Error
+}
+
+// Get retrieves a batch by ID
+func (r *BatchRepository) Get(id string) (*BatchModel, error) {
+	var model BatchModel
+	err := r.db.Where("id = ?", id).First(&model).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &model, err
+}
+
+// List retrieves batches with optional filters
+func (r *BatchRepository) List(status string, agentID string, limit, offset int) ([]BatchModel, int64, error) {
+	var models []BatchModel
+	var total int64
+
+	query := r.db.Model(&BatchModel{})
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if agentID != "" {
+		query = query.Where("agent_id = ?", agentID)
+	}
+
+	// Count total
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Apply pagination
+	if limit <= 0 {
+		limit = 50
+	}
+	query = query.Limit(limit).Offset(offset)
+
+	err := query.Order("created_at DESC").Find(&models).Error
+	return models, total, err
+}
+
+// ListByStatus retrieves batches by status
+func (r *BatchRepository) ListByStatus(status string) ([]BatchModel, error) {
+	var models []BatchModel
+	err := r.db.Where("status = ?", status).Order("created_at DESC").Find(&models).Error
+	return models, err
+}
+
+// Update updates a batch
+func (r *BatchRepository) Update(model *BatchModel) error {
+	model.UpdatedAt = time.Now()
+	return r.db.Save(model).Error
+}
+
+// UpdateCounters atomically updates completed/failed/dead counters
+func (r *BatchRepository) UpdateCounters(id string, completed, failed, dead int) error {
+	return r.db.Model(&BatchModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"completed":  gorm.Expr("completed + ?", completed),
+		"failed":     gorm.Expr("failed + ?", failed),
+		"dead":       gorm.Expr("dead + ?", dead),
+		"updated_at": time.Now(),
+	}).Error
+}
+
+// UpdateStatus updates batch status
+func (r *BatchRepository) UpdateStatus(id, status string) error {
+	updates := map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now(),
+	}
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		now := time.Now()
+		updates["completed_at"] = &now
+	}
+	return r.db.Model(&BatchModel{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// Delete deletes a batch and its tasks
+func (r *BatchRepository) Delete(id string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Delete tasks first
+		if err := tx.Where("batch_id = ?", id).Delete(&BatchTaskModel{}).Error; err != nil {
+			return err
+		}
+		// Delete batch
+		return tx.Delete(&BatchModel{}, "id = ?", id).Error
+	})
+}
+
+// BatchTaskRepository handles batch task database operations
+type BatchTaskRepository struct {
+	db *gorm.DB
+}
+
+// NewBatchTaskRepository creates a new BatchTaskRepository
+func NewBatchTaskRepository() *BatchTaskRepository {
+	return &BatchTaskRepository{db: DB}
+}
+
+// CreateBulk creates multiple tasks in a transaction
+func (r *BatchTaskRepository) CreateBulk(models []BatchTaskModel) error {
+	if len(models) == 0 {
+		return nil
+	}
+	return r.db.CreateInBatches(models, 100).Error
+}
+
+// Get retrieves a task by ID
+func (r *BatchTaskRepository) Get(id string) (*BatchTaskModel, error) {
+	var model BatchTaskModel
+	err := r.db.Where("id = ?", id).First(&model).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &model, err
+}
+
+// GetByBatchAndID retrieves a task by batch ID and task ID
+func (r *BatchTaskRepository) GetByBatchAndID(batchID, taskID string) (*BatchTaskModel, error) {
+	var model BatchTaskModel
+	err := r.db.Where("batch_id = ? AND id = ?", batchID, taskID).First(&model).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &model, err
+}
+
+// List retrieves tasks for a batch with optional filters
+func (r *BatchTaskRepository) List(batchID, status, workerID string, limit, offset int) ([]BatchTaskModel, int64, error) {
+	var models []BatchTaskModel
+	var total int64
+
+	query := r.db.Model(&BatchTaskModel{}).Where("batch_id = ?", batchID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if workerID != "" {
+		query = query.Where("worker_id = ?", workerID)
+	}
+
+	// Count total
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Apply pagination
+	if limit <= 0 {
+		limit = 100
+	}
+	query = query.Limit(limit).Offset(offset)
+
+	err := query.Order("task_index ASC").Find(&models).Error
+	return models, total, err
+}
+
+// Update updates a task
+func (r *BatchTaskRepository) Update(model *BatchTaskModel) error {
+	model.UpdatedAt = time.Now()
+	return r.db.Save(model).Error
+}
+
+// UpdateStatus updates task status and related fields
+func (r *BatchTaskRepository) UpdateStatus(id, status string, updates map[string]interface{}) error {
+	if updates == nil {
+		updates = make(map[string]interface{})
+	}
+	updates["status"] = status
+	updates["updated_at"] = time.Now()
+	return r.db.Model(&BatchTaskModel{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// MarkDead moves a task to dead letter status
+func (r *BatchTaskRepository) MarkDead(id, reason string) error {
+	now := time.Now()
+	return r.db.Model(&BatchTaskModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"status":      "dead",
+		"dead_at":     &now,
+		"dead_reason": reason,
+		"updated_at":  now,
+	}).Error
+}
+
+// ListDead retrieves dead tasks for a batch
+func (r *BatchTaskRepository) ListDead(batchID string, limit int) ([]BatchTaskModel, error) {
+	var models []BatchTaskModel
+	if limit <= 0 {
+		limit = 100
+	}
+	err := r.db.Where("batch_id = ? AND status = ?", batchID, "dead").
+		Order("dead_at DESC").Limit(limit).Find(&models).Error
+	return models, err
+}
+
+// RetryDead resets dead tasks to pending
+func (r *BatchTaskRepository) RetryDead(batchID string, taskIDs []string) (int64, error) {
+	query := r.db.Model(&BatchTaskModel{}).Where("batch_id = ? AND status = ?", batchID, "dead")
+	if len(taskIDs) > 0 {
+		query = query.Where("id IN ?", taskIDs)
+	}
+
+	result := query.Updates(map[string]interface{}{
+		"status":      "pending",
+		"dead_at":     nil,
+		"dead_reason": "",
+		"error":       "",
+		"attempts":    0,
+		"worker_id":   "",
+		"started_at":  nil,
+		"updated_at":  time.Now(),
+	})
+
+	return result.RowsAffected, result.Error
+}
+
+// ResetRunning resets running tasks to pending (for recovery)
+func (r *BatchTaskRepository) ResetRunning(batchID string) (int64, error) {
+	result := r.db.Model(&BatchTaskModel{}).
+		Where("batch_id = ? AND status = ?", batchID, "running").
+		Updates(map[string]interface{}{
+			"status":     "pending",
+			"worker_id":  "",
+			"started_at": nil,
+			"claimed_at": nil,
+			"claimed_by": "",
+			"updated_at": time.Now(),
+		})
+	return result.RowsAffected, result.Error
+}
+
+// GetStats returns task statistics for a batch
+func (r *BatchTaskRepository) GetStats(batchID string) (map[string]int64, error) {
+	var results []struct {
+		Status string
+		Count  int64
+	}
+
+	err := r.db.Model(&BatchTaskModel{}).
+		Select("status, COUNT(*) as count").
+		Where("batch_id = ?", batchID).
+		Group("status").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]int64)
+	for _, r := range results {
+		stats[r.Status] = r.Count
+	}
+	return stats, nil
+}
+
+// DeleteByBatch deletes all tasks for a batch
+func (r *BatchTaskRepository) DeleteByBatch(batchID string) error {
+	return r.db.Where("batch_id = ?", batchID).Delete(&BatchTaskModel{}).Error
+}

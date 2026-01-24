@@ -1,0 +1,463 @@
+package api
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/tmalldedede/agentbox/internal/batch"
+)
+
+// BatchHandler handles batch API requests.
+type BatchHandler struct {
+	batchMgr *batch.Manager
+}
+
+// NewBatchHandler creates a new batch handler.
+func NewBatchHandler(batchMgr *batch.Manager) *BatchHandler {
+	return &BatchHandler{
+		batchMgr: batchMgr,
+	}
+}
+
+// RegisterRoutes registers batch routes.
+func (h *BatchHandler) RegisterRoutes(r *gin.RouterGroup) {
+	batches := r.Group("/batches")
+	{
+		batches.POST("", h.Create)
+		batches.GET("", h.List)
+		batches.GET("/:id", h.Get)
+		batches.DELETE("/:id", h.Delete)
+		batches.POST("/:id/start", h.Start)
+		batches.POST("/:id/pause", h.Pause)
+		batches.POST("/:id/resume", h.Resume)
+		batches.POST("/:id/cancel", h.Cancel)
+		batches.POST("/:id/retry", h.RetryFailed)
+		batches.GET("/:id/tasks", h.ListTasks)
+		batches.GET("/:id/tasks/:taskId", h.GetTask)
+		batches.GET("/:id/stats", h.GetStats)
+		batches.GET("/:id/events", h.StreamEvents)
+		batches.GET("/:id/export", h.Export)
+
+		// Dead letter queue operations
+		batches.GET("/:id/dead", h.ListDeadTasks)
+		batches.POST("/:id/dead/retry", h.RetryDeadTasks)
+	}
+
+	// Queue overview (global)
+	r.GET("/queue/overview", h.GetQueueOverview)
+	r.GET("/queue/pool", h.GetPoolStats)
+}
+
+// Create creates a new batch.
+func (h *BatchHandler) Create(c *gin.Context) {
+	var req batch.CreateBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "invalid request: "+err.Error())
+		return
+	}
+
+	b, err := h.batchMgr.Create(&req)
+	if err != nil {
+		Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	Created(c, b)
+}
+
+// List returns all batches with optional filtering.
+func (h *BatchHandler) List(c *gin.Context) {
+	filter := &batch.ListBatchFilter{}
+
+	if status := c.Query("status"); status != "" {
+		filter.Status = batch.BatchStatus(status)
+	}
+	if agentID := c.Query("agent_id"); agentID != "" {
+		filter.AgentID = agentID
+	}
+	if limit := c.Query("limit"); limit != "" {
+		if l, err := strconv.Atoi(limit); err == nil {
+			filter.Limit = l
+		}
+	}
+	if offset := c.Query("offset"); offset != "" {
+		if o, err := strconv.Atoi(offset); err == nil {
+			filter.Offset = o
+		}
+	}
+
+	batches, total, err := h.batchMgr.List(filter)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	SuccessWithPagination(c, gin.H{"batches": batches}, total, filter.Limit, filter.Offset)
+}
+
+// Get returns a single batch.
+func (h *BatchHandler) Get(c *gin.Context) {
+	id := c.Param("id")
+
+	b, err := h.batchMgr.Get(id)
+	if err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, b)
+}
+
+// Delete deletes a batch.
+func (h *BatchHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.batchMgr.Delete(id); err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, gin.H{"deleted": true})
+}
+
+// Start starts a batch.
+func (h *BatchHandler) Start(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.batchMgr.Start(id); err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	b, _ := h.batchMgr.Get(id)
+	Success(c, b)
+}
+
+// Pause pauses a running batch.
+func (h *BatchHandler) Pause(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.batchMgr.Pause(id); err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		if err == batch.ErrBatchNotRunning {
+			Error(c, http.StatusBadRequest, "batch is not running")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	b, _ := h.batchMgr.Get(id)
+	Success(c, b)
+}
+
+// Resume resumes a paused batch.
+func (h *BatchHandler) Resume(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.batchMgr.Resume(id); err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	b, _ := h.batchMgr.Get(id)
+	Success(c, b)
+}
+
+// Cancel cancels a batch.
+func (h *BatchHandler) Cancel(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.batchMgr.Cancel(id); err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	b, _ := h.batchMgr.Get(id)
+	Success(c, b)
+}
+
+// RetryFailed requeues all failed tasks.
+func (h *BatchHandler) RetryFailed(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.batchMgr.RetryFailed(id); err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		if err == batch.ErrBatchRunning {
+			Error(c, http.StatusBadRequest, "cannot retry while batch is running")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	b, _ := h.batchMgr.Get(id)
+	Success(c, b)
+}
+
+// ListTasks returns tasks for a batch.
+func (h *BatchHandler) ListTasks(c *gin.Context) {
+	batchID := c.Param("id")
+
+	filter := &batch.ListTaskFilter{}
+	if status := c.Query("status"); status != "" {
+		filter.Status = batch.BatchTaskStatus(status)
+	}
+	if workerID := c.Query("worker_id"); workerID != "" {
+		filter.WorkerID = workerID
+	}
+	if limit := c.Query("limit"); limit != "" {
+		if l, err := strconv.Atoi(limit); err == nil {
+			filter.Limit = l
+		}
+	}
+	if offset := c.Query("offset"); offset != "" {
+		if o, err := strconv.Atoi(offset); err == nil {
+			filter.Offset = o
+		}
+	}
+
+	tasks, total, err := h.batchMgr.ListTasks(batchID, filter)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	SuccessWithPagination(c, gin.H{"tasks": tasks}, total, filter.Limit, filter.Offset)
+}
+
+// GetTask returns a single task.
+func (h *BatchHandler) GetTask(c *gin.Context) {
+	batchID := c.Param("id")
+	taskID := c.Param("taskId")
+
+	task, err := h.batchMgr.GetTask(batchID, taskID)
+	if err != nil {
+		if err == batch.ErrTaskNotFound {
+			Error(c, http.StatusNotFound, "task not found")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, task)
+}
+
+// GetStats returns statistics for a batch.
+func (h *BatchHandler) GetStats(c *gin.Context) {
+	id := c.Param("id")
+
+	stats, err := h.batchMgr.GetStats(id)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, stats)
+}
+
+// StreamEvents streams batch events via SSE.
+func (h *BatchHandler) StreamEvents(c *gin.Context) {
+	batchID := c.Param("id")
+
+	// Verify batch exists
+	_, err := h.batchMgr.Get(batchID)
+	if err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	// Set SSE headers
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	// Subscribe to events
+	eventCh := h.batchMgr.Subscribe(batchID)
+	defer h.batchMgr.Unsubscribe(batchID, eventCh)
+
+	// Stream events
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				return false
+			}
+
+			data, _ := json.Marshal(event)
+			c.SSEvent(event.Type, string(data))
+			return true
+
+		case <-c.Request.Context().Done():
+			return false
+		}
+	})
+}
+
+// Export exports batch results as CSV or JSON.
+func (h *BatchHandler) Export(c *gin.Context) {
+	batchID := c.Param("id")
+	format := c.DefaultQuery("format", "json")
+
+	// Get all completed and failed tasks
+	tasks, _, err := h.batchMgr.ListTasks(batchID, &batch.ListTaskFilter{
+		Limit: 100000, // Get all
+	})
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	switch format {
+	case "csv":
+		h.exportCSV(c, batchID, tasks)
+	default:
+		h.exportJSON(c, batchID, tasks)
+	}
+}
+
+func (h *BatchHandler) exportJSON(c *gin.Context, batchID string, tasks []*batch.BatchTask) {
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-results.json\"", batchID))
+	c.JSON(http.StatusOK, gin.H{
+		"batch_id": batchID,
+		"tasks":    tasks,
+	})
+}
+
+func (h *BatchHandler) exportCSV(c *gin.Context, batchID string, tasks []*batch.BatchTask) {
+	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-results.csv\"", batchID))
+
+	w := csv.NewWriter(c.Writer)
+	defer w.Flush()
+
+	// Write header
+	w.Write([]string{"index", "status", "input", "result", "error", "duration_ms", "attempts"})
+
+	// Write rows
+	for _, task := range tasks {
+		inputJSON, _ := json.Marshal(task.Input)
+		w.Write([]string{
+			strconv.Itoa(task.Index),
+			string(task.Status),
+			string(inputJSON),
+			task.Result,
+			task.Error,
+			strconv.FormatInt(task.DurationMs, 10),
+			strconv.Itoa(task.Attempts),
+		})
+	}
+}
+
+// ListDeadTasks returns dead letter tasks for a batch.
+func (h *BatchHandler) ListDeadTasks(c *gin.Context) {
+	batchID := c.Param("id")
+
+	limit := 100
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	tasks, err := h.batchMgr.ListDeadTasks(batchID, limit)
+	if err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, gin.H{
+		"batch_id": batchID,
+		"tasks":    tasks,
+		"count":    len(tasks),
+	})
+}
+
+// RetryDeadTasks retries dead letter tasks.
+func (h *BatchHandler) RetryDeadTasks(c *gin.Context) {
+	batchID := c.Param("id")
+
+	var req batch.RetryDeadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Allow empty body to retry all
+		req.TaskIDs = nil
+	}
+
+	count, err := h.batchMgr.RetryDeadTasks(batchID, req.TaskIDs)
+	if err != nil {
+		if err == batch.ErrBatchNotFound {
+			Error(c, http.StatusNotFound, "batch not found")
+			return
+		}
+		if err == batch.ErrBatchRunning {
+			Error(c, http.StatusBadRequest, "cannot retry while batch is running")
+			return
+		}
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, gin.H{
+		"batch_id":      batchID,
+		"retried_count": count,
+	})
+}
+
+// GetQueueOverview returns global queue statistics.
+func (h *BatchHandler) GetQueueOverview(c *gin.Context) {
+	overview, err := h.batchMgr.GetQueueOverview()
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+
+	Success(c, overview)
+}
+
+// GetPoolStats returns worker pool statistics.
+func (h *BatchHandler) GetPoolStats(c *gin.Context) {
+	stats := h.batchMgr.GetPoolStats()
+	Success(c, stats)
+}

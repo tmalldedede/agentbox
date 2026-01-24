@@ -20,6 +20,8 @@ import type {
   CreateProviderRequest,
   UpdateProviderRequest,
   MCPServer,
+  MCPServerStats,
+  MCPTestResult,
   CreateMCPServerRequest,
   UpdateMCPServerRequest,
   CloneMCPServerRequest,
@@ -53,6 +55,18 @@ import type {
   HistoryListResponse,
   HistoryFilter,
   DashboardStats,
+  Batch,
+  BatchTask,
+  BatchStats,
+  CreateBatchRequest,
+  ListBatchFilter,
+  ListBatchTaskFilter,
+  Settings,
+  AgentSettings,
+  TaskSettings,
+  BatchSettings,
+  StorageSettings,
+  NotifySettings,
 } from '../types'
 
 const API_BASE = '/api/v1'
@@ -137,6 +151,89 @@ export const api = {
   // SSE 事件流
   streamTaskEvents: (id: string): EventSource =>
     new EventSource(`${API_BASE}/tasks/${id}/events`),
+
+  // Batches (批量任务 API) - Worker 池模式
+  listBatches: (filter?: ListBatchFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.status) params.set('status', filter.status)
+    if (filter?.agent_id) params.set('agent_id', filter.agent_id)
+    if (filter?.limit) params.set('limit', filter.limit.toString())
+    if (filter?.offset) params.set('offset', filter.offset.toString())
+    const query = params.toString()
+    return request<{ batches: Batch[]; total: number }>(`${API_BASE}/batches${query ? `?${query}` : ''}`)
+  },
+
+  getBatch: (id: string) => request<Batch>(`${API_BASE}/batches/${id}`),
+
+  createBatch: (req: CreateBatchRequest) =>
+    request<Batch>(`${API_BASE}/batches`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  deleteBatch: (id: string) =>
+    request<{ deleted: boolean }>(`${API_BASE}/batches/${id}`, {
+      method: 'DELETE',
+    }),
+
+  startBatch: (id: string) =>
+    request<Batch>(`${API_BASE}/batches/${id}/start`, {
+      method: 'POST',
+    }),
+
+  pauseBatch: (id: string) =>
+    request<Batch>(`${API_BASE}/batches/${id}/pause`, {
+      method: 'POST',
+    }),
+
+  resumeBatch: (id: string) =>
+    request<Batch>(`${API_BASE}/batches/${id}/resume`, {
+      method: 'POST',
+    }),
+
+  cancelBatch: (id: string) =>
+    request<Batch>(`${API_BASE}/batches/${id}/cancel`, {
+      method: 'POST',
+    }),
+
+  retryBatchFailed: (id: string) =>
+    request<Batch>(`${API_BASE}/batches/${id}/retry`, {
+      method: 'POST',
+    }),
+
+  listBatchTasks: (batchId: string, filter?: ListBatchTaskFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.status) params.set('status', filter.status)
+    if (filter?.worker_id) params.set('worker_id', filter.worker_id)
+    if (filter?.limit) params.set('limit', filter.limit.toString())
+    if (filter?.offset) params.set('offset', filter.offset.toString())
+    const query = params.toString()
+    return request<{ tasks: BatchTask[]; total: number }>(`${API_BASE}/batches/${batchId}/tasks${query ? `?${query}` : ''}`)
+  },
+
+  getBatchTask: (batchId: string, taskId: string) =>
+    request<BatchTask>(`${API_BASE}/batches/${batchId}/tasks/${taskId}`),
+
+  getBatchStats: (id: string) =>
+    request<BatchStats>(`${API_BASE}/batches/${id}/stats`),
+
+  // Batch SSE 事件流
+  streamBatchEvents: (id: string): EventSource =>
+    new EventSource(`${API_BASE}/batches/${id}/events`),
+
+  // Batch 结果导出
+  getBatchExportUrl: (id: string, format: 'json' | 'csv' = 'json') =>
+    `${API_BASE}/batches/${id}/export?format=${format}`,
+
+  // Batch 死信队列
+  listBatchDeadTasks: (batchId: string, limit = 100) =>
+    request<{ batch_id: string; tasks: BatchTask[]; count: number }>(`${API_BASE}/batches/${batchId}/dead?limit=${limit}`),
+
+  retryBatchDead: (batchId: string, taskIds?: string[]) =>
+    request<{ batch_id: string; retried_count: number }>(`${API_BASE}/batches/${batchId}/dead/retry`, {
+      method: 'POST',
+      body: JSON.stringify({ task_ids: taskIds }),
+    }),
 
   // Files (附件 API) - 文件上传/下载
   listFiles: () => request<UploadedFile[]>(`${API_BASE}/files`),
@@ -410,9 +507,12 @@ export const api = {
     }),
 
   testMCPServer: (id: string) =>
-    request<{ status: string; message: string }>(`${ADMIN_BASE}/mcp-servers/${id}/test`, {
+    request<MCPTestResult>(`${ADMIN_BASE}/mcp-servers/${id}/test`, {
       method: 'POST',
     }),
+
+  getMCPServerStats: () =>
+    request<MCPServerStats>(`${ADMIN_BASE}/mcp-servers/stats`),
 
   // Skills (管理接口)
   listSkills: (options?: { category?: string; enabled?: boolean }) => {
@@ -541,5 +641,59 @@ export const api = {
     request<GCStats>(`${ADMIN_BASE}/system/gc/config`, {
       method: 'PUT',
       body: JSON.stringify(req),
+    }),
+
+  // Settings (业务配置)
+  getSettings: () => request<Settings>(`${ADMIN_BASE}/settings`),
+
+  updateSettings: (settings: Settings) =>
+    request<Settings>(`${ADMIN_BASE}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+
+  resetSettings: () =>
+    request<Settings>(`${ADMIN_BASE}/settings/reset`, {
+      method: 'POST',
+    }),
+
+  getAgentSettings: () => request<AgentSettings>(`${ADMIN_BASE}/settings/agent`),
+
+  updateAgentSettings: (settings: AgentSettings) =>
+    request<AgentSettings>(`${ADMIN_BASE}/settings/agent`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+
+  getTaskSettings: () => request<TaskSettings>(`${ADMIN_BASE}/settings/task`),
+
+  updateTaskSettings: (settings: TaskSettings) =>
+    request<TaskSettings>(`${ADMIN_BASE}/settings/task`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+
+  getBatchSettings: () => request<BatchSettings>(`${ADMIN_BASE}/settings/batch`),
+
+  updateBatchSettings: (settings: BatchSettings) =>
+    request<BatchSettings>(`${ADMIN_BASE}/settings/batch`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+
+  getStorageSettings: () => request<StorageSettings>(`${ADMIN_BASE}/settings/storage`),
+
+  updateStorageSettings: (settings: StorageSettings) =>
+    request<StorageSettings>(`${ADMIN_BASE}/settings/storage`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+
+  getNotifySettings: () => request<NotifySettings>(`${ADMIN_BASE}/settings/notify`),
+
+  updateNotifySettings: (settings: NotifySettings) =>
+    request<NotifySettings>(`${ADMIN_BASE}/settings/notify`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
     }),
 }

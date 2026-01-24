@@ -15,6 +15,9 @@ import (
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/task"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func setupTaskTestRouter(t *testing.T) (*gin.Engine, *TaskHandler, *task.Manager, string) {
@@ -46,9 +49,13 @@ func setupTaskTestRouter(t *testing.T) (*gin.Engine, *TaskHandler, *task.Manager
 	err = agentMgr.Create(testAgent)
 	require.NoError(t, err)
 
-	// Create task store (in-memory SQLite)
+	// Create task store (GORM with SQLite)
 	dbPath := filepath.Join(tempDir, "test.db")
-	store, err := task.NewSQLiteStore(dbPath)
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	store, err := task.NewGormStore(db)
 	require.NoError(t, err)
 
 	// Create task manager (without starting the scheduler)

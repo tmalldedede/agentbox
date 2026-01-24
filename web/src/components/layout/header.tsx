@@ -41,8 +41,8 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
             'after:absolute after:inset-0 after:-z-10 after:bg-background/20 after:backdrop-blur-lg'
         )}
       >
-        <SidebarTrigger variant='outline' className='scale-125 md:hidden' />
-        <Separator orientation='vertical' className='h-6 md:hidden' />
+        <SidebarTrigger variant='outline' className='scale-125 sm:scale-100' />
+        <Separator orientation='vertical' className='h-6' />
         {children}
       </div>
     </header>

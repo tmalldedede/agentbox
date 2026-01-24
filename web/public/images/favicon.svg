@@ -1,4 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svgjs="http://svgjs.com/svgjs" width="24" height="24"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokewidth="2" strokelinecap="round" strokelinejoin="round">
-  <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"></path>
-</svg><style>@media (prefers-color-scheme: light) { :root { filter: contrast(1) brightness(0.8); } }
-</style></svg>
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M20 3 L35 11.5 L35 28.5 L20 37 L5 28.5 L5 11.5 Z" stroke="#1a1a1a" stroke-width="2.5" fill="none"/>
+  <path d="M20 13 L26 16.5 L26 23.5 L20 27 L14 23.5 L14 16.5 Z" fill="#1a1a1a"/>
+  <line x1="20" y1="13" x2="20" y2="6" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="26" y1="16.5" x2="32" y2="13" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="26" y1="23.5" x2="32" y2="27" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="20" y1="27" x2="20" y2="34" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="14" y1="23.5" x2="8" y2="27" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="14" y1="16.5" x2="8" y2="13" stroke="#1a1a1a" stroke-width="2"/>
+  <circle cx="20" cy="5" r="2" fill="#1a1a1a"/>
+  <circle cx="33" cy="12" r="2" fill="#1a1a1a"/>
+  <circle cx="33" cy="28" r="2" fill="#1a1a1a"/>
+  <circle cx="20" cy="35" r="2" fill="#1a1a1a"/>
+  <circle cx="7" cy="28" r="2" fill="#1a1a1a"/>
+  <circle cx="7" cy="12" r="2" fill="#1a1a1a"/>
+</svg>

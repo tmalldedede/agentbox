@@ -17,15 +17,17 @@ import {
   Play,
   CheckCircle,
   XCircle,
+  AlertTriangle,
   MoreVertical,
   Edit,
   Plus,
   LayoutGrid,
   List,
+  Settings2,
+  Zap,
 } from 'lucide-react'
 import type { MCPServer, MCPCategory } from '@/types'
-import { useMCPServers, useUpdateMCPServer } from '@/hooks'
-import { api } from '@/services/api'
+import { useMCPServers, useMCPServerStats, useUpdateMCPServer, useCloneMCPServer } from '@/hooks'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -188,6 +190,12 @@ function MCPServerCard({
             <Badge variant='secondary' className='text-xs'>
               <PowerOff className='w-3 h-3 mr-1' />
               Disabled
+            </Badge>
+          )}
+          {!server.is_configured && (
+            <Badge variant='destructive' className='text-xs'>
+              <AlertTriangle className='w-3 h-3 mr-1' />
+              Needs Config
             </Badge>
           )}
           <Badge variant='outline' className='text-xs capitalize'>
@@ -354,11 +362,19 @@ function MCPServerTableRow({
         <Badge variant='outline' className='text-xs'>{server.type}</Badge>
       </TableCell>
       <TableCell>
-        {server.is_enabled ? (
-          <Badge variant='default' className='bg-green-500 text-xs'>Enabled</Badge>
-        ) : (
-          <Badge variant='secondary' className='text-xs'>Disabled</Badge>
-        )}
+        <div className='flex items-center gap-1.5'>
+          {server.is_enabled ? (
+            <Badge variant='default' className='bg-green-500 text-xs'>Enabled</Badge>
+          ) : (
+            <Badge variant='secondary' className='text-xs'>Disabled</Badge>
+          )}
+          {!server.is_configured && (
+            <Badge variant='destructive' className='text-xs'>
+              <AlertTriangle className='w-3 h-3 mr-1' />
+              Unconfigured
+            </Badge>
+          )}
+        </div>
       </TableCell>
       <TableCell className='text-right'>
         <MCPServerActions
@@ -378,22 +394,19 @@ function MCPServerTableRow({
 
 export default function MCPServerList() {
   const navigate = useNavigate()
-  const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled' | 'unconfigured'>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const { setCurrentRow, setOpen } = useMCPServersContext()
 
   const { data: servers = [], isLoading } = useMCPServers()
+  const { data: stats } = useMCPServerStats()
   const updateServer = useUpdateMCPServer()
+  const cloneServer = useCloneMCPServer()
 
-  const handleClone = async (server: MCPServer) => {
+  const handleClone = (server: MCPServer) => {
     const newId = `${server.id}-copy-${Date.now()}`
     const newName = `${server.name} (Copy)`
-    try {
-      await api.cloneMCPServer(server.id, { new_id: newId, new_name: newName })
-      toast.success('MCP Server cloned')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to clone MCP server')
-    }
+    cloneServer.mutate({ id: server.id, req: { new_id: newId, new_name: newName } })
   }
 
   const handleDelete = (server: MCPServer) => {
@@ -406,6 +419,7 @@ export default function MCPServerList() {
   }
 
   const handleTest = async (server: MCPServer) => {
+    const { api } = await import('@/services/api')
     await api.testMCPServer(server.id)
   }
 
@@ -413,6 +427,7 @@ export default function MCPServerList() {
   const filteredServers = servers.filter(s => {
     if (filter === 'enabled') return s.is_enabled
     if (filter === 'disabled') return !s.is_enabled
+    if (filter === 'unconfigured') return !s.is_configured
     return true
   })
 
@@ -428,16 +443,67 @@ export default function MCPServerList() {
 
   return (
     <div className='space-y-4'>
+      {/* Stats Summary */}
+      {stats && (
+        <div className='grid grid-cols-2 md:grid-cols-4 gap-3'>
+          <Card className='p-3'>
+            <div className='flex items-center gap-2'>
+              <div className='w-8 h-8 rounded-md bg-blue-500/10 flex items-center justify-center'>
+                <Server className='w-4 h-4 text-blue-500' />
+              </div>
+              <div>
+                <p className='text-2xl font-bold'>{stats.total}</p>
+                <p className='text-xs text-muted-foreground'>Total</p>
+              </div>
+            </div>
+          </Card>
+          <Card className='p-3'>
+            <div className='flex items-center gap-2'>
+              <div className='w-8 h-8 rounded-md bg-green-500/10 flex items-center justify-center'>
+                <Zap className='w-4 h-4 text-green-500' />
+              </div>
+              <div>
+                <p className='text-2xl font-bold'>{stats.enabled}</p>
+                <p className='text-xs text-muted-foreground'>Enabled</p>
+              </div>
+            </div>
+          </Card>
+          <Card className='p-3'>
+            <div className='flex items-center gap-2'>
+              <div className='w-8 h-8 rounded-md bg-emerald-500/10 flex items-center justify-center'>
+                <Settings2 className='w-4 h-4 text-emerald-500' />
+              </div>
+              <div>
+                <p className='text-2xl font-bold'>{stats.configured}</p>
+                <p className='text-xs text-muted-foreground'>Configured</p>
+              </div>
+            </div>
+          </Card>
+          <Card className='p-3'>
+            <div className='flex items-center gap-2'>
+              <div className='w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center'>
+                <AlertTriangle className='w-4 h-4 text-amber-500' />
+              </div>
+              <div>
+                <p className='text-2xl font-bold'>{stats.not_configured}</p>
+                <p className='text-xs text-muted-foreground'>Needs Config</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className='flex items-center justify-between gap-2'>
         <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <SelectTrigger className='w-[120px]'>
+          <SelectTrigger className='w-[140px]'>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value='all'>All</SelectItem>
             <SelectItem value='enabled'>Enabled</SelectItem>
             <SelectItem value='disabled'>Disabled</SelectItem>
+            <SelectItem value='unconfigured'>Unconfigured</SelectItem>
           </SelectContent>
         </Select>
 

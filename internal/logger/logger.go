@@ -21,6 +21,10 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/lmittmann/tint"
+	"golang.org/x/term"
 )
 
 var (
@@ -57,16 +61,6 @@ func Init(cfg *Config) {
 		}
 
 		level := parseLevel(cfg.Level)
-		opts := &slog.HandlerOptions{
-			Level: level,
-			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-				// 简化时间格式
-				if a.Key == slog.TimeKey {
-					return slog.Attr{Key: "time", Value: slog.StringValue(a.Value.Time().Format("15:04:05.000"))}
-				}
-				return a
-			},
-		}
 
 		output := cfg.Output
 		if output == nil {
@@ -75,9 +69,16 @@ func Init(cfg *Config) {
 
 		var handler slog.Handler
 		if cfg.Format == "json" {
-			handler = slog.NewJSONHandler(output, opts)
+			handler = slog.NewJSONHandler(output, &slog.HandlerOptions{
+				Level: level,
+			})
 		} else {
-			handler = slog.NewTextHandler(output, opts)
+			// 使用 tint 彩色输出
+			handler = tint.NewHandler(output, &tint.Options{
+				Level:      level,
+				TimeFormat: time.TimeOnly, // "15:04:05"
+				NoColor:    !isTerminal(output),
+			})
 		}
 
 		defaultLogger = slog.New(handler)
@@ -142,4 +143,12 @@ func Error(msg string, args ...any) {
 // Module 创建模块日志器的便捷方法
 func Module(name string) *slog.Logger {
 	return With("module", name)
+}
+
+// isTerminal 检测输出是否为终端（支持颜色）
+func isTerminal(w io.Writer) bool {
+	if f, ok := w.(*os.File); ok {
+		return term.IsTerminal(int(f.Fd()))
+	}
+	return false
 }

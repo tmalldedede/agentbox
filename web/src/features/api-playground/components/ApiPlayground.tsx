@@ -1,6 +1,61 @@
-import { useState, useEffect, useRef } from 'react'
-import { Play, Copy, Check, Loader2, Code, Terminal, Upload, X, FileIcon, Radio } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  Play,
+  Copy,
+  Check,
+  Loader2,
+  Code,
+  Upload,
+  X,
+  FileIcon,
+  Radio,
+  ChevronDown,
+  ChevronRight,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Clock,
+  FlaskConical,
+  Network,
+} from 'lucide-react'
 import type { Agent } from '@/types'
+import { useDockerAvailable } from '@/hooks/useSystemHealth'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+
+// --- API Call Log Types ---
+interface ApiCallEntry {
+  id: number
+  timestamp: number
+  method: string
+  url: string
+  path: string
+  status: number | null
+  duration: number | null
+  requestBody: string | null
+  responseBody: string | null
+  error: string | null
+}
 
 interface TaskResult {
   id: string
@@ -22,6 +77,7 @@ interface ApiPlaygroundProps {
 }
 
 export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps) {
+  const dockerAvailable = useDockerAvailable()
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -29,19 +85,89 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
   const [result, setResult] = useState<TaskResult | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState<'curl' | 'python' | null>(null)
-  const [activeTab, setActiveTab] = useState<'result' | 'logs' | 'curl' | 'python'>('result')
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [uploadProgress, setUploadProgress] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // SSE logs
-  const [logs, setLogs] = useState<string[]>([])
+  // API Call Log
+  const [apiCalls, setApiCalls] = useState<ApiCallEntry[]>([])
+  const [expandedCalls, setExpandedCalls] = useState<Set<number>>(new Set())
+  const callIdRef = useRef(0)
+
+  // Container Logs (SSE)
+  const [containerLogs, setContainerLogs] = useState<string[]>([])
   const [sseConnected, setSseConnected] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Fetch agents with public/api_key access
+  // Active tab
+  const [activeTab, setActiveTab] = useState('result')
+
+  // --- Logged Fetch: 记录所有 API 调用 ---
+  const loggedFetch = useCallback(async (
+    url: string,
+    options?: RequestInit
+  ): Promise<Response> => {
+    const id = ++callIdRef.current
+    const method = options?.method || 'GET'
+    const path = url.startsWith('http') ? new URL(url).pathname : url
+    const startTime = Date.now()
+
+    // 记录请求体
+    let requestBody: string | null = null
+    if (options?.body) {
+      if (typeof options.body === 'string') {
+        requestBody = options.body
+      } else if (options.body instanceof FormData) {
+        requestBody = '[FormData]'
+      }
+    }
+
+    // 添加进行中的调用
+    const entry: ApiCallEntry = {
+      id,
+      timestamp: startTime,
+      method,
+      url,
+      path,
+      status: null,
+      duration: null,
+      requestBody,
+      responseBody: null,
+      error: null,
+    }
+    setApiCalls(prev => [...prev, entry])
+
+    try {
+      const response = await fetch(url, options)
+      const duration = Date.now() - startTime
+
+      // 克隆 response 以读取 body（原始 response 仍可被调用者消费）
+      const cloned = response.clone()
+      let responseBody: string | null = null
+      try {
+        const text = await cloned.text()
+        responseBody = text.length > 2000 ? text.slice(0, 2000) + '...' : text
+      } catch {
+        responseBody = '[Unable to read body]'
+      }
+
+      setApiCalls(prev =>
+        prev.map(c => c.id === id ? { ...c, status: response.status, duration, responseBody } : c)
+      )
+
+      return response
+    } catch (err) {
+      const duration = Date.now() - startTime
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      setApiCalls(prev =>
+        prev.map(c => c.id === id ? { ...c, status: 0, duration, error: errorMsg } : c)
+      )
+      throw err
+    }
+  }, [])
+
+  // Fetch agents
   useEffect(() => {
     fetch('/api/v1/agents')
       .then(res => res.json())
@@ -59,10 +185,10 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
       .catch(err => console.error('Failed to fetch agents:', err))
   }, [preselectedAgentId])
 
-  // Auto-scroll logs
+  // Auto-scroll container logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [logs])
+  }, [containerLogs])
 
   // Cleanup SSE
   useEffect(() => {
@@ -73,30 +199,30 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     }
   }, [])
 
-  // Connect to SSE log stream
+  // SSE Log Stream
   const connectLogStream = (sessionId: string) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
     }
 
-    const es = new EventSource(`/api/v1/sessions/${sessionId}/logs/stream`)
+    const es = new EventSource(`/api/v1/admin/sessions/${sessionId}/logs/stream`)
     eventSourceRef.current = es
 
     es.addEventListener('connected', (event) => {
       setSseConnected(true)
       const data = JSON.parse(event.data)
-      setLogs(prev => [...prev, `[SSE] Connected to Session: ${data.session_id}`])
+      setContainerLogs(prev => [...prev, `[Connected] Session: ${data.session_id}`])
     })
 
     es.onmessage = (event) => {
       if (event.data.trim()) {
-        setLogs(prev => [...prev, event.data])
+        setContainerLogs(prev => [...prev, event.data])
       }
     }
 
     es.addEventListener('error', (event: MessageEvent) => {
       if (event.data) {
-        setLogs(prev => [...prev, `[SSE Error] ${event.data}`])
+        setContainerLogs(prev => [...prev, `[Error] ${event.data}`])
       }
     })
 
@@ -111,10 +237,6 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
       eventSourceRef.current.close()
       eventSourceRef.current = null
       setSseConnected(false)
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      abortControllerRef.current = null
     }
   }
 
@@ -147,7 +269,7 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
       const formData = new FormData()
       formData.append('file', file.file)
 
-      const res = await fetch(`/api/v1/sessions/${sessionId}/files?path=/`, {
+      const res = await loggedFetch(`/api/v1/admin/sessions/${sessionId}/files?path=/`, {
         method: 'POST',
         body: formData
       })
@@ -174,7 +296,7 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  // Execute task using Agent Run API
+  // Execute
   const handleExecute = async () => {
     if (!selectedAgentId || !prompt.trim()) {
       setError('Please select an Agent and enter a prompt')
@@ -184,14 +306,16 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     setLoading(true)
     setError('')
     setResult(null)
-    setActiveTab('logs')
-    setLogs([`[System] Starting execution...`])
+    setApiCalls([])
+    setContainerLogs([])
+    setActiveTab('api-calls')
+    callIdRef.current = 0
 
     const selectedAgent = agents.find(a => a.id === selectedAgentId)
 
     try {
       // 1. Create Session
-      const sessionRes = await fetch('/api/v1/sessions', {
+      const sessionRes = await loggedFetch('/api/v1/admin/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -204,13 +328,13 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
         throw new Error(sessionData.message)
       }
       const sessionId = sessionData.data.id
-      setLogs(prev => [...prev, `[System] Session created: ${sessionId} (Agent: ${selectedAgent?.name || selectedAgentId})`])
+      setContainerLogs(prev => [...prev, `[System] Session created: ${sessionId} (Agent: ${selectedAgent?.name || selectedAgentId})`])
 
       // 2. Upload files if any
       let uploadedPaths: string[] = []
       if (files.length > 0) {
         uploadedPaths = await uploadFilesToSession(sessionId)
-        setLogs(prev => [...prev, `[System] Files uploaded: ${uploadedPaths.length}`])
+        setContainerLogs(prev => [...prev, `[System] Files uploaded: ${uploadedPaths.length}`])
       }
 
       // 3. Build final prompt
@@ -223,7 +347,7 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
       // 4. Connect log stream and create task
       connectLogStream(sessionId)
 
-      const taskRes = await fetch('/api/v1/tasks', {
+      const taskRes = await loggedFetch('/api/v1/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,41 +361,35 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
         throw new Error(taskData.message)
       }
       const taskId = taskData.data.id
-      setLogs(prev => [...prev, `[System] Task created: ${taskId}`])
+      setContainerLogs(prev => [...prev, `[System] Task created: ${taskId}`])
 
       // 5. Poll for result
       let attempts = 0
       const maxAttempts = 300
-      const startTime = Date.now()
+      let taskDone = false
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000))
-        const statusRes = await fetch(`/api/v1/tasks/${taskId}`)
+        const statusRes = await loggedFetch(`/api/v1/tasks/${taskId}`)
         const statusData = await statusRes.json()
+        const taskStatus = statusData.data?.status
+        const taskResult = statusData.data?.result
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000)
-        const mins = Math.floor(elapsed / 60)
-        const secs = elapsed % 60
-        if (attempts % 5 === 0) {
-          setLogs(prev => [...prev, `[System] Running... ${mins}:${secs.toString().padStart(2, '0')}`])
-        }
-
-        if (statusData.data.status === 'completed' || statusData.data.status === 'failed') {
+        // 终态 或 已有结果（多轮模式下 status 仍为 running 但已有 result）
+        if (['completed', 'failed', 'cancelled'].includes(taskStatus) || taskResult) {
           setResult(statusData.data)
-          setLogs(prev => [...prev, `[System] Task ${statusData.data.status} (${mins}:${secs.toString().padStart(2, '0')})`])
           setActiveTab('result')
+          taskDone = true
           break
         }
         attempts++
       }
 
-      if (attempts >= maxAttempts) {
+      if (!taskDone) {
         setError('Task timeout (exceeded 10 minutes)')
-        setLogs(prev => [...prev, `[Error] Task timeout. Task ID: ${taskId}`])
       }
     } catch (err: unknown) {
       const error = err as Error
       setError(error.message || 'Execution failed')
-      setLogs(prev => [...prev, `[Error] ${error.message || 'Execution failed'}`])
     } finally {
       setLoading(false)
       setUploadProgress('')
@@ -279,18 +397,16 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     }
   }
 
-  // Generate cURL command
+  // Code generation
   const generateCurl = () => {
     const baseUrl = window.location.origin
     return `# 1. Create Session
-curl -X POST ${baseUrl}/api/v1/sessions \\
+curl -X POST ${baseUrl}/api/v1/admin/sessions \\
   -H "Content-Type: application/json" \\
   -d '{
     "agent_id": "${selectedAgentId}",
     "workspace": "/tmp/my-task"
   }'
-
-# Returns session_id, e.g.: "abc123"
 
 # 2. Create Task
 curl -X POST ${baseUrl}/api/v1/tasks \\
@@ -300,12 +416,10 @@ curl -X POST ${baseUrl}/api/v1/tasks \\
     "prompt": "${prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"
   }'
 
-# Returns task_id, e.g.: "task-xyz789"
-
 # 3. Query Result
 curl ${baseUrl}/api/v1/tasks/TASK_ID
 
-# Alternative: Use Agent Run API directly
+# Alternative: Agent Run API (synchronous)
 curl -X POST ${baseUrl}/api/v1/agents/${selectedAgentId}/run \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -314,7 +428,6 @@ curl -X POST ${baseUrl}/api/v1/agents/${selectedAgentId}/run \\
   }'`
   }
 
-  // Generate Python code
   const generatePython = () => {
     const baseUrl = window.location.origin
     return `import requests
@@ -325,37 +438,30 @@ BASE_URL = "${baseUrl}"
 def run_agent(prompt: str, agent_id: str = "${selectedAgentId}"):
     """Run an Agent task and return result"""
 
-    # Option 1: Use Agent Run API (simplest)
-    run_resp = requests.post(f"{BASE_URL}/api/v1/agents/{agent_id}/run", json={
+    # Option 1: Agent Run API (simplest, synchronous)
+    resp = requests.post(f"{BASE_URL}/api/v1/agents/{agent_id}/run", json={
         "prompt": prompt,
         "workspace": f"/tmp/task-{int(time.time())}"
     })
-    return run_resp.json()["data"]
+    return resp.json()["data"]
 
-    # Option 2: Session + Task (more control)
-    # 1. Create Session
-    session_resp = requests.post(f"{BASE_URL}/api/v1/sessions", json={
-        "agent_id": agent_id,
-        "workspace": f"/tmp/task-{int(time.time())}"
-    })
-    session_id = session_resp.json()["data"]["id"]
+    # Option 2: Session + Task (async, more control)
+    # session = requests.post(f"{BASE_URL}/api/v1/admin/sessions", json={
+    #     "agent_id": agent_id,
+    #     "workspace": f"/tmp/task-{int(time.time())}"
+    # }).json()["data"]
+    #
+    # task = requests.post(f"{BASE_URL}/api/v1/tasks", json={
+    #     "agent_id": agent_id,
+    #     "prompt": prompt
+    # }).json()["data"]
+    #
+    # while True:
+    #     status = requests.get(f"{BASE_URL}/api/v1/tasks/{task['id']}").json()["data"]
+    #     if status["status"] in ["completed", "failed"]:
+    #         return status
+    #     time.sleep(2)
 
-    # 2. Create Task
-    task_resp = requests.post(f"{BASE_URL}/api/v1/tasks", json={
-        "agent_id": agent_id,
-        "prompt": prompt
-    })
-    task_id = task_resp.json()["data"]["id"]
-
-    # 3. Wait for completion
-    while True:
-        status_resp = requests.get(f"{BASE_URL}/api/v1/tasks/{task_id}")
-        status = status_resp.json()["data"]["status"]
-        if status in ["completed", "failed"]:
-            return status_resp.json()["data"]
-        time.sleep(2)
-
-# Usage
 result = run_agent("""${prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n')}""")
 print(result)`
   }
@@ -371,276 +477,351 @@ print(result)`
     return text.replace(/[\x00-\x1F\x7F]/g, '').trim()
   }
 
+  const toggleCallExpand = (id: number) => {
+    setExpandedCalls(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const getStatusColor = (status: number | null) => {
+    if (status === null) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+    if (status >= 200 && status < 300) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+    if (status >= 400) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+  }
+
+  const getMethodColor = (method: string) => {
+    switch (method) {
+      case 'GET': return 'text-blue-600 dark:text-blue-400'
+      case 'POST': return 'text-green-600 dark:text-green-400'
+      case 'PUT': return 'text-orange-600 dark:text-orange-400'
+      case 'DELETE': return 'text-red-600 dark:text-red-400'
+      default: return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  const formatJson = (str: string | null) => {
+    if (!str) return ''
+    try {
+      return JSON.stringify(JSON.parse(str), null, 2)
+    } catch {
+      return str
+    }
+  }
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Playground</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Test the AgentBox API online
+    <div className='space-y-6'>
+      {/* Header */}
+      <div>
+        <h2 className='text-2xl font-bold tracking-tight flex items-center gap-2'>
+          <FlaskConical className='h-6 w-6' />
+          API Playground
+        </h2>
+        <p className='text-muted-foreground mt-1'>
+          Test the AgentBox API with real-time call tracing
         </p>
       </div>
 
-      {/* Configuration */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-        <div className="space-y-4">
+      {/* Configuration Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-4'>
           {/* Agent Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Select Agent
-            </label>
-            <select
-              value={selectedAgentId}
-              onChange={(e) => setSelectedAgentId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                       focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {agents.length === 0 ? (
-                <option value="">No agents available</option>
-              ) : (
-                agents.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.adapter})
-                  </option>
-                ))
-              )}
-            </select>
+          <div className='space-y-2'>
+            <Label>Agent</Label>
+            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+              <SelectTrigger>
+                <SelectValue placeholder='Select an Agent' />
+              </SelectTrigger>
+              <SelectContent>
+                {agents.map(a => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name} <span className='text-muted-foreground ml-1'>({a.adapter})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Prompt */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Prompt
-            </label>
-            <textarea
+          <div className='space-y-2'>
+            <Label>Prompt</Label>
+            <Textarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter the task for the AI Agent..."
+              onChange={e => setPrompt(e.target.value)}
+              placeholder='Enter the task for the AI Agent...'
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                       focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                       placeholder-gray-400"
             />
           </div>
 
           {/* File Upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Upload Files <span className="text-gray-400 font-normal">(Optional)</span>
-            </label>
+          <div className='space-y-2'>
+            <Label>
+              Attachments <span className='text-muted-foreground font-normal'>(Optional)</span>
+            </Label>
 
             {files.length > 0 && (
-              <div className="mb-3 space-y-2">
+              <div className='space-y-1'>
                 {files.map((file, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                    className='flex items-center justify-between px-3 py-1.5 bg-muted rounded-md'
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                        {file.file.name}
+                    <div className='flex items-center gap-2 min-w-0'>
+                      <FileIcon className='w-4 h-4 text-muted-foreground flex-shrink-0' />
+                      <span className='text-sm truncate'>{file.file.name}</span>
+                      <span className='text-xs text-muted-foreground flex-shrink-0'>
+                        {formatFileSize(file.file.size)}
                       </span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">
-                        ({formatFileSize(file.file.size)})
-                      </span>
-                      {file.uploaded && (
-                        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      )}
+                      {file.uploaded && <Check className='w-4 h-4 text-green-500 flex-shrink-0' />}
                     </div>
-                    <button
-                      onClick={() => removeFile(index)}
-                      disabled={loading}
-                      className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-50"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    <Button variant='ghost' size='icon' className='h-6 w-6' onClick={() => removeFile(index)} disabled={loading}>
+                      <X className='w-3 h-3' />
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="flex items-center gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600
-                         rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700
-                         hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50
-                         transition-colors text-sm"
-              >
-                <Upload className="w-4 h-4" />
+            <div className='flex items-center gap-3'>
+              <input ref={fileInputRef} type='file' multiple onChange={handleFileSelect} className='hidden' />
+              <Button variant='outline' size='sm' onClick={() => fileInputRef.current?.click()} disabled={loading}>
+                <Upload className='mr-2 h-4 w-4' />
                 Select Files
-              </button>
+              </Button>
               {files.length > 0 && (
-                <span className="text-sm text-gray-500">
-                  {files.length} file(s) selected
-                </span>
+                <span className='text-sm text-muted-foreground'>{files.length} file(s)</span>
               )}
             </div>
 
             {uploadProgress && (
-              <div className="mt-2 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
+              <div className='text-sm text-blue-600 flex items-center gap-2'>
+                <Loader2 className='w-4 h-4 animate-spin' />
                 {uploadProgress}
               </div>
             )}
           </div>
 
-          {/* Execute Button */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleExecute}
-              disabled={loading || !selectedAgentId || !prompt.trim()}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg
-                       hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed
-                       transition-colors font-medium"
-            >
+          {/* Execute */}
+          <div className='flex items-center gap-4 pt-2'>
+            <Button onClick={handleExecute} disabled={loading || !selectedAgentId || !prompt.trim() || !dockerAvailable}>
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                   Running...
                 </>
               ) : (
                 <>
-                  <Play className="w-4 h-4" />
+                  <Play className='mr-2 h-4 w-4' />
                   Execute
                 </>
               )}
-            </button>
-
+            </Button>
             {loading && (
-              <span className="text-sm text-gray-500">
-                Task running, please wait...
-              </span>
+              <span className='text-sm text-muted-foreground'>Task running, check API Calls tab...</span>
             )}
           </div>
 
           {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg">
+            <div className='p-3 bg-destructive/10 text-destructive rounded-md text-sm'>
               {error}
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Results */}
-      {(result || prompt) && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setActiveTab('result')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors
-                ${activeTab === 'result'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-            >
-              <Terminal className="w-4 h-4 inline mr-2" />
-              Result
-            </button>
-            <button
-              onClick={() => setActiveTab('logs')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors relative
-                ${activeTab === 'logs'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-            >
-              <Radio className="w-4 h-4 inline mr-2" />
-              Live Logs
-              {sseConnected && (
-                <span className="absolute top-2 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('curl')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors
-                ${activeTab === 'curl'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-            >
-              <Code className="w-4 h-4 inline mr-2" />
-              cURL
-            </button>
-            <button
-              onClick={() => setActiveTab('python')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors
-                ${activeTab === 'python'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-            >
-              <Code className="w-4 h-4 inline mr-2" />
-              Python
-            </button>
-          </div>
-
-          {/* Tab Content */}
-          <div className="p-4">
-            {activeTab === 'result' && (
-              <div>
-                {result ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        result.status === 'completed'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        {result.status}
-                      </span>
-                      <span className="text-sm text-gray-500">Task ID: {result.id}</span>
-                    </div>
-                    <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-                      {result.result?.text ? cleanOutput(result.result.text) : 'No output'}
-                    </pre>
-                  </div>
-                ) : loading ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                    <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
-                    <p>Task running, check Live Logs for progress...</p>
-                  </div>
-                ) : (
-                  <div className="text-gray-500 text-center py-8">
-                    Click Execute to run the task
-                  </div>
+      {/* Results Tabs */}
+      <Card>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <CardHeader className='pb-0'>
+            <TabsList className='w-full justify-start'>
+              <TabsTrigger value='result' className='gap-1.5'>
+                Result
+                {result && (
+                  <Badge variant={result.status === 'completed' ? 'default' : 'destructive'} className='ml-1 text-[10px] px-1.5 py-0'>
+                    {result.status}
+                  </Badge>
                 )}
-              </div>
-            )}
+              </TabsTrigger>
+              <TabsTrigger value='api-calls' className='gap-1.5'>
+                <Network className='h-3.5 w-3.5' />
+                API Calls
+                {apiCalls.length > 0 && (
+                  <Badge variant='secondary' className='ml-1 text-[10px] px-1.5 py-0'>
+                    {apiCalls.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value='container-logs' className='gap-1.5'>
+                <Radio className='h-3.5 w-3.5' />
+                Container Logs
+                {sseConnected && (
+                  <span className='w-2 h-2 bg-green-500 rounded-full animate-pulse' />
+                )}
+              </TabsTrigger>
+              <TabsTrigger value='curl' className='gap-1.5'>
+                <Code className='h-3.5 w-3.5' />
+                cURL
+              </TabsTrigger>
+              <TabsTrigger value='python' className='gap-1.5'>
+                <Code className='h-3.5 w-3.5' />
+                Python
+              </TabsTrigger>
+            </TabsList>
+          </CardHeader>
 
-            {activeTab === 'logs' && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
-                    <span className="text-sm text-gray-500">
-                      {sseConnected ? 'SSE Connected' : 'SSE Disconnected'}
+          <CardContent className='pt-4'>
+            {/* Result Tab */}
+            <TabsContent value='result' className='mt-0'>
+              {result ? (
+                <div className='space-y-3'>
+                  <div className='flex items-center gap-2'>
+                    <Badge variant={result.status === 'completed' ? 'default' : 'destructive'}>
+                      {result.status}
+                    </Badge>
+                    <span className='text-sm text-muted-foreground font-mono'>ID: {result.id}</span>
+                  </div>
+                  <pre className='p-4 bg-muted rounded-lg overflow-x-auto text-sm whitespace-pre-wrap max-h-96 overflow-y-auto'>
+                    {result.result?.text ? cleanOutput(result.result.text) : 'No output'}
+                  </pre>
+                </div>
+              ) : loading ? (
+                <div className='flex flex-col items-center justify-center py-12 text-muted-foreground'>
+                  <Loader2 className='w-8 h-8 animate-spin mb-3' />
+                  <p>Task running, check API Calls tab for progress...</p>
+                </div>
+              ) : (
+                <div className='text-muted-foreground text-center py-8'>
+                  Click Execute to run the task
+                </div>
+              )}
+            </TabsContent>
+
+            {/* API Calls Tab */}
+            <TabsContent value='api-calls' className='mt-0'>
+              {apiCalls.length === 0 ? (
+                <div className='text-muted-foreground text-center py-8'>
+                  API calls will appear here after execution
+                </div>
+              ) : (
+                <div className='space-y-1'>
+                  {apiCalls.map((call) => {
+                    const isExpanded = expandedCalls.has(call.id)
+                    return (
+                      <div key={call.id} className='border rounded-md overflow-hidden'>
+                        {/* Call Summary Row */}
+                        <button
+                          onClick={() => toggleCallExpand(call.id)}
+                          className='w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className='h-3.5 w-3.5 text-muted-foreground flex-shrink-0' />
+                          ) : (
+                            <ChevronRight className='h-3.5 w-3.5 text-muted-foreground flex-shrink-0' />
+                          )}
+                          <span className={`font-mono font-bold w-12 text-left ${getMethodColor(call.method)}`}>
+                            {call.method}
+                          </span>
+                          <span className='font-mono text-left flex-1 truncate'>
+                            {call.path}
+                          </span>
+                          {call.status !== null ? (
+                            <Badge variant='outline' className={`text-[10px] px-1.5 py-0 ${getStatusColor(call.status)}`}>
+                              {call.status}
+                            </Badge>
+                          ) : (
+                            <Loader2 className='h-3.5 w-3.5 animate-spin text-muted-foreground' />
+                          )}
+                          {call.duration !== null && (
+                            <span className='text-xs text-muted-foreground flex items-center gap-0.5 w-16 justify-end'>
+                              <Clock className='h-3 w-3' />
+                              {call.duration}ms
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Expanded Details */}
+                        {isExpanded && (
+                          <div className='border-t bg-muted/30 px-3 py-3 space-y-3'>
+                            <div className='grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs'>
+                              <span className='text-muted-foreground'>URL:</span>
+                              <span className='font-mono break-all'>{call.url}</span>
+                              <span className='text-muted-foreground'>Time:</span>
+                              <span>{new Date(call.timestamp).toLocaleTimeString()}</span>
+                              {call.error && (
+                                <>
+                                  <span className='text-destructive'>Error:</span>
+                                  <span className='text-destructive'>{call.error}</span>
+                                </>
+                              )}
+                            </div>
+
+                            {call.requestBody && call.requestBody !== '[FormData]' && (
+                              <div className='space-y-1'>
+                                <div className='flex items-center gap-1 text-xs text-muted-foreground'>
+                                  <ArrowUpRight className='h-3 w-3' />
+                                  Request Body
+                                </div>
+                                <pre className='p-2 bg-muted rounded text-xs overflow-x-auto max-h-40 overflow-y-auto'>
+                                  {formatJson(call.requestBody)}
+                                </pre>
+                              </div>
+                            )}
+
+                            {call.responseBody && (
+                              <div className='space-y-1'>
+                                <div className='flex items-center gap-1 text-xs text-muted-foreground'>
+                                  <ArrowDownLeft className='h-3 w-3' />
+                                  Response Body
+                                </div>
+                                <pre className='p-2 bg-muted rounded text-xs overflow-x-auto max-h-40 overflow-y-auto'>
+                                  {formatJson(call.responseBody)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Container Logs Tab */}
+            <TabsContent value='container-logs' className='mt-0'>
+              <div className='space-y-2'>
+                <div className='flex items-center justify-between'>
+                  <div className='flex items-center gap-2'>
+                    <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                    <span className='text-sm text-muted-foreground'>
+                      {sseConnected ? 'SSE Connected' : 'Disconnected'}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400">{logs.length} entries</span>
+                  <span className='text-xs text-muted-foreground'>{containerLogs.length} entries</span>
                 </div>
-                <div className="h-80 overflow-y-auto bg-gray-900 rounded-lg p-4 font-mono text-sm">
-                  {logs.length === 0 ? (
-                    <div className="text-gray-500 text-center py-8">
-                      Logs will appear here after execution
+                <div className='h-80 overflow-y-auto bg-muted rounded-lg p-4 font-mono text-xs'>
+                  {containerLogs.length === 0 ? (
+                    <div className='text-muted-foreground text-center py-8'>
+                      Container logs will appear here during execution
                     </div>
                   ) : (
-                    logs.map((log, index) => (
+                    containerLogs.map((log, index) => (
                       <div
                         key={index}
                         className={`py-0.5 ${
-                          log.startsWith('[System]') ? 'text-blue-400' :
-                          log.startsWith('[SSE]') ? 'text-green-400' :
-                          log.startsWith('[Error]') ? 'text-red-400' :
-                          'text-gray-100'
+                          log.startsWith('[System]') ? 'text-blue-500' :
+                          log.startsWith('[Connected]') ? 'text-green-500' :
+                          log.startsWith('[Error]') ? 'text-destructive' :
+                          ''
                         }`}
                       >
                         {log}
@@ -650,51 +831,71 @@ print(result)`
                   <div ref={logsEndRef} />
                 </div>
               </div>
-            )}
+            </TabsContent>
 
-            {activeTab === 'curl' && (
-              <div className="relative">
-                <button
+            {/* cURL Tab */}
+            <TabsContent value='curl' className='mt-0'>
+              <div className='relative'>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='absolute top-2 right-2 h-8 w-8'
                   onClick={() => copyToClipboard('curl')}
-                  className="absolute top-2 right-2 p-2 text-gray-400 hover:text-white
-                           bg-gray-700 rounded transition-colors"
                 >
-                  {copied === 'curl' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-                <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                  {copied === 'curl' ? <Check className='h-4 w-4 text-green-500' /> : <Copy className='h-4 w-4' />}
+                </Button>
+                <pre className='p-4 bg-muted rounded-lg overflow-x-auto text-xs max-h-96 overflow-y-auto'>
                   {generateCurl()}
                 </pre>
               </div>
-            )}
+            </TabsContent>
 
-            {activeTab === 'python' && (
-              <div className="relative">
-                <button
+            {/* Python Tab */}
+            <TabsContent value='python' className='mt-0'>
+              <div className='relative'>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='absolute top-2 right-2 h-8 w-8'
                   onClick={() => copyToClipboard('python')}
-                  className="absolute top-2 right-2 p-2 text-gray-400 hover:text-white
-                           bg-gray-700 rounded transition-colors"
                 >
-                  {copied === 'python' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-                <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                  {copied === 'python' ? <Check className='h-4 w-4 text-green-500' /> : <Copy className='h-4 w-4' />}
+                </Button>
+                <pre className='p-4 bg-muted rounded-lg overflow-x-auto text-xs max-h-96 overflow-y-auto'>
                   {generatePython()}
                 </pre>
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            </TabsContent>
+          </CardContent>
+        </Tabs>
+      </Card>
 
-      {/* API Documentation */}
-      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <h3 className="font-medium text-blue-900 dark:text-blue-300 mb-2">API Usage</h3>
-        <ol className="list-decimal list-inside text-sm text-blue-800 dark:text-blue-400 space-y-1">
-          <li><code>POST /api/v1/agents/:id/run</code> - Run agent directly (simplest)</li>
-          <li><code>POST /api/v1/sessions</code> - Create session (for interactive use)</li>
-          <li><code>POST /api/v1/tasks</code> - Create async task</li>
-          <li><code>GET /api/v1/tasks/:id</code> - Query task result</li>
-        </ol>
-      </div>
+      {/* Quick API Reference */}
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-sm'>API Endpoints</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-2 text-xs'>
+            <div className='flex items-center gap-2 font-mono'>
+              <Badge variant='outline' className='text-[10px] bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'>POST</Badge>
+              /api/v1/agents/:id/run
+            </div>
+            <div className='flex items-center gap-2 font-mono'>
+              <Badge variant='outline' className='text-[10px] bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'>POST</Badge>
+              /api/v1/admin/sessions
+            </div>
+            <div className='flex items-center gap-2 font-mono'>
+              <Badge variant='outline' className='text-[10px] bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'>POST</Badge>
+              /api/v1/tasks
+            </div>
+            <div className='flex items-center gap-2 font-mono'>
+              <Badge variant='outline' className='text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'>GET</Badge>
+              /api/v1/tasks/:id
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

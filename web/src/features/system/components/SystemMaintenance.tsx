@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -9,7 +9,6 @@ import {
   CheckCircle,
   XCircle,
   HardDrive,
-  Cpu,
   Box,
   Terminal,
   Trash2,
@@ -20,6 +19,8 @@ import {
   Zap,
   Recycle,
   Play,
+  Users,
+  Layers,
 } from 'lucide-react'
 import type { SystemHealth, SystemStats, GCStats, GCCandidate } from '@/types'
 import { api } from '@/services/api'
@@ -41,30 +42,62 @@ export default function SystemMaintenance() {
   const [savingGCConfig, setSavingGCConfig] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<string | null>(null)
 
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      const [healthData, statsData, gcData] = await Promise.all([
-        api.getSystemHealth(),
-        api.getSystemStats(),
-        api.getGCStats(),
-      ])
-      setHealth(healthData)
-      setStats(statsData)
-      setGCStats(gcData)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch system data')
-    } finally {
-      setLoading(false)
-    }
+  const withTimeout = <T,>(promise: Promise<T>, ms = 5000): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), ms)),
+    ])
   }
 
-  useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 10000)
-    return () => clearInterval(interval)
+  const failCountRef = useRef(0)
+  const isMountedRef = useRef(true)
+
+  const fetchData = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true)
+    try {
+      const [healthResult, statsResult, gcResult] = await Promise.allSettled([
+        withTimeout(api.getSystemHealth()),
+        withTimeout(api.getSystemStats()),
+        withTimeout(api.getGCStats()),
+      ])
+      if (!isMountedRef.current) return
+
+      if (healthResult.status === 'fulfilled') setHealth(healthResult.value)
+      if (statsResult.status === 'fulfilled') setStats(statsResult.value)
+      if (gcResult.status === 'fulfilled') setGCStats(gcResult.value)
+
+      const allFailed = healthResult.status === 'rejected' &&
+        statsResult.status === 'rejected' &&
+        gcResult.status === 'rejected'
+      if (allFailed) {
+        failCountRef.current++
+        const reason = (healthResult as PromiseRejectedResult).reason
+        setError(reason?.message || 'Failed to fetch system data')
+      } else {
+        failCountRef.current = 0
+        setError(null)
+      }
+    } catch (err) {
+      if (!isMountedRef.current) return
+      failCountRef.current++
+      setError(err instanceof Error ? err.message : 'Failed to fetch system data')
+    } finally {
+      if (isMountedRef.current) setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    isMountedRef.current = true
+    fetchData(false)
+    const interval = setInterval(() => {
+      if (failCountRef.current >= 3) return
+      fetchData(true)
+    }, 5000) // 更频繁刷新以追踪 batch 进度
+    return () => {
+      isMountedRef.current = false
+      clearInterval(interval)
+    }
+  }, [fetchData])
 
   const handleCleanupContainers = async () => {
     try {
@@ -76,7 +109,7 @@ export default function SystemMaintenance() {
       } else {
         setCleanupResult('No orphan containers found')
       }
-      fetchData()
+      fetchData(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cleanup containers')
     } finally {
@@ -95,7 +128,7 @@ export default function SystemMaintenance() {
       } else {
         setCleanupResult('No unused images to remove')
       }
-      fetchData()
+      fetchData(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cleanup images')
     } finally {
@@ -113,7 +146,7 @@ export default function SystemMaintenance() {
       } else {
         setCleanupResult('GC completed: no containers to remove')
       }
-      fetchData()
+      fetchData(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to trigger GC')
     } finally {
@@ -154,7 +187,7 @@ export default function SystemMaintenance() {
       })
       setEditingGCConfig(false)
       setCleanupResult('GC configuration updated')
-      fetchData()
+      fetchData(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update GC config')
     } finally {
@@ -175,6 +208,16 @@ export default function SystemMaintenance() {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
   }
 
+  // 计算总体状态
+  const getOverallStatus = () => {
+    if (!health) return 'unknown'
+    if (health.status === 'healthy' && health.docker.status === 'healthy') return 'healthy'
+    if (health.status === 'degraded' || health.docker.status !== 'healthy') return 'degraded'
+    return 'unhealthy'
+  }
+
+  const overallStatus = getOverallStatus()
+
   if (loading && !health) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -182,6 +225,8 @@ export default function SystemMaintenance() {
       </div>
     )
   }
+
+  const batches = stats?.batches
 
   return (
     <div className="min-h-screen">
@@ -194,16 +239,16 @@ export default function SystemMaintenance() {
           <div className="flex items-center gap-3">
             <Activity className="w-6 h-6 text-emerald-400" />
             <div>
-              <h1 className="text-xl font-semibold text-foreground">System Maintenance</h1>
+              <h1 className="text-xl font-semibold text-foreground">Operations Dashboard</h1>
               <p className="text-sm text-muted-foreground">
-                Health checks, stats & cleanup
+                System health, worker pool & maintenance
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={fetchData} className="btn btn-secondary" disabled={loading}>
+          <button onClick={() => { failCountRef.current = 0; fetchData(false) }} className="btn btn-secondary" disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
@@ -211,10 +256,16 @@ export default function SystemMaintenance() {
       </header>
 
       <div className="p-6 space-y-6">
+        {/* Alerts */}
         {error && (
           <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
+            <div>
+              <span>{error}</span>
+              {failCountRef.current >= 3 && (
+                <p className="text-xs mt-1 opacity-70">Auto-refresh paused. Click Refresh to retry.</p>
+              )}
+            </div>
             <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-300">
               &times;
             </button>
@@ -231,136 +282,161 @@ export default function SystemMaintenance() {
           </div>
         )}
 
-        {/* Health Status */}
-        {health && (
-          <div className="card p-6">
-            <h3 className="text-lg font-medium text-foreground mb-4 flex items-center gap-2">
-              <Gauge className="w-5 h-5 text-emerald-400" />
-              System Health
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Overall Status */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  {health.status === 'healthy' ? (
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-emerald-400" />
-                    </div>
-                  ) : health.status === 'degraded' ? (
-                    <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                      <AlertCircle className="w-5 h-5 text-amber-400" />
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                      <XCircle className="w-5 h-5 text-red-400" />
-                    </div>
-                  )}
-                  <div>
-                    <p className="font-medium text-foreground capitalize">{health.status}</p>
-                    <p className="text-sm text-muted-foreground">Overall Status</p>
-                  </div>
+        {/* Top Status Indicators - 4 cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Overall Status */}
+          <div className="card p-4">
+            <div className="flex items-center gap-3">
+              {overallStatus === 'healthy' ? (
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-400" />
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="w-4 h-4" />
-                  Uptime: {health.uptime}
+              ) : overallStatus === 'degraded' ? (
+                <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-amber-400" />
                 </div>
-              </div>
-
-              {/* Docker Status */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  {health.docker.status === 'healthy' ? (
-                    <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                      <Box className="w-5 h-5 text-blue-400" />
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                      <Box className="w-5 h-5 text-red-400" />
-                    </div>
-                  )}
-                  <div>
-                    <p className="font-medium text-foreground capitalize">Docker {health.docker.status}</p>
-                    <p className="text-sm text-muted-foreground">Container Runtime</p>
-                  </div>
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <XCircle className="w-6 h-6 text-red-400" />
                 </div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Containers</span>
-                    <span className="text-foreground/80">{health.docker.containers}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Images</span>
-                    <span className="text-foreground/80">{health.docker.images}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Resources */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                    <Server className="w-5 h-5 text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">Resources</p>
-                    <p className="text-sm text-muted-foreground">Server Info</p>
-                  </div>
-                </div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <MemoryStick className="w-3 h-3" /> Memory
-                    </span>
-                    <span className="text-foreground/80">{health.resources.memory_usage_mb} MB</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Cpu className="w-3 h-3" /> CPU Cores
-                    </span>
-                    <span className="text-foreground/80">{health.resources.num_cpu}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Zap className="w-3 h-3" /> Goroutines
-                    </span>
-                    <span className="text-foreground/80">{health.resources.num_goroutines}</span>
-                  </div>
-                </div>
+              )}
+              <div>
+                <p className="text-lg font-semibold text-foreground capitalize">{overallStatus}</p>
+                <p className="text-sm text-muted-foreground">Overall Status</p>
               </div>
             </div>
-
-            {/* Health Checks */}
-            <div className="mt-6 pt-4 border-t border-default">
-              <p className="text-sm font-medium text-muted-foreground mb-3">Health Checks</p>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(health.checks).map(([name, status]) => (
-                  <span
-                    key={name}
-                    className={`px-3 py-1 rounded-full text-xs flex items-center gap-1.5 ${
-                      status === 'ok'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-red-500/20 text-red-400'
-                    }`}
-                  >
-                    {status === 'ok' ? (
-                      <CheckCircle className="w-3 h-3" />
-                    ) : (
-                      <XCircle className="w-3 h-3" />
-                    )}
-                    {name}
-                  </span>
-                ))}
+            {health && (
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                Uptime: {health.uptime}
               </div>
+            )}
+          </div>
+
+          {/* Docker Status */}
+          <div className="card p-4">
+            <div className="flex items-center gap-3">
+              {health?.docker.status === 'healthy' ? (
+                <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <Box className="w-6 h-6 text-blue-400" />
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <Box className="w-6 h-6 text-red-400" />
+                </div>
+              )}
+              <div>
+                <p className="text-lg font-semibold text-foreground capitalize">
+                  {health?.docker.status || 'Unknown'}
+                </p>
+                <p className="text-sm text-muted-foreground">Docker</p>
+              </div>
+            </div>
+            {stats && (
+              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <span>{stats.containers.running} running</span>
+                <span>{stats.images.total} images</span>
+              </div>
+            )}
+          </div>
+
+          {/* Worker Pool Status */}
+          <div className="card p-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                batches && batches.running_batches > 0
+                  ? 'bg-cyan-500/20'
+                  : 'bg-gray-500/20'
+              }`}>
+                <Users className={`w-6 h-6 ${
+                  batches && batches.running_batches > 0
+                    ? 'text-cyan-400'
+                    : 'text-gray-400'
+                }`} />
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-foreground">
+                  {batches?.total_workers || 0} Workers
+                </p>
+                <p className="text-sm text-muted-foreground">Worker Pool</p>
+              </div>
+            </div>
+            {batches && (
+              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="text-cyan-400">{batches.busy_workers} busy</span>
+                <span>{batches.idle_workers} idle</span>
+                <span>{batches.running_batches}/{batches.max_batches} batches</span>
+              </div>
+            )}
+          </div>
+
+          {/* Resources */}
+          <div className="card p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <Server className="w-6 h-6 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-foreground">
+                  {stats?.system.memory_usage_mb || 0} MB
+                </p>
+                <p className="text-sm text-muted-foreground">Memory</p>
+              </div>
+            </div>
+            {stats && (
+              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <span>{stats.system.num_cpu} CPUs</span>
+                <span>{stats.system.num_goroutines} goroutines</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Running Batches Panel */}
+        {batches && batches.batches.length > 0 && (
+          <div className="card p-6">
+            <h3 className="text-lg font-medium text-foreground mb-4 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-cyan-400" />
+              Running Batches ({batches.running_batches})
+            </h3>
+            <div className="space-y-3">
+              {batches.batches.map((batch) => (
+                <div key={batch.id} className="p-4 rounded-lg bg-background/50 border border-default">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-foreground">{batch.name || batch.id}</span>
+                      <span className="text-xs text-muted-foreground px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400">
+                        {batch.workers} workers
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-emerald-400">{batch.completed} done</span>
+                      {batch.failed > 0 && <span className="text-red-400">{batch.failed} failed</span>}
+                      <span className="text-muted-foreground">/ {batch.total}</span>
+                    </div>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="h-2 rounded-full bg-gray-700 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all duration-300"
+                      style={{ width: `${batch.percent}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                    <span>{batch.percent.toFixed(1)}% complete</span>
+                    <span>{batch.tasks_per_sec.toFixed(1)} tasks/sec</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Statistics */}
+        {/* Middle Section: Sessions + Containers + Images + System */}
         {stats && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Sessions */}
-            <div className="card p-6">
+            <div className="card p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                   <Terminal className="w-5 h-5 text-emerald-400" />
@@ -387,7 +463,7 @@ export default function SystemMaintenance() {
             </div>
 
             {/* Containers */}
-            <div className="card p-6">
+            <div className="card p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                   <Box className="w-5 h-5 text-blue-400" />
@@ -414,7 +490,7 @@ export default function SystemMaintenance() {
             </div>
 
             {/* Images */}
-            <div className="card p-6">
+            <div className="card p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
                   <HardDrive className="w-5 h-5 text-purple-400" />
@@ -440,11 +516,11 @@ export default function SystemMaintenance() {
               </div>
             </div>
 
-            {/* System */}
-            <div className="card p-6">
+            {/* System Info */}
+            <div className="card p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                  <Server className="w-5 h-5 text-amber-400" />
+                  <Gauge className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-foreground">{stats.system.num_cpu}</p>
@@ -453,16 +529,20 @@ export default function SystemMaintenance() {
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Memory</span>
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <MemoryStick className="w-3 h-3" /> Memory
+                  </span>
                   <span className="text-foreground/80">{stats.system.memory_usage_mb} MB</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Zap className="w-3 h-3" /> Goroutines
+                  </span>
+                  <span className="text-foreground/80">{stats.system.num_goroutines}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Go Version</span>
                   <span className="text-foreground/80">{stats.system.go_version.replace('go', '')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Uptime</span>
-                  <span className="text-foreground/80">{stats.system.uptime}</span>
                 </div>
               </div>
             </div>
@@ -669,7 +749,7 @@ export default function SystemMaintenance() {
         <div className="card p-6">
           <h3 className="text-lg font-medium text-foreground mb-4 flex items-center gap-2">
             <Trash2 className="w-5 h-5 text-red-400" />
-            Cleanup Actions
+            Quick Actions
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

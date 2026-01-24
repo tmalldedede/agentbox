@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Terminal, Loader2, ChevronDown } from 'lucide-react'
 import type { Agent, CreateSessionRequest } from '@/types'
 import { useLanguage } from '@/contexts/LanguageContext'
-import { useCreateSession } from '@/hooks'
+import { useCreateSession, useDockerAvailable } from '@/hooks'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -42,6 +42,7 @@ export default function CreateSessionModal({
   onCreated,
 }: Props) {
   const { t } = useLanguage()
+  const dockerAvailable = useDockerAvailable()
   const [agentId, setAgentId] = useState(defaultAgentId || agents[0]?.id || '')
   const [workspace, setWorkspace] = useState('/tmp/myproject')
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -191,7 +192,7 @@ export default function CreateSessionModal({
             </Button>
             <Button
               type="submit"
-              disabled={createSession.isPending || !agentId || !workspace}
+              disabled={createSession.isPending || !agentId || !workspace || !dockerAvailable}
             >
               {createSession.isPending ? (
                 <>

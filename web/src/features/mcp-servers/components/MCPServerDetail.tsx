@@ -13,7 +13,7 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react'
-import type { MCPServer, MCPServerType, MCPCategory } from '@/types'
+import type { MCPServer, MCPServerType, MCPCategory, MCPTestResult } from '@/types'
 import { useMCPServers, useUpdateMCPServer, useDeleteMCPServer } from '@/hooks'
 import { api } from '@/services/api'
 import { toast } from 'sonner'
@@ -35,6 +35,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
+import { Switch } from '@/components/ui/switch'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -67,7 +73,7 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
   const [newEnvValue, setNewEnvValue] = useState('')
   const [newArg, setNewArg] = useState('')
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
+  const [testResult, setTestResult] = useState<MCPTestResult | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   useEffect(() => {
@@ -105,7 +111,9 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
   }
 
   const isBuiltIn = server.is_built_in
+  // Built-in 服务器只允许修改 Env 和 IsEnabled，其他字段只读
   const isReadOnly = isBuiltIn
+  const missingEnvKeys = Object.entries(formData.env || {}).filter(([, v]) => !v).map(([k]) => k)
 
   const handleSave = async () => {
     if (!serverId) return
@@ -148,18 +156,23 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
     setTesting(true)
     setTestResult(null)
     try {
-      await api.testMCPServer(serverId)
-      setTestResult('ok')
-      toast.success('Connection test successful')
+      const result = await api.testMCPServer(serverId)
+      setTestResult(result)
+      if (result.status === 'ok') {
+        const latencyInfo = result.latency_ms ? ` (${result.latency_ms}ms)` : ''
+        toast.success(`Connection test passed${latencyInfo}`)
+      } else {
+        toast.error(`Test failed: ${result.error || 'Unknown error'}`)
+      }
     } catch (err) {
-      setTestResult('error')
+      setTestResult({ status: 'error', latency_ms: 0, error: err instanceof Error ? err.message : 'Connection test failed' })
       toast.error(err instanceof Error ? err.message : 'Connection test failed')
     } finally {
       setTesting(false)
       if (resetTimeoutRef.current) {
         window.clearTimeout(resetTimeoutRef.current)
       }
-      resetTimeoutRef.current = window.setTimeout(() => setTestResult(null), 3000)
+      resetTimeoutRef.current = window.setTimeout(() => setTestResult(null), 10000)
     }
   }
 
@@ -227,14 +240,26 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
                 Built-in
               </Badge>
             )}
+            {!server.is_configured && (
+              <Badge variant='destructive'>Needs Config</Badge>
+            )}
+            <div className='flex items-center gap-2 ml-2'>
+              <Switch
+                checked={formData.is_enabled ?? server.is_enabled}
+                onCheckedChange={v => updateField('is_enabled', v)}
+              />
+              <span className='text-sm text-muted-foreground'>
+                {formData.is_enabled ?? server.is_enabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
           </div>
           <div className='flex items-center gap-2'>
             <Button variant='outline' size='sm' onClick={handleTest} disabled={testing}>
               {testing ? (
                 <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              ) : testResult === 'ok' ? (
+              ) : testResult?.status === 'ok' ? (
                 <CheckCircle className='mr-2 h-4 w-4 text-green-500' />
-              ) : testResult === 'error' ? (
+              ) : testResult?.status === 'error' ? (
                 <XCircle className='mr-2 h-4 w-4 text-red-500' />
               ) : (
                 <Play className='mr-2 h-4 w-4' />
@@ -253,22 +278,65 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
                 Delete
               </Button>
             )}
-            {!isReadOnly && (
-              <Button
-                size='sm'
-                onClick={handleSave}
-                disabled={!isDirty || updateServer.isPending}
-              >
-                {updateServer.isPending ? (
-                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                ) : (
-                  <Save className='mr-2 h-4 w-4' />
-                )}
-                Save
-              </Button>
-            )}
+            <Button
+              size='sm'
+              onClick={handleSave}
+              disabled={!isDirty || updateServer.isPending}
+            >
+              {updateServer.isPending ? (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              ) : (
+                <Save className='mr-2 h-4 w-4' />
+              )}
+              Save
+            </Button>
           </div>
         </div>
+
+        {/* 配置状态警告 */}
+        {!server.is_configured && (
+          <Alert variant='destructive'>
+            <AlertCircle className='h-4 w-4' />
+            <AlertTitle>Configuration Required</AlertTitle>
+            <AlertDescription>
+              Missing environment variables: <span className='font-mono font-semibold'>{missingEnvKeys.join(', ')}</span>.
+              Please fill in all required values to use this MCP server.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* 测试结果详情 */}
+        {testResult && (
+          <Alert variant={testResult.status === 'ok' ? 'default' : 'destructive'}>
+            {testResult.status === 'ok' ? (
+              <CheckCircle className='h-4 w-4' />
+            ) : (
+              <XCircle className='h-4 w-4' />
+            )}
+            <AlertTitle>
+              {testResult.status === 'ok' ? 'Connection Successful' : 'Connection Failed'}
+              {testResult.latency_ms > 0 && (
+                <span className='ml-2 text-sm font-normal text-muted-foreground'>
+                  ({testResult.latency_ms}ms)
+                </span>
+              )}
+            </AlertTitle>
+            <AlertDescription className='space-y-1'>
+              {testResult.error && <p>{testResult.error}</p>}
+              {testResult.server_info && (
+                <p className='text-sm'>
+                  Server: {(testResult.server_info as Record<string, string>).name || 'unknown'}
+                  {(testResult.server_info as Record<string, string>).version && ` v${(testResult.server_info as Record<string, string>).version}`}
+                </p>
+              )}
+              {testResult.capabilities && Object.keys(testResult.capabilities).length > 0 && (
+                <p className='text-sm'>
+                  Capabilities: {Object.keys(testResult.capabilities).join(', ')}
+                </p>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Card>
           <CardHeader>
@@ -403,13 +471,34 @@ export default function MCPServerDetail({ serverId }: MCPServerDetailProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Environment Variables</CardTitle>
+            <CardTitle className='flex items-center gap-2'>
+              Environment Variables
+              {missingEnvKeys.length > 0 && (
+                <Badge variant='destructive' className='text-xs'>
+                  {missingEnvKeys.length} missing
+                </Badge>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className='space-y-3'>
             {Object.entries(formData.env || {}).map(([key, value]) => (
               <div key={key} className='flex gap-2 items-center'>
                 <Input value={key} disabled className='flex-1 font-mono text-sm' />
-                <Input value={value} disabled className='flex-1 font-mono text-sm' />
+                <div className='flex-1 relative'>
+                  <Input
+                    value={value}
+                    onChange={e => {
+                      const env = { ...(formData.env || {}) }
+                      env[key] = e.target.value
+                      updateField('env', env)
+                    }}
+                    className={`font-mono text-sm ${!value ? 'border-destructive bg-destructive/5' : ''}`}
+                    placeholder='Enter value...'
+                  />
+                  {!value && (
+                    <AlertCircle className='absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive' />
+                  )}
+                </div>
                 {!isReadOnly && (
                   <Button variant='ghost' size='icon' onClick={() => removeEnv(key)}>
                     <X className='h-4 w-4 text-destructive' />

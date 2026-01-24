@@ -19,8 +19,10 @@ func setupWebhookTestRouter(t *testing.T) (*gin.Engine, *WebhookHandler, string)
 	tempDir, err := os.MkdirTemp("", "webhook_test")
 	require.NoError(t, err)
 
-	mgr, err := webhook.NewManager(tempDir)
+	store, err := webhook.NewFileStore(tempDir)
 	require.NoError(t, err)
+
+	mgr := webhook.NewManagerWithStore(store)
 
 	handler := NewWebhookHandler(mgr)
 

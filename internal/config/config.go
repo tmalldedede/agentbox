@@ -13,6 +13,18 @@ type Config struct {
 	Storage   StorageConfig   `json:"storage"`
 	Database  DatabaseConfig  `json:"database"`
 	Files     FilesConfig     `json:"files"`
+	Redis     RedisConfig     `json:"redis"`
+}
+
+// RedisConfig Redis 配置
+type RedisConfig struct {
+	Enabled         bool          `json:"enabled"`           // 是否启用 Redis 队列
+	Addr            string        `json:"addr"`              // Redis 地址 host:port
+	Password        string        `json:"password"`          // 密码
+	DB              int           `json:"db"`                // 数据库编号
+	PoolSize        int           `json:"pool_size"`         // 连接池大小
+	ClaimTimeout    time.Duration `json:"claim_timeout"`     // 任务认领超时（超时后重新入队）
+	RecoverInterval time.Duration `json:"recover_interval"`  // 恢复扫描间隔
 }
 
 // FilesConfig 文件上传配置
@@ -88,6 +100,15 @@ func Default() *Config {
 			CleanupInterval: 30 * time.Minute,
 			MaxFileSize:     100 * 1024 * 1024, // 100MB
 		},
+		Redis: RedisConfig{
+			Enabled:         true,                // 默认启用 Redis 队列
+			Addr:            "localhost:6379",
+			Password:        "",
+			DB:              0,
+			PoolSize:        10,
+			ClaimTimeout:    5 * time.Minute,     // 任务认领 5 分钟超时
+			RecoverInterval: 30 * time.Second,    // 每 30 秒扫描超时任务
+		},
 	}
 }
 
@@ -149,6 +170,32 @@ func Load() *Config {
 	}
 	if logLevel := os.Getenv("AGENTBOX_DB_LOG_LEVEL"); logLevel != "" {
 		cfg.Database.LogLevel = logLevel
+	}
+
+	// Redis 配置
+	if v := os.Getenv("AGENTBOX_REDIS_ENABLED"); v != "" {
+		cfg.Redis.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("AGENTBOX_REDIS_ADDR"); v != "" {
+		cfg.Redis.Addr = v
+	}
+	if v := os.Getenv("AGENTBOX_REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
+	if v := os.Getenv("AGENTBOX_REDIS_DB"); v != "" {
+		if db, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = db
+		}
+	}
+	if v := os.Getenv("AGENTBOX_REDIS_POOL_SIZE"); v != "" {
+		if size, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.PoolSize = size
+		}
+	}
+	if v := os.Getenv("AGENTBOX_REDIS_CLAIM_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Redis.ClaimTimeout = d
+		}
 	}
 
 	return cfg

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentBox Logo Preview</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 40px;
+      background: #0a0a0a;
+      color: #fff;
+    }
+    h1 { margin-bottom: 30px; font-weight: 300; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      border: 1px solid #333;
+      transition: all 0.2s;
+    }
+    .card:hover {
+      border-color: #666;
+      transform: translateY(-2px);
+    }
+    .logo-container {
+      display: flex;
+      gap: 32px;
+      align-items: center;
+    }
+    .logo-box {
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+    }
+    .logo-box.dark { background: #0a0a0a; }
+    .logo-box.light { background: #ffffff; }
+    .logo-box img {
+      width: 48px;
+      height: 48px;
+    }
+    .logo-box.dark img { filter: invert(0); }
+    .logo-box.light img { filter: invert(1); }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .card-desc {
+      font-size: 14px;
+      color: #888;
+      text-align: center;
+    }
+    .size-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .size-row img {
+      border-radius: 4px;
+    }
+    .size-label {
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>AgentBox Logo Preview</h1>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">2a - 双层六边形</div>
+      <div class="logo-container">
+        <div class="logo-box dark">
+          <img src="agentbox-logo-2a.svg" alt="Logo 2a dark">
+        </div>
+        <div class="logo-box light">
+          <img src="agentbox-logo-2a.svg" alt="Logo 2a light">
+        </div>
+      </div>
+      <div class="card-desc">外框+内框+中心环形核心</div>
+      <div class="size-row">
+        <img src="agentbox-logo-2a.svg" width="24" height="24" style="filter: invert(0)">
+        <img src="agentbox-logo-2a.svg" width="32" height="32" style="filter: invert(0)">
+        <img src="agentbox-logo-2a.svg" width="40" height="40" style="filter: invert(0)">
+        <span class="size-label">24/32/40px</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2b - 能量辐射</div>
+      <div class="logo-container">
+        <div class="logo-box dark">
+          <img src="agentbox-logo-2b.svg" alt="Logo 2b dark">
+        </div>
+        <div class="logo-box light">
+          <img src="agentbox-logo-2b.svg" alt="Logo 2b light">
+        </div>
+      </div>
+      <div class="card-desc">中心实心六边形，向外发射能量线</div>
+      <div class="size-row">
+        <img src="agentbox-logo-2b.svg" width="24" height="24" style="filter: invert(0)">
+        <img src="agentbox-logo-2b.svg" width="32" height="32" style="filter: invert(0)">
+        <img src="agentbox-logo-2b.svg" width="40" height="40" style="filter: invert(0)">
+        <span class="size-label">24/32/40px</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2c - 八角脉冲</div>
+      <div class="logo-container">
+        <div class="logo-box dark">
+          <img src="agentbox-logo-2c.svg" alt="Logo 2c dark">
+        </div>
+        <div class="logo-box light">
+          <img src="agentbox-logo-2c.svg" alt="Logo 2c light">
+        </div>
+      </div>
+      <div class="card-desc">8节点，虚线内环，脉冲波纹核心</div>
+      <div class="size-row">
+        <img src="agentbox-logo-2c.svg" width="24" height="24" style="filter: invert(0)">
+        <img src="agentbox-logo-2c.svg" width="32" height="32" style="filter: invert(0)">
+        <img src="agentbox-logo-2c.svg" width="40" height="40" style="filter: invert(0)">
+        <span class="size-label">24/32/40px</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2d - 战士盾牌</div>
+      <div class="logo-container">
+        <div class="logo-box dark">
+          <img src="agentbox-logo-2d.svg" alt="Logo 2d dark">
+        </div>
+        <div class="logo-box light">
+          <img src="agentbox-logo-2d.svg" alt="Logo 2d light">
+        </div>
+      </div>
+      <div class="card-desc">盾形六边形，中心眼睛，V形徽章</div>
+      <div class="size-row">
+        <img src="agentbox-logo-2d.svg" width="24" height="24" style="filter: invert(0)">
+        <img src="agentbox-logo-2d.svg" width="32" height="32" style="filter: invert(0)">
+        <img src="agentbox-logo-2d.svg" width="40" height="40" style="filter: invert(0)">
+        <span class="size-label">24/32/40px</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2e - 轨道卫星</div>
+      <div class="logo-container">
+        <div class="logo-box dark">
+          <img src="agentbox-logo-2e.svg" alt="Logo 2e dark">
+        </div>
+        <div class="logo-box light">
+          <img src="agentbox-logo-2e.svg" alt="Logo 2e light">
+        </div>
+      </div>
+      <div class="card-desc">简洁六边形，6节点绕核心公转</div>
+      <div class="size-row">
+        <img src="agentbox-logo-2e.svg" width="24" height="24" style="filter: invert(0)">
+        <img src="agentbox-logo-2e.svg" width="32" height="32" style="filter: invert(0)">
+        <img src="agentbox-logo-2e.svg" width="40" height="40" style="filter: invert(0)">
+        <span class="size-label">24/32/40px</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Original - 基础版</div>
+      <div class="logo-container">
+        <div class="logo-box dark">
+          <img src="agentbox-logo-2.svg" alt="Logo 2 dark">
+        </div>
+        <div class="logo-box light">
+          <img src="agentbox-logo-2.svg" alt="Logo 2 light">
+        </div>
+      </div>
+      <div class="card-desc">原始六边形设计</div>
+      <div class="size-row">
+        <img src="agentbox-logo-2.svg" width="24" height="24" style="filter: invert(0)">
+        <img src="agentbox-logo-2.svg" width="32" height="32" style="filter: invert(0)">
+        <img src="agentbox-logo-2.svg" width="40" height="40" style="filter: invert(0)">
+        <span class="size-label">24/32/40px</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -18,6 +18,20 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: 'Batches',
+    items: [
+      { path: '/api-docs/create-batch', label: 'Create Batch', method: 'POST' },
+      { path: '/api-docs/list-batches', label: 'List Batches', method: 'GET' },
+      { path: '/api-docs/get-batch', label: 'Get Batch', method: 'GET' },
+      { path: '/api-docs/start-batch', label: 'Start Batch', method: 'POST' },
+      { path: '/api-docs/pause-batch', label: 'Pause Batch', method: 'POST' },
+      { path: '/api-docs/cancel-batch', label: 'Cancel Batch', method: 'POST' },
+      { path: '/api-docs/delete-batch', label: 'Delete Batch', method: 'DELETE' },
+      { path: '/api-docs/list-batch-tasks', label: 'List Batch Tasks', method: 'GET' },
+      { path: '/api-docs/stream-batch-events', label: 'Stream Events', method: 'GET' },
+    ],
+  },
+  {
     title: 'Files',
     items: [
       { path: '/api-docs/upload-file', label: 'Upload File', method: 'POST' },
@@ -25,6 +39,15 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/api-docs/get-file', label: 'Get File', method: 'GET' },
       { path: '/api-docs/delete-file', label: 'Delete File', method: 'DELETE' },
       { path: '/api-docs/download-file', label: 'Download File', method: 'GET' },
+    ],
+  },
+  {
+    title: 'Webhooks',
+    items: [
+      { path: '/api-docs/create-webhook', label: 'Create Webhook', method: 'POST' },
+      { path: '/api-docs/list-webhooks', label: 'List Webhooks', method: 'GET' },
+      { path: '/api-docs/get-webhook', label: 'Get Webhook', method: 'GET' },
+      { path: '/api-docs/delete-webhook', label: 'Delete Webhook', method: 'DELETE' },
     ],
   },
 ]

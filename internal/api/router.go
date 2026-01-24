@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmalldedede/agentbox/internal/agent"
+	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/engine"
@@ -14,6 +15,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/runtime"
 	"github.com/tmalldedede/agentbox/internal/session"
+	"github.com/tmalldedede/agentbox/internal/settings"
 	"github.com/tmalldedede/agentbox/internal/skill"
 	"github.com/tmalldedede/agentbox/internal/task"
 	"github.com/tmalldedede/agentbox/internal/webhook"
@@ -38,6 +40,8 @@ type Server struct {
 	agentHandler      *AgentHandler
 	historyHandler    *HistoryHandler
 	dashboardHandler  *DashboardHandler
+	batchHandler      *BatchHandler
+	settingsHandler   *SettingsHandler
 }
 
 // Deps 服务器依赖（从 App 容器注入）
@@ -53,7 +57,9 @@ type Deps struct {
 	Webhook     *webhook.Manager
 	Agent       *agent.Manager
 	History     *history.Manager
+	Batch       *batch.Manager
 	GC          *container.GarbageCollector
+	Settings    *settings.Manager
 	FilesConfig config.FilesConfig
 	FileStore   FileStore
 }
@@ -75,12 +81,14 @@ func NewServer(deps *Deps) *Server {
 	mcpHandler := NewMCPHandler(deps.MCP)
 	skillHandler := NewSkillHandler(deps.Skill)
 	imageHandler := NewImageHandler(deps.Container)
-	systemHandler := NewSystemHandler(deps.Container, deps.Session, deps.GC)
+	systemHandler := NewSystemHandler(deps.Container, deps.Session, deps.Batch, deps.GC)
 	taskHandler := NewTaskHandler(deps.Task)
 	webhookHandler := NewWebhookHandler(deps.Webhook)
 	agentHandler := NewAgentHandler(deps.Agent, deps.Session, deps.History)
 	historyHandler := NewHistoryHandler(deps.History)
-	dashboardHandler := NewDashboardHandler(deps.Task, deps.Agent, deps.Session, deps.Provider, deps.Container, deps.History)
+	dashboardHandler := NewDashboardHandler(deps.Task, deps.Agent, deps.Session, deps.Provider, deps.MCP, deps.Container, deps.History)
+	batchHandler := NewBatchHandler(deps.Batch)
+	settingsHandler := NewSettingsHandler(deps.Settings)
 
 	s := &Server{
 		engine:            engine,
@@ -99,6 +107,8 @@ func NewServer(deps *Deps) *Server {
 		agentHandler:      agentHandler,
 		historyHandler:    historyHandler,
 		dashboardHandler:  dashboardHandler,
+		batchHandler:      batchHandler,
+		settingsHandler:   settingsHandler,
 	}
 
 	s.setupRoutes()
@@ -120,6 +130,9 @@ func (s *Server) setupRoutes() {
 
 		// Tasks (核心) - 创建/多轮/取消/SSE 事件流
 		s.taskHandler.RegisterRoutes(v1)
+
+		// Batches (批量任务) - Worker 池模式批量处理
+		s.batchHandler.RegisterRoutes(v1)
 
 		// Files (附件) - 独立文件上传
 		s.publicFileHandler.RegisterRoutes(v1)
@@ -192,6 +205,9 @@ func (s *Server) setupRoutes() {
 
 		// Dashboard (态势感知大屏)
 		s.dashboardHandler.RegisterRoutes(admin)
+
+		// Settings (业务配置)
+		s.settingsHandler.RegisterRoutes(admin)
 	}
 }
 

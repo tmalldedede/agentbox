@@ -49,8 +49,9 @@ type Server struct {
 	URL string `json:"url,omitempty"`
 
 	// 状态
-	IsBuiltIn bool `json:"is_built_in"`
-	IsEnabled bool `json:"is_enabled"`
+	IsBuiltIn    bool `json:"is_built_in"`
+	IsEnabled    bool `json:"is_enabled"`
+	IsConfigured bool `json:"is_configured"` // 所有必需 Env 已填写
 
 	// 时间戳
 	CreatedAt time.Time `json:"created_at"`
@@ -86,6 +87,31 @@ func (s *Server) Validate() error {
 	}
 
 	return nil
+}
+
+// ComputeConfigured 计算 IsConfigured 状态
+// 当所有 Env 值都非空时视为已配置
+func (s *Server) ComputeConfigured() bool {
+	if len(s.Env) == 0 {
+		return true // 无需配置
+	}
+	for _, v := range s.Env {
+		if v == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// RequiredEnvKeys 返回尚未配置的 Env Key 列表（值为空的）
+func (s *Server) RequiredEnvKeys() []string {
+	var keys []string
+	for k, v := range s.Env {
+		if v == "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 // Clone 克隆 Server
@@ -156,6 +182,15 @@ type UpdateServerRequest struct {
 	Tags        []string           `json:"tags,omitempty"`
 	URL         *string            `json:"url,omitempty"`
 	IsEnabled   *bool              `json:"is_enabled,omitempty"`
+}
+
+// TestResult MCP Server 测试结果
+type TestResult struct {
+	Status       string                 `json:"status"` // "ok" or "error"
+	LatencyMs    int64                  `json:"latency_ms"`
+	ServerInfo   map[string]interface{} `json:"server_info,omitempty"`
+	Capabilities map[string]interface{} `json:"capabilities,omitempty"`
+	Error        string                 `json:"error,omitempty"`
 }
 
 // 错误定义 - 使用 apperr 提供正确的 HTTP 状态码

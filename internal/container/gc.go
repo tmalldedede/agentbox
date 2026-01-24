@@ -71,12 +71,12 @@ func (gc *GarbageCollector) Start() {
 		"idle_timeout", gc.config.IdleTimeout,
 	)
 
-	// 启动时执行一次清理
+	// 启动时执行一次清理（Docker 不可用时跳过，不报错）
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := gc.RunOnce(ctx); err != nil {
-			gc.logger.Error("startup gc failed", "error", err)
+			gc.logger.Warn("startup gc skipped", "error", err)
 		}
 	}()
 
@@ -294,7 +294,7 @@ func (gc *GarbageCollector) loop() {
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			if err := gc.RunOnce(ctx); err != nil {
-				gc.logger.Error("gc scan failed", "error", err)
+				gc.logger.Warn("gc scan skipped", "error", err)
 			}
 			cancel()
 		}

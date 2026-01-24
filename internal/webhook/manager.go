@@ -26,19 +26,24 @@ type Manager struct {
 	client *http.Client
 }
 
-// NewManager 创建 Webhook 管理器
-func NewManager(dataDir string) (*Manager, error) {
-	store, err := NewFileStore(dataDir)
-	if err != nil {
-		return nil, err
+// NewManager 创建 Webhook 管理器（使用数据库存储）
+func NewManager() *Manager {
+	return &Manager{
+		store: NewDBStore(),
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
+}
 
+// NewManagerWithStore 创建 Webhook 管理器（自定义存储，用于测试）
+func NewManagerWithStore(store Store) *Manager {
 	return &Manager{
 		store: store,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-	}, nil
+	}
 }
 
 // Create 创建 Webhook

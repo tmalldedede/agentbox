@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Play, Loader2, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react'
+import { useDockerAvailable } from '@/hooks/useSystemHealth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -53,6 +54,7 @@ const DEMO_TASKS: DemoTask[] = [
 
 export function DemoPanel() {
   const navigate = useNavigate()
+  const dockerAvailable = useDockerAvailable()
   const [selectedDemo, setSelectedDemo] = useState<DemoTask | null>(null)
   const [customPrompt, setCustomPrompt] = useState('')
   const [loading, setLoading] = useState(false)
@@ -150,7 +152,7 @@ export function DemoPanel() {
                     e.stopPropagation()
                     runDemo(demo)
                   }}
-                  disabled={loading}
+                  disabled={loading || !dockerAvailable}
                 >
                   {loading && selectedDemo?.id === demo.id ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -187,7 +189,7 @@ export function DemoPanel() {
             <Button
               className="w-full"
               onClick={() => runDemo(selectedDemo)}
-              disabled={loading}
+              disabled={loading || !dockerAvailable}
             >
               {loading ? (
                 <>

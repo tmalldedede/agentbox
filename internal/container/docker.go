@@ -1,16 +1,20 @@
 package container
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 // DockerManager Docker 容器管理器实现
@@ -137,9 +141,10 @@ func (m *DockerManager) Exec(ctx context.Context, containerID string, cmd []stri
 	}
 	defer attachResp.Close()
 
-	// 读取输出
+	// 读取输出 - 使用 stdcopy 来正确解析多路复用的 stdout/stderr
+	// 当 Tty=false 时，Docker 使用 8 字节头部的多路复用格式
 	var stdout, stderr bytes.Buffer
-	_, err = io.Copy(&stdout, attachResp.Reader)
+	_, err = stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader)
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("failed to read exec output: %w", err)
 	}
@@ -377,4 +382,145 @@ func (m *DockerManager) RemoveImage(ctx context.Context, imageID string) error {
 		return fmt.Errorf("failed to remove image: %w", err)
 	}
 	return nil
+}
+
+// CopyToContainer 复制文件/目录到容器
+// srcPath: 本地源路径
+// dstPath: 容器内目标路径（必须是目录）
+func (m *DockerManager) CopyToContainer(ctx context.Context, containerID string, srcPath string, dstPath string) error {
+	// 创建 tar archive
+	tarData, err := createTarFromPath(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to create tar archive: %w", err)
+	}
+
+	// 转换为 bytes.Buffer 以获取数据
+	buf, ok := tarData.(*bytes.Buffer)
+	if !ok {
+		return fmt.Errorf("expected bytes.Buffer from createTarFromPath")
+	}
+
+	// 使用 Docker SDK 的 CopyToContainer
+	reader := bytes.NewReader(buf.Bytes())
+	err = m.client.CopyToContainer(ctx, containerID, dstPath, reader, container.CopyToContainerOptions{
+		AllowOverwriteDirWithFile: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to copy to container: %w", err)
+	}
+
+	return nil
+}
+
+// createTarFromPath 从本地路径创建 tar 归档
+func createTarFromPath(srcPath string) (io.Reader, error) {
+	srcPath = filepath.Clean(srcPath)
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat source path: %w", err)
+	}
+
+	buf := new(bytes.Buffer)
+	tw := tar.NewWriter(buf)
+
+	if srcInfo.IsDir() {
+		// 遍历目录
+		baseName := filepath.Base(srcPath)
+		err = filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// 跳过 .git 目录
+			if info.IsDir() && info.Name() == ".git" {
+				return filepath.SkipDir
+			}
+
+			// 计算相对路径（相对于 srcPath 的父目录，保留目录名）
+			relPath, err := filepath.Rel(filepath.Dir(srcPath), path)
+			if err != nil {
+				return err
+			}
+
+			// 处理符号链接
+			if info.Mode()&os.ModeSymlink != 0 {
+				link, err := os.Readlink(path)
+				if err != nil {
+					return err
+				}
+				header := &tar.Header{
+					Name:     relPath,
+					Linkname: link,
+					Mode:     int64(info.Mode()),
+					Typeflag: tar.TypeSymlink,
+				}
+				return tw.WriteHeader(header)
+			}
+
+			// 创建 tar header
+			header, err := tar.FileInfoHeader(info, "")
+			if err != nil {
+				return err
+			}
+			header.Name = relPath
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			// 如果是普通文件，写入内容
+			if info.Mode().IsRegular() {
+				file, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+
+				_, copyErr := io.Copy(tw, file)
+				file.Close()
+				if copyErr != nil {
+					return copyErr
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			tw.Close()
+			return nil, fmt.Errorf("failed to walk directory: %w", err)
+		}
+		_ = baseName // 用于保留目录结构
+	} else {
+		// 单个文件
+		header, err := tar.FileInfoHeader(srcInfo, "")
+		if err != nil {
+			tw.Close()
+			return nil, err
+		}
+		header.Name = filepath.Base(srcPath)
+
+		if err := tw.WriteHeader(header); err != nil {
+			tw.Close()
+			return nil, err
+		}
+
+		file, err := os.Open(srcPath)
+		if err != nil {
+			tw.Close()
+			return nil, err
+		}
+
+		_, copyErr := io.Copy(tw, file)
+		file.Close()
+		if copyErr != nil {
+			tw.Close()
+			return nil, copyErr
+		}
+	}
+
+	// 关闭 tar writer 以完成归档
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	return buf, nil
 }

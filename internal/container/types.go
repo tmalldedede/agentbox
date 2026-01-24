@@ -45,6 +45,9 @@ type Manager interface {
 	// RemoveImage 删除镜像
 	RemoveImage(ctx context.Context, imageID string) error
 
+	// CopyToContainer 复制文件/目录到容器
+	CopyToContainer(ctx context.Context, containerID string, srcPath string, dstPath string) error
+
 	// Ping 检查连接
 	Ping(ctx context.Context) error
 

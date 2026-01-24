@@ -19,6 +19,8 @@ func AutoMigrate() error {
 		&WebhookModel{},
 		&ImageModel{},
 		&HistoryModel{},
+		&BatchModel{},
+		&BatchTaskModel{},
 	}
 
 	for _, model := range models {

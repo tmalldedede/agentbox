@@ -22,14 +22,18 @@ const (
 
 // Skill 技能定义
 type Skill struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Command     string   `json:"command"` // 触发命令，如 "/commit"
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Command     string `json:"command"` // 触发命令，如 "/commit"
 
 	// Skill 内容
-	Prompt string      `json:"prompt"`           // 主提示词
-	Files  []SkillFile `json:"files,omitempty"`  // 附加文件（如 references）
+	Prompt string      `json:"prompt"`          // 主提示词
+	Files  []SkillFile `json:"files,omitempty"` // 附加文件（如 references）
+
+	// 源目录 - 本地文件系统路径，用于复制 scripts/tools 等目录到容器
+	// 如果设置，注入时会复制整个目录（排除 SKILL.md，因为会动态生成）
+	SourceDir string `json:"source_dir,omitempty"`
 
 	// 配置
 	AllowedTools []string `json:"allowed_tools,omitempty"` // 允许使用的工具
@@ -143,6 +147,7 @@ type CreateSkillRequest struct {
 	Command      string      `json:"command"`
 	Prompt       string      `json:"prompt"`
 	Files        []SkillFile `json:"files,omitempty"`
+	SourceDir    string      `json:"source_dir,omitempty"` // 本地源目录路径
 	AllowedTools []string    `json:"allowed_tools,omitempty"`
 	RequiredMCP  []string    `json:"required_mcp,omitempty"`
 	Category     Category    `json:"category"`
@@ -158,6 +163,7 @@ type UpdateSkillRequest struct {
 	Command      *string     `json:"command,omitempty"`
 	Prompt       *string     `json:"prompt,omitempty"`
 	Files        []SkillFile `json:"files,omitempty"`
+	SourceDir    *string     `json:"source_dir,omitempty"` // 本地源目录路径
 	AllowedTools []string    `json:"allowed_tools,omitempty"`
 	RequiredMCP  []string    `json:"required_mcp,omitempty"`
 	Category     *Category   `json:"category,omitempty"`

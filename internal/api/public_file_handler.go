@@ -155,8 +155,14 @@ func (h *PublicFileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// 保存文件到磁盘
-	filePath := filepath.Join(fileDir, header.Filename)
+	// 保存文件到磁盘（使用 filepath.Base 防止路径遍历）
+	safeFilename := filepath.Base(header.Filename)
+	if safeFilename == "." || safeFilename == "/" {
+		os.RemoveAll(fileDir)
+		BadRequest(c, "invalid filename")
+		return
+	}
+	filePath := filepath.Join(fileDir, safeFilename)
 	dst, err := os.Create(filePath)
 	if err != nil {
 		os.RemoveAll(fileDir)

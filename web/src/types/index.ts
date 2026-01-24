@@ -356,8 +356,28 @@ export interface MCPServer {
   url?: string
   is_built_in: boolean
   is_enabled: boolean
+  is_configured: boolean
   created_at: string
   updated_at: string
+}
+
+export interface MCPTestResult {
+  status: 'ok' | 'error'
+  latency_ms: number
+  server_info?: Record<string, unknown>
+  capabilities?: Record<string, unknown>
+  error?: string
+}
+
+export interface MCPServerStats {
+  total: number
+  enabled: number
+  configured: number
+  not_configured: number
+  built_in: number
+  custom: number
+  by_category: Record<string, number>
+  by_type: Record<string, number>
 }
 
 export interface CreateMCPServerRequest {
@@ -650,6 +670,26 @@ export interface SystemHealth {
   checks: Record<string, string>
 }
 
+export interface RunningBatchInfo {
+  id: string
+  name: string
+  workers: number
+  completed: number
+  failed: number
+  total: number
+  percent: number
+  tasks_per_sec: number
+}
+
+export interface BatchPoolStats {
+  max_batches: number
+  running_batches: number
+  total_workers: number
+  busy_workers: number
+  idle_workers: number
+  batches: RunningBatchInfo[]
+}
+
 export interface SystemStats {
   sessions: {
     total: number
@@ -670,6 +710,7 @@ export interface SystemStats {
     total_size: number
     in_use: number
   }
+  batches?: BatchPoolStats
   system: {
     uptime: string
     memory_usage_mb: number
@@ -854,4 +895,168 @@ export interface ApiResponse<T> {
   code: number
   message: string
   data?: T
+}
+
+// Batch Types (批量任务处理)
+export type BatchStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+export type BatchTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'dead'
+
+export interface BatchTemplate {
+  prompt_template: string
+  timeout: number
+  max_retries: number
+  runtime_id?: string
+}
+
+export interface WorkerInfo {
+  id: string
+  session_id: string
+  container_id?: string
+  status: string  // idle, busy, error, stopped
+  current_task?: string
+  completed: number
+  last_error?: string
+}
+
+export interface Batch {
+  id: string
+  name: string
+  agent_id: string
+  template: BatchTemplate
+  concurrency: number
+  status: BatchStatus
+  total_tasks: number
+  completed: number
+  failed: number
+  progress_percent?: number
+  estimated_eta?: string
+  tasks_per_sec?: number
+  workers?: WorkerInfo[]
+  error_summary?: Record<string, number>
+  created_at: string
+  started_at?: string
+  completed_at?: string
+}
+
+export interface BatchTask {
+  id: string
+  batch_id: string
+  index: number
+  input: Record<string, unknown>
+  prompt?: string
+  status: BatchTaskStatus
+  worker_id?: string
+  result?: string
+  error?: string
+  attempts: number
+  claimed_at?: string
+  claimed_by?: string
+  dead_at?: string
+  dead_reason?: string
+  created_at: string
+  started_at?: string
+  duration_ms?: number
+}
+
+export interface CreateBatchRequest {
+  name: string
+  agent_id: string
+  prompt_template: string
+  inputs: Record<string, unknown>[]
+  concurrency?: number
+  timeout?: number
+  max_retries?: number
+  runtime_id?: string
+  auto_start?: boolean
+}
+
+export interface BatchStats {
+  total_tasks: number
+  pending: number
+  running: number
+  completed: number
+  failed: number
+  dead?: number
+  by_worker?: Record<string, number>
+  avg_duration_ms: number
+  error_types?: Record<string, number>
+}
+
+export interface BatchEvent {
+  type: string
+  batch_id: string
+  timestamp: string
+  data?: unknown
+}
+
+export interface BatchProgressData {
+  completed: number
+  failed: number
+  total: number
+  percent: number
+  eta: string
+  tasks_per_sec: number
+}
+
+export interface ListBatchFilter {
+  status?: BatchStatus
+  agent_id?: string
+  limit?: number
+  offset?: number
+}
+
+export interface ListBatchTaskFilter {
+  status?: BatchTaskStatus
+  worker_id?: string
+  limit?: number
+  offset?: number
+}
+
+// ==================== Settings Types ====================
+
+export interface Settings {
+  agent: AgentSettings
+  task: TaskSettings
+  batch: BatchSettings
+  storage: StorageSettings
+  notify: NotifySettings
+}
+
+export interface AgentSettings {
+  default_provider_id: string
+  default_model: string
+  default_runtime_id: string
+  default_timeout: number
+  system_prompt: string
+}
+
+export interface TaskSettings {
+  default_idle_timeout: number
+  default_poll_interval: number
+  max_turns: number
+  max_attachments: number
+  max_attachment_size: number
+}
+
+export interface BatchSettings {
+  default_workers: number
+  max_workers: number
+  max_concurrent_batches: number
+  max_retries: number
+  retry_delay: number
+  dead_letter_enabled: boolean
+}
+
+export interface StorageSettings {
+  history_retention_days: number
+  session_retention_days: number
+  auto_cleanup: boolean
+}
+
+export interface NotifySettings {
+  webhook_url: string
+  webhook_secret: string
+  notify_on_complete: boolean
+  notify_on_failed: boolean
+  notify_on_batch_complete: boolean
 }

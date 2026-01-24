@@ -21,6 +21,7 @@ func (h *MCPHandler) RegisterRoutes(r *gin.RouterGroup) {
 	servers := r.Group("/mcp-servers")
 	{
 		servers.GET("", h.List)
+		servers.GET("/stats", h.Stats)
 		servers.POST("", h.Create)
 		servers.GET("/:id", h.Get)
 		servers.PUT("/:id", h.Update)
@@ -137,15 +138,23 @@ func (h *MCPHandler) Clone(c *gin.Context) {
 	Created(c, server)
 }
 
+// Stats 获取 MCP Server 统计信息
+// GET /api/v1/mcp-servers/stats
+func (h *MCPHandler) Stats(c *gin.Context) {
+	stats := h.manager.Stats()
+	Success(c, stats)
+}
+
 // Test 测试 MCP Server 连接
 // POST /api/v1/mcp-servers/:id/test
 func (h *MCPHandler) Test(c *gin.Context) {
 	id := c.Param("id")
 
-	if err := h.manager.Test(id); err != nil {
+	result, err := h.manager.Test(id)
+	if err != nil {
 		HandleError(c, err)
 		return
 	}
 
-	Success(c, gin.H{"status": "ok", "message": "MCP server configuration is valid"})
+	Success(c, result)
 }

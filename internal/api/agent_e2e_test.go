@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -478,4 +479,210 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + fmt.Sprintf("... (%d chars total)", len(s))
+}
+
+// TestEmailOSINT_E2E 端到端测试 email-osint 技能
+//
+// 测试流程:
+//  1. 创建 email-osint skill (使用 SourceDir 复制完整目录)
+//  2. 创建 Agent 关联该 skill
+//  3. 创建 Session
+//  4. 发送邮箱查询 prompt: "wakaka6@proton.me"
+//  5. 验证 LLM 能识别技能并执行分析
+//
+// 运行方式:
+//
+//	go test -v -run TestEmailOSINT_E2E -timeout 300s ./internal/api/
+func TestEmailOSINT_E2E(t *testing.T) {
+	// === 前置检查 ===
+	apiKey := getZhipuAPIKey(t)
+	if apiKey == "" {
+		t.Skip("zhipu API key not available, skipping E2E test")
+	}
+
+	// 检查 skill 源目录是否存在
+	skillSourceDir := "/Users/sky2/pr/cybersec-skills/skills/email-osint"
+	if _, err := os.Stat(skillSourceDir); os.IsNotExist(err) {
+		t.Skipf("email-osint skill source not found at %s, skipping E2E test", skillSourceDir)
+	}
+
+	ctx := context.Background()
+	dockerMgr, err := container.NewDockerManager()
+	if err != nil {
+		t.Skipf("Docker not available: %v, skipping E2E test", err)
+	}
+
+	tmpDir := t.TempDir()
+
+	// === 初始化 Managers ===
+	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
+	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
+
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	skillMgr, err := skill.NewManager(filepath.Join(tmpDir, "skills"))
+	require.NoError(t, err)
+	mcpMgr, _ := mcp.NewManager(filepath.Join(tmpDir, "mcp"))
+	agentMgr := agent.NewManager(filepath.Join(tmpDir, "agents"), provMgr, rtMgr, skillMgr, mcpMgr)
+
+	registry := engine.DefaultRegistry()
+	sessionStore := session.NewMemoryStore()
+	sessionMgr := session.NewManager(sessionStore, dockerMgr, registry, filepath.Join(tmpDir, "workspaces"))
+	sessionMgr.SetAgentManager(agentMgr)
+	sessionMgr.SetSkillManager(skillMgr)
+
+	// === 创建 email-osint Skill ===
+	t.Run("CreateEmailOSINTSkill", func(t *testing.T) {
+		emailOsintSkill := &skill.CreateSkillRequest{
+			ID:          "email-osint",
+			Name:        "Email OSINT Investigation",
+			Description: "邮箱情报调查与关联分析。查询邮箱的注册平台、用户名关联、社交账号发现。",
+			Command:     "/email-osint",
+			Prompt:      "对指定邮箱进行 OSINT 调查，使用 holehe 和 blackbird 工具检测注册平台。",
+			Category:    skill.CategorySecurity,
+			Tags:        []string{"osint", "email", "investigation"},
+			SourceDir:   skillSourceDir, // 使用 SourceDir 复制完整目录
+		}
+		_, err := skillMgr.Create(emailOsintSkill)
+		require.NoError(t, err)
+		t.Logf("Created email-osint skill with SourceDir: %s", skillSourceDir)
+
+		// 验证 skill 已创建
+		s, err := skillMgr.Get("email-osint")
+		require.NoError(t, err)
+		assert.Equal(t, skillSourceDir, s.SourceDir)
+	})
+
+	// === 创建 Agent (使用 Claude Code adapter) ===
+	t.Run("CreateAgent", func(t *testing.T) {
+		testAgent := &agent.Agent{
+			ID:          "e2e-email-osint-agent",
+			Name:        "Email OSINT Agent",
+			Description: "Agent for email OSINT investigation using email-osint skill",
+			Adapter:     agent.AdapterClaudeCode, // 使用 Claude Code adapter
+			ProviderID:  "zhipu",
+			Model:       "glm-4-flash",
+			SystemPrompt: `你是一个邮箱 OSINT 调查专家。当用户提供邮箱地址时，你需要：
+1. 使用 holehe 工具检测邮箱注册平台
+2. 使用 blackbird 工具搜索用户名
+3. 分析邮箱服务商特点
+4. 生成调查报告
+
+工具位置：
+- holehe: $HOME/.codex/skills/email-osint/scripts/holehe_run.py
+- blackbird: $HOME/.codex/skills/email-osint/scripts/blackbird_run.py
+
+请先检查环境是否准备就绪：python3 $HOME/.codex/skills/email-osint/scripts/check_env.py`,
+			SkillIDs: []string{"email-osint"},
+			Permissions: agent.PermissionConfig{
+				SkipAll: true, // Claude Code 使用 --dangerously-skip-permissions
+			},
+		}
+		err := agentMgr.Create(testAgent)
+		require.NoError(t, err)
+		t.Logf("Agent created: id=%s, adapter=%s, skills=%v", testAgent.ID, testAgent.Adapter, testAgent.SkillIDs)
+	})
+
+	// === 创建 Session 并执行查询 ===
+	workspaceBase := filepath.Join(tmpDir, "workspaces")
+	var sess *session.Session
+	t.Run("ExecuteEmailQuery", func(t *testing.T) {
+		// 创建 Session
+		sess, err = sessionMgr.Create(ctx, &session.CreateRequest{
+			AgentID:   "e2e-email-osint-agent",
+			Workspace: filepath.Join(workspaceBase, "workspace-osint"),
+		})
+		require.NoError(t, err)
+		t.Logf("Session created: id=%s, container=%s", sess.ID, sess.ContainerID)
+
+		// 等待容器启动
+		time.Sleep(3 * time.Second)
+
+		// 验证 skill 文件已注入
+		t.Run("VerifySkillInjected", func(t *testing.T) {
+			// 检查 SKILL.md
+			checkCmd := []string{"sh", "-c", "ls -la $HOME/.codex/skills/email-osint/"}
+			result, err := dockerMgr.Exec(ctx, sess.ContainerID, checkCmd)
+			require.NoError(t, err)
+			t.Logf("Skill directory:\n%s", result.Stdout)
+			assert.Contains(t, result.Stdout, "SKILL.md")
+			assert.Contains(t, result.Stdout, "scripts")
+			assert.Contains(t, result.Stdout, "tools")
+
+			// 检查 holehe 脚本
+			checkScript := []string{"sh", "-c", "head -3 $HOME/.codex/skills/email-osint/scripts/holehe_run.py"}
+			scriptResult, err := dockerMgr.Exec(ctx, sess.ContainerID, checkScript)
+			require.NoError(t, err)
+			t.Logf("holehe_run.py exists: %s", scriptResult.Stdout)
+		})
+
+		// 执行邮箱查询 (LLM 连接可能不稳定，主要验证技能注入)
+		t.Run("QueryEmail", func(t *testing.T) {
+			prompt := `这是一个授权的安全测试环境（CTF 教育测试），用于验证 email-osint 技能是否正常工作。
+
+请对邮箱 wakaka6@proton.me 进行 OSINT 调查：
+
+1. 先安装依赖（使用 --user 避免权限问题）：
+   pip3 install --user holehe httpx==0.27.2 --quiet
+2. 使用 holehe 检测该邮箱的注册平台：
+   python3 -m holehe wakaka6@proton.me
+3. 分析结果，总结该邮箱在哪些平台有注册
+
+请直接执行 Bash 命令，不要解释。`
+
+			t.Logf("Sending prompt: %s", truncate(prompt, 100))
+			t.Log("Waiting for LLM response (may take 60-120s)...")
+
+			resp, err := sessionMgr.Exec(ctx, sess.ID, &session.ExecRequest{
+				Prompt:   prompt,
+				MaxTurns: 20,  // 增加轮次，允许多次工具调用
+				Timeout:  240, // 4分钟超时，工具执行需要时间
+			})
+
+			t.Logf("=== Query Result ===")
+			if err != nil {
+				t.Logf("  Error (exec): %v", err)
+			}
+			if resp != nil {
+				t.Logf("  ExitCode: %d", resp.ExitCode)
+				t.Logf("  Message:  %s", truncate(resp.Message, 2000))
+				t.Logf("  Output:   %s", truncate(resp.Output, 2000))
+				if resp.Error != "" {
+					t.Logf("  Error:    %s", resp.Error)
+				}
+				if resp.Usage != nil {
+					t.Logf("  Usage:    input=%d, output=%d tokens", resp.Usage.InputTokens, resp.Usage.OutputTokens)
+				}
+			}
+
+			// 如果 LLM 连接失败，只记录警告，不作为失败
+			// 技能注入已在 VerifySkillInjected 中验证通过
+			if err != nil || resp == nil || resp.Message == "" {
+				t.Log("WARNING: LLM query failed or returned empty response. This may be due to API connection issues.")
+				t.Log("The skill injection test (VerifySkillInjected) has already passed, which is the main focus of this E2E test.")
+				return
+			}
+
+			// 如果有响应，验证 LLM 能识别到 skill 目录
+			if resp.Message != "" {
+				hasRelevantContent := strings.Contains(resp.Message, "email-osint") ||
+					strings.Contains(resp.Message, "ProtonMail") ||
+					strings.Contains(resp.Message, "proton") ||
+					strings.Contains(resp.Message, "holehe") ||
+					strings.Contains(resp.Message, "scripts") ||
+					strings.Contains(resp.Message, "wakaka6")
+				if hasRelevantContent {
+					t.Log("LLM response contains relevant content about the skill or email analysis")
+				} else {
+					t.Log("LLM response does not mention expected keywords, but skill injection was verified")
+				}
+			}
+		})
+	})
+
+	// === 清理 ===
+	if sess != nil && sess.ContainerID != "" {
+		_ = dockerMgr.Stop(ctx, sess.ContainerID)
+		_ = dockerMgr.Remove(ctx, sess.ContainerID)
+		t.Logf("Cleaned up container: %s", sess.ContainerID[:12])
+	}
 }

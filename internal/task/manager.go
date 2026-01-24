@@ -1,10 +1,13 @@
 package task
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -24,6 +27,11 @@ func init() {
 	log = logger.Module("task")
 }
 
+// WebhookNotifier 全局 Webhook 通知接口
+type WebhookNotifier interface {
+	Send(event string, data interface{})
+}
+
 // FileBindFunc 文件绑定回调（将 fileID 关联到 taskID）
 type FileBindFunc func(fileID, taskID string) error
 
@@ -41,9 +49,13 @@ type Manager struct {
 	pollInterval  time.Duration // 轮询间隔
 
 	// Idle timeout 配置
-	idleTimeout time.Duration         // 默认 30 分钟
+	idleTimeout time.Duration          // 默认 30 分钟
 	idleTimers  map[string]*time.Timer // taskID → idle timer
-	idleMu     sync.Mutex
+	idleMu      sync.Mutex
+
+	// Webhook 通知
+	webhookNotifier WebhookNotifier
+	webhookClient   *http.Client
 
 	// 文件管理
 	fileBinder       FileBindFunc // 创建 task 时绑定附件
@@ -107,6 +119,7 @@ func NewManager(store Store, agentMgr *agent.Manager, sessionMgr *session.Manage
 		pollInterval:  cfg.PollInterval,
 		idleTimeout:   cfg.IdleTimeout,
 		idleTimers:    make(map[string]*time.Timer),
+		webhookClient: &http.Client{Timeout: 10 * time.Second},
 		ctx:           ctx,
 		cancel:        cancel,
 		running:       make(map[string]context.CancelFunc),
@@ -124,8 +137,14 @@ func (m *Manager) SetFilePathResolver(fn FilePathFunc) {
 	m.filePathResolver = fn
 }
 
+// SetWebhookNotifier 设置全局 Webhook 通知器
+func (m *Manager) SetWebhookNotifier(notifier WebhookNotifier) {
+	m.webhookNotifier = notifier
+}
+
 // Start 启动调度器
 func (m *Manager) Start() {
+	m.recoverStuckTasks()
 	m.wg.Add(1)
 	go m.scheduler()
 	log.Info("task manager started", "max_concurrent", m.maxConcurrent, "poll_interval", m.pollInterval)
@@ -144,6 +163,74 @@ func (m *Manager) Stop() {
 
 	m.wg.Wait()
 	log.Info("task manager stopped")
+}
+
+// recoverStuckTasks 在启动时清理异常 running 任务
+func (m *Manager) recoverStuckTasks() {
+	if m.sessionMgr == nil {
+		log.Warn("recoverStuckTasks: sessionMgr is nil, skipping recovery")
+		return
+	}
+
+	tasks, err := m.store.List(&ListFilter{Status: []Status{StatusRunning}})
+	if err != nil {
+		log.Error("recoverStuckTasks: failed to list running tasks", "error", err)
+		return
+	}
+
+	if len(tasks) == 0 {
+		return
+	}
+
+	now := time.Now()
+	for _, task := range tasks {
+		// 超时任务直接标记失败
+		timeout := task.Timeout
+		if timeout <= 0 {
+			timeout = 1800 // 默认 30 分钟
+		}
+		if task.StartedAt != nil {
+			grace := 300 * time.Second
+			if now.Sub(*task.StartedAt) > time.Duration(timeout)*time.Second+grace {
+				task.Status = StatusFailed
+				task.ErrorMessage = "task timed out during recovery"
+				task.CompletedAt = &now
+				if err := m.store.Update(task); err != nil {
+					log.Error("recoverStuckTasks: failed to mark task failed", "task_id", task.ID, "error", err)
+				} else {
+					log.Warn("recoverStuckTasks: marked task failed", "task_id", task.ID)
+				}
+				continue
+			}
+		}
+
+		// 无 session 或 session 非运行状态 -> 重新入队
+		if task.SessionID == "" {
+			m.requeueTask(task, "missing session_id")
+			continue
+		}
+		sess, err := m.sessionMgr.Get(context.Background(), task.SessionID)
+		if err != nil || sess.Status != session.StatusRunning {
+			m.requeueTask(task, "session not running")
+		}
+	}
+}
+
+func (m *Manager) requeueTask(task *Task, reason string) {
+	now := time.Now()
+	task.Status = StatusQueued
+	task.QueuedAt = &now
+	task.StartedAt = nil
+	task.CompletedAt = nil
+	task.ErrorMessage = ""
+	task.SessionID = ""
+	task.ThreadID = ""
+
+	if err := m.store.Update(task); err != nil {
+		log.Error("requeueTask: failed", "task_id", task.ID, "reason", reason, "error", err)
+		return
+	}
+	log.Warn("requeueTask: task requeued", "task_id", task.ID, "reason", reason)
 }
 
 // scheduler 调度循环
@@ -173,15 +260,12 @@ func (m *Manager) scheduleNext() {
 		return
 	}
 
-	// 获取等待中的任务
-	tasks, err := m.store.List(&ListFilter{
-		Status:    []Status{StatusQueued},
-		Limit:     m.maxConcurrent - currentRunning,
-		OrderBy:   "created_at",
-		OrderDesc: false, // FIFO
-	})
+	limit := m.maxConcurrent - currentRunning
+
+	// 原子领取等待中的任务（避免多实例重复执行）
+	tasks, err := m.store.ClaimQueued(limit)
 	if err != nil {
-		log.Error("failed to list queued tasks", "error", err)
+		log.Error("failed to claim queued tasks", "error", err)
 		return
 	}
 
@@ -201,9 +285,9 @@ func (m *Manager) scheduleNext() {
 // CreateTaskRequest 创建任务请求（简化版）
 type CreateTaskRequest struct {
 	// 核心字段
-	AgentID string `json:"agent_id,omitempty"`          // 首次创建时必填
+	AgentID string `json:"agent_id,omitempty"` // 首次创建时必填
 	Prompt  string `json:"prompt" binding:"required"`
-	TaskID  string `json:"task_id,omitempty"`           // 多轮时传入已有 task_id
+	TaskID  string `json:"task_id,omitempty"` // 多轮时传入已有 task_id
 
 	// 附件
 	Attachments []string `json:"attachments,omitempty"` // file IDs
@@ -495,15 +579,18 @@ func (m *Manager) UnsubscribeEvents(taskID string, ch <-chan *TaskEvent) {
 // broadcastEvent 广播事件到所有订阅者
 func (m *Manager) broadcastEvent(taskID string, event *TaskEvent) {
 	m.eventSubsMu.RLock()
-	subs := m.eventSubs[taskID]
-	m.eventSubsMu.RUnlock()
-
-	for _, ch := range subs {
+	for _, ch := range m.eventSubs[taskID] {
 		select {
 		case ch <- event:
 		default:
 			// channel 满了，跳过
 		}
+	}
+	m.eventSubsMu.RUnlock()
+
+	// 通知全局 webhook
+	if m.webhookNotifier != nil {
+		m.webhookNotifier.Send(event.Type, event.Data)
 	}
 }
 
@@ -756,7 +843,6 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-
 // truncateStr 截断字符串用于日志
 func truncateStr(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -906,8 +992,41 @@ func (m *Manager) CountTasks(filter *ListFilter) (int, error) {
 	return m.store.Count(filter)
 }
 
-// sendWebhook 发送 Webhook 通知
+// sendWebhook 发送 Per-Task Webhook 通知（POST task 结果到 task.WebhookURL）
 func (m *Manager) sendWebhook(task *Task) {
-	// TODO: 实现 Webhook 发送
-	log.Debug("sending webhook", "task_id", task.ID, "webhook_url", task.WebhookURL)
+	payload := map[string]interface{}{
+		"task_id":   task.ID,
+		"status":    string(task.Status),
+		"agent_id":  task.AgentID,
+		"result":    task.Result,
+		"error":     task.ErrorMessage,
+		"completed": task.CompletedAt,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Error("webhook: failed to marshal payload", "task_id", task.ID, "error", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", task.WebhookURL, bytes.NewReader(body))
+	if err != nil {
+		log.Error("webhook: failed to create request", "task_id", task.ID, "error", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Task-ID", task.ID)
+
+	resp, err := m.webhookClient.Do(req)
+	if err != nil {
+		log.Error("webhook: failed to send", "task_id", task.ID, "url", task.WebhookURL, "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		log.Debug("webhook: sent", "task_id", task.ID, "status", resp.StatusCode)
+	} else {
+		log.Warn("webhook: non-2xx response", "task_id", task.ID, "url", task.WebhookURL, "status", resp.StatusCode)
+	}
 }

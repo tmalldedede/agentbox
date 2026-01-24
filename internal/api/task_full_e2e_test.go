@@ -28,6 +28,9 @@ import (
 	"github.com/tmalldedede/agentbox/internal/session"
 	"github.com/tmalldedede/agentbox/internal/skill"
 	"github.com/tmalldedede/agentbox/internal/task"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // e2eTestEnv 端到端测试环境
@@ -146,14 +149,17 @@ func setupTaskE2E(t *testing.T, adapterType string, idleTimeout time.Duration) (
 
 	// === Task Manager ===
 	dbPath := filepath.Join(tmpDir, "tasks.db")
-	store, err := task.NewSQLiteStore(dbPath)
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	store, err := task.NewGormStore(db)
 	require.NoError(t, err)
 
 	taskCfg := &task.ManagerConfig{
 		MaxConcurrent: 3,
 		PollInterval:  500 * time.Millisecond, // 快速轮询加速测试
 		IdleTimeout:   idleTimeout,
-		UploadDir:     filepath.Join(tmpDir, "uploads"),
 	}
 	taskMgr := task.NewManager(store, agentMgr, sessionMgr, taskCfg)
 	taskMgr.Start()

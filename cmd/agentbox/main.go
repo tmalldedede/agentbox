@@ -57,7 +57,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -125,9 +124,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 初始化 File Store
-	fileDBPath := filepath.Join(cfg.Container.WorkspaceBase, "agentbox.db")
-	fileStore, err := api.NewSQLiteFileStore(fileDBPath)
+	// 初始化 File Store (使用统一的 GORM 数据库连接)
+	fileStore, err := api.NewGormFileStore(database.DB)
 	if err != nil {
 		log.Error("failed to initialize file store", "error", err)
 		os.Exit(1)
@@ -164,7 +162,9 @@ func main() {
 		Webhook:     application.Webhook,
 		Agent:       application.Agent,
 		History:     application.History,
+		Batch:       application.Batch,
 		GC:          application.GC,
+		Settings:    application.Settings,
 		FilesConfig: cfg.Files,
 		FileStore:   fileStore,
 	})
@@ -223,6 +223,7 @@ func printRoutes() {
 	fmt.Println("  *      /api/v1/providers/*            - Provider management (CRUD)")
 	fmt.Println("  *      /api/v1/sessions/*             - Session management (CRUD)")
 	fmt.Println("  *      /api/v1/tasks/*                - Task management (CRUD)")
+	fmt.Println("  *      /api/v1/batches/*              - Batch task management (Worker pool)")
 	fmt.Println("  *      /api/v1/files/*                - File upload (CRUD)")
 	fmt.Println("  *      /api/v1/webhooks/*             - Webhook management (CRUD)")
 	fmt.Println("  *      /api/v1/history/*              - Execution history (Read)")
@@ -233,5 +234,6 @@ func printRoutes() {
 	fmt.Println("  *      /api/v1/admin/skills/*         - Skill management")
 	fmt.Println("  *      /api/v1/admin/images/*         - Image management")
 	fmt.Println("  *      /api/v1/admin/system/*         - System management")
+	fmt.Println("  *      /api/v1/admin/settings/*       - Business settings")
 	fmt.Println()
 }

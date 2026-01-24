@@ -345,6 +345,7 @@ func (m *Manager) Create(req *CreateSkillRequest) (*Skill, error) {
 		Command:      req.Command,
 		Prompt:       req.Prompt,
 		Files:        req.Files,
+		SourceDir:    req.SourceDir,
 		AllowedTools: req.AllowedTools,
 		RequiredMCP:  req.RequiredMCP,
 		Category:     req.Category,
@@ -410,6 +411,9 @@ func (m *Manager) Update(id string, req *UpdateSkillRequest) (*Skill, error) {
 	}
 	if req.Files != nil {
 		skill.Files = req.Files
+	}
+	if req.SourceDir != nil {
+		skill.SourceDir = *req.SourceDir
 	}
 	if req.AllowedTools != nil {
 		skill.AllowedTools = req.AllowedTools

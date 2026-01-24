@@ -7,6 +7,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/history"
+	"github.com/tmalldedede/agentbox/internal/mcp"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/session"
 	"github.com/tmalldedede/agentbox/internal/task"
@@ -18,6 +19,7 @@ type DashboardHandler struct {
 	agentMgr     *agent.Manager
 	sessionMgr   *session.Manager
 	providerMgr  *provider.Manager
+	mcpMgr       *mcp.Manager
 	containerMgr container.Manager
 	historyMgr   *history.Manager
 	startTime    time.Time
@@ -29,6 +31,7 @@ func NewDashboardHandler(
 	agentMgr *agent.Manager,
 	sessionMgr *session.Manager,
 	providerMgr *provider.Manager,
+	mcpMgr *mcp.Manager,
 	containerMgr container.Manager,
 	historyMgr *history.Manager,
 ) *DashboardHandler {
@@ -37,6 +40,7 @@ func NewDashboardHandler(
 		agentMgr:     agentMgr,
 		sessionMgr:   sessionMgr,
 		providerMgr:  providerMgr,
+		mcpMgr:       mcpMgr,
 		containerMgr: containerMgr,
 		historyMgr:   historyMgr,
 		startTime:    time.Now(),
@@ -53,14 +57,15 @@ func (h *DashboardHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 // DashboardStatsResponse 大屏聚合数据响应
 type DashboardStatsResponse struct {
-	Agents     DashboardAgentStats     `json:"agents"`
-	Tasks      DashboardTaskStats      `json:"tasks"`
-	Sessions   DashboardSessionStats   `json:"sessions"`
-	Tokens     DashboardTokenStats     `json:"tokens"`
-	Containers DashboardContainerStats `json:"containers"`
-	Providers  []DashboardProviderInfo `json:"providers"`
-	System     DashboardSystemInfo     `json:"system"`
-	RecentTasks []DashboardRecentTask  `json:"recent_tasks"`
+	Agents      DashboardAgentStats     `json:"agents"`
+	Tasks       DashboardTaskStats      `json:"tasks"`
+	Sessions    DashboardSessionStats   `json:"sessions"`
+	Tokens      DashboardTokenStats     `json:"tokens"`
+	Containers  DashboardContainerStats `json:"containers"`
+	MCPServers  DashboardMCPStats       `json:"mcp_servers"`
+	Providers   []DashboardProviderInfo `json:"providers"`
+	System      DashboardSystemInfo     `json:"system"`
+	RecentTasks []DashboardRecentTask   `json:"recent_tasks"`
 }
 
 // DashboardAgentStats Agent 统计
@@ -126,6 +131,31 @@ type DashboardProviderInfo struct {
 	Category     string `json:"category"`
 	Icon         string `json:"icon"`
 	IconColor    string `json:"icon_color"`
+}
+
+// DashboardMCPStats MCP Server 统计
+type DashboardMCPStats struct {
+	Total         int                    `json:"total"`
+	Enabled       int                    `json:"enabled"`
+	Configured    int                    `json:"configured"`
+	NotConfigured int                    `json:"not_configured"`
+	BuiltIn       int                    `json:"built_in"`
+	Custom        int                    `json:"custom"`
+	ByCategory    map[string]int         `json:"by_category"`
+	Details       []DashboardMCPDetail   `json:"details"`
+}
+
+// DashboardMCPDetail 单个 MCP Server 详情
+type DashboardMCPDetail struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Category     string   `json:"category"`
+	IsEnabled    bool     `json:"is_enabled"`
+	IsConfigured bool     `json:"is_configured"`
+	IsBuiltIn    bool     `json:"is_built_in"`
+	UsedByAgents int      `json:"used_by_agents"` // 被多少个 Agent 引用
+	MissingEnv   []string `json:"missing_env,omitempty"` // 缺失的 Env Key
 }
 
 // DashboardSystemInfo 系统信息
@@ -285,6 +315,42 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			Category:     string(p.Category),
 			Icon:         p.Icon,
 			IconColor:    p.IconColor,
+		})
+	}
+
+	// ==================== MCP Server 统计 ====================
+	mcpStats := h.mcpMgr.Stats()
+	resp.MCPServers = DashboardMCPStats{
+		Total:         mcpStats.Total,
+		Enabled:       mcpStats.Enabled,
+		Configured:    mcpStats.Configured,
+		NotConfigured: mcpStats.NotConfigured,
+		BuiltIn:       mcpStats.BuiltIn,
+		Custom:        mcpStats.Custom,
+		ByCategory:    mcpStats.ByCategory,
+		Details:       make([]DashboardMCPDetail, 0),
+	}
+
+	// 统计每个 MCP Server 被多少个 Agent 引用
+	mcpUsage := make(map[string]int)
+	for _, a := range agents {
+		for _, mid := range a.MCPServerIDs {
+			mcpUsage[mid]++
+		}
+	}
+
+	mcpServers := h.mcpMgr.List()
+	for _, s := range mcpServers {
+		resp.MCPServers.Details = append(resp.MCPServers.Details, DashboardMCPDetail{
+			ID:           s.ID,
+			Name:         s.Name,
+			Type:         string(s.Type),
+			Category:     string(s.Category),
+			IsEnabled:    s.IsEnabled,
+			IsConfigured: s.IsConfigured,
+			IsBuiltIn:    s.IsBuiltIn,
+			UsedByAgents: mcpUsage[s.ID],
+			MissingEnv:   s.RequiredEnvKeys(),
 		})
 	}
 
