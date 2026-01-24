@@ -2,6 +2,8 @@ import { Link } from '@tanstack/react-router'
 import {
   BadgeCheck,
   ChevronsUpDown,
+  Key,
+  KeyRound,
   LogOut,
   Sparkles,
 } from 'lucide-react'
@@ -23,6 +25,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import { ChangePasswordDialog } from '@/components/change-password-dialog'
 
 type NavUserProps = {
   user: {
@@ -90,6 +93,20 @@ export function NavUser({ user }: NavUserProps) {
                     Settings
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to='/api-keys'>
+                    <Key />
+                    API Keys
+                  </Link>
+                </DropdownMenuItem>
+                <ChangePasswordDialog
+                  trigger={
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                      <KeyRound />
+                      Change Password
+                    </DropdownMenuItem>
+                  }
+                />
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem
