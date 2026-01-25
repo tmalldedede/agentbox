@@ -15,6 +15,15 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/agentbox
 
+# 构建 email-analyzer CLI
+build-email-analyzer:
+	@echo "Building email-analyzer..."
+	@mkdir -p $(BUILD_DIR)
+	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/email-analyzer ./cmd/email-analyzer
+
+# 构建所有二进制
+build-all: build build-email-analyzer
+
 # 开发模式运行
 run: build
 	@echo "Running $(BINARY_NAME)..."
@@ -69,12 +78,14 @@ docker:
 # 帮助
 help:
 	@echo "Available targets:"
-	@echo "  build          - Build the binary"
-	@echo "  run            - Build and run"
-	@echo "  dev            - Run with hot reload (requires air)"
-	@echo "  test           - Run tests"
-	@echo "  test-coverage  - Run tests with coverage"
-	@echo "  lint           - Run linter"
-	@echo "  clean          - Clean build artifacts"
-	@echo "  tidy           - Run go mod tidy"
-	@echo "  docker         - Build Docker image"
+	@echo "  build               - Build the main binary"
+	@echo "  build-email-analyzer - Build email-analyzer CLI"
+	@echo "  build-all           - Build all binaries"
+	@echo "  run                 - Build and run"
+	@echo "  dev                 - Run with hot reload (requires air)"
+	@echo "  test                - Run tests"
+	@echo "  test-coverage       - Run tests with coverage"
+	@echo "  lint                - Run linter"
+	@echo "  clean               - Clean build artifacts"
+	@echo "  tidy                - Run go mod tidy"
+	@echo "  docker              - Build Docker image"
