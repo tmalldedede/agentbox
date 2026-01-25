@@ -1,5 +1,6 @@
-# AgentBox Universal Agent Image
+# AgentBox Universal Agent Image v2
 # Based on Claude Code devcontainer configuration
+# Includes common skill dependencies (covers 73% skills)
 
 FROM node:20
 
@@ -7,9 +8,10 @@ ARG TZ=UTC
 ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
-ARG CODEX_VERSION=latest
+ARG CODEX_VERSION=0.77.0
 
 # Install development tools (aligned with claude-code devcontainer)
+# + skill dependencies (whois, dnsutils, poppler, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Basic tools
     less \
@@ -34,6 +36,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Build essentials (for native modules)
     build-essential \
     python3 \
+    # === Skill Dependencies (v3) ===
+    # DNS/WHOIS tools
+    whois \
+    dnsutils \
+    # PDF tools
+    poppler-utils \
+    qpdf \
+    # Image processing (for pyzbar)
+    libzbar0 \
+    # Build deps for pip packages
+    libffi-dev \
+    libxml2-dev \
+    libxslt1-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure node user has access to npm global
@@ -65,8 +80,62 @@ RUN ARCH=$(dpkg --print-architecture) && \
     dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
     rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
-# Switch to non-root user
+# === Python Skill Dependencies (v3) ===
+# Install pip for node user
 USER node
+RUN curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+    && python3 /tmp/get-pip.py --user --break-system-packages --quiet \
+    && rm /tmp/get-pip.py
+
+ENV PATH="/home/node/.local/bin:${PATH}"
+
+# Install common Python packages for skills (covers 73% of skills)
+# Layer 1: Network libraries
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "requests>=2.28.0" \
+    "aiohttp>=3.8.0" \
+    "httpx>=0.24.0"
+
+# Layer 2: DNS/Domain analysis
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "dnspython>=2.3.0" \
+    "python-whois>=0.8.0" \
+    "tld>=0.12.0" \
+    "idna>=3.4"
+
+# Layer 3: Data processing
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "beautifulsoup4>=4.12.0" \
+    "lxml>=4.9.0" \
+    "pandas>=2.0.0" \
+    "pyyaml>=6.0"
+
+# Layer 4: Document processing
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "pdfplumber>=0.9.0" \
+    "python-docx>=0.8.11" \
+    "openpyxl>=3.1.0"
+
+# Layer 5: Image/QR code
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "pillow>=9.0.0" \
+    "pyzbar>=0.1.9"
+
+# Layer 6: CLI beautification
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "rich>=12.0.0" \
+    "colorama>=0.4.6" \
+    "tqdm>=4.65.0"
+
+# Layer 7: Utilities
+RUN python3 -m pip install --user --break-system-packages --quiet \
+    "python-dotenv>=1.0.0" \
+    "pyzipper>=0.3.6" \
+    "py7zr>=0.20.0" \
+    "defusedxml>=0.7.0"
+
+# Switch to non-root user (already node)
+# USER node
 
 # Set default shell and editor
 ENV SHELL=/bin/zsh
