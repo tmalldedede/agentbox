@@ -241,7 +241,10 @@ func (a *App) initialize() error {
 	}
 
 	a.Batch = batch.NewManager(a.batchStore, a.Session, a.Agent, &batch.ManagerConfig{
-		RedisQueue: redisQueue,
+		MaxBatches:       10,                      // 最多同时运行 10 个 batch
+		PollInterval:     100 * time.Millisecond,  // 任务轮询间隔
+		ProgressInterval: 1 * time.Second,         // 进度更新间隔
+		RedisQueue:       redisQueue,
 	})
 	log.Info("batch manager initialized")
 
