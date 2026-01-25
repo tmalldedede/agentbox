@@ -152,6 +152,11 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 				envVars[k] = v
 			}
 		}
+		// Agent 的 base_url_override 覆盖 Provider 的 base_url
+		if fullConfig.Agent.BaseURLOverride != "" {
+			envVars["OPENAI_BASE_URL"] = fullConfig.Agent.BaseURLOverride
+			envVars["ANTHROPIC_BASE_URL"] = fullConfig.Agent.BaseURLOverride
+		}
 		// Agent 自身的 env 覆盖
 		for k, v := range fullConfig.Agent.Env {
 			envVars[k] = v
@@ -212,7 +217,7 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	}
 
 	// 写入配置文件（如果适配器需要）
-	if err := m.writeConfigFiles(ctx, adapter, ctr.ID, req); err != nil {
+	if err := m.writeConfigFiles(ctx, adapter, ctr.ID, req, envVars); err != nil {
 		// 配置文件写入失败不中断创建，但记录警告
 		log.Warn("failed to write config files", "session_id", sessionID, "error", err)
 	} else {
@@ -246,9 +251,18 @@ func ensureWithinBase(path, base string) error {
 	if err != nil {
 		return fmt.Errorf("invalid workspace path: %w", err)
 	}
+
+	// 尝试解析完整路径的符号链接
 	realPath := absPath
 	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
 		realPath = resolved
+	} else {
+		// 如果完整路径不存在（目录尚未创建），尝试解析父目录的符号链接
+		// 这处理了 macOS 上 /tmp -> /private/tmp 的情况
+		parent := filepath.Dir(absPath)
+		if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
+			realPath = filepath.Join(resolvedParent, filepath.Base(absPath))
+		}
 	}
 
 	rel, err := filepath.Rel(realBase, realPath)
@@ -259,7 +273,7 @@ func ensureWithinBase(path, base string) error {
 }
 
 // writeConfigFiles 写入配置文件到容器
-func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, containerID string, req *CreateRequest) error {
+func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, containerID string, req *CreateRequest, envVars map[string]string) error {
 	// 检查适配器是否实现 ConfigFilesProvider 接口
 	cfgProvider, ok := adapter.(engine.ConfigFilesProvider)
 	if !ok {
@@ -319,10 +333,10 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, 
 		}
 	}
 
-	// 获取 API Key（从环境变量）
+	// 获取 API Key（从 envVars，包含 Provider 的 API Key）
 	apiKey := ""
 	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
-		if v, ok := req.Env[key]; ok && v != "" {
+		if v, ok := envVars[key]; ok && v != "" {
 			apiKey = v
 			break
 		}
