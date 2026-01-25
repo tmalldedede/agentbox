@@ -2,581 +2,1361 @@ openapi: 3.0.3
 info:
   title: AgentBox API
   description: |
-    AgentBox - 开源的 AI Agent 容器化运行平台 API 文档。
+    AgentBox - 开源 AI Agent 容器化运行平台 API 文档。
 
-    为 AI Agent 提供安全、隔离、可管理的执行环境。支持 Claude Code、Codex 等主流 Agent。
+    说明：API 统一响应格式为 { code, message, data, type? }。
+    认证支持两种方式：
+    - JWT: Authorization: Bearer <token>
+    - API Key: Authorization: Bearer ab_xxx... （与 JWT 同 header）
+
+    SSE 接口支持 query 参数 token（用于 EventSource）。
   version: 0.1.0
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
-  contact:
-    name: AgentBox
-    url: https://github.com/tmalldedede/agentbox
-
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:18080
     description: 本地开发服务器
 
+security:
+  - bearerAuth: []
+
 tags:
-  - name: System
-    description: 系统相关接口
+  - name: Auth
+    description: 认证与用户
+  - name: Tasks
+    description: 任务（核心）
+  - name: Batches
+    description: 批量任务
+  - name: Queue
+    description: 队列统计
+  - name: Files
+    description: 文件上传/下载
+  - name: Webhooks
+    description: Webhook 管理
+  - name: History
+    description: 执行历史
   - name: Agents
     description: Agent 管理
+  - name: Engines
+    description: 引擎列表（只读）
+  - name: Providers
+    description: Provider 管理（Admin）
+  - name: Runtimes
+    description: Runtime 管理（Admin）
+  - name: MCP Servers
+    description: MCP Server 管理（Admin）
+  - name: Skills
+    description: Skill 管理（Admin）
+  - name: Images
+    description: 镜像管理（Admin）
+  - name: System
+    description: 系统与清理（Admin）
+  - name: Dashboard
+    description: 态势感知（Admin）
+  - name: Settings
+    description: 业务配置（Admin）
   - name: Sessions
-    description: 会话管理
-  - name: Executions
-    description: 任务执行
-  - name: Files
-    description: 文件管理
-  - name: Stream
-    description: WebSocket 实时流
+    description: 会话调试（Admin）
 
 paths:
-  /health:
+  /api/v1/health:
     get:
-      tags:
-        - System
+      security: []
+      tags: [System]
       summary: 健康检查
-      description: 检查服务是否正常运行
-      operationId: healthCheck
       responses:
         '200':
-          description: 服务正常
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: '#/components/schemas/ApiResponseHealth'
+
+  /api/v1/auth/login:
+    post:
+      security: []
+      tags: [Auth]
+      summary: 登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseLogin'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: 当前用户信息
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUserInfo'
+
+  /api/v1/auth/password:
+    put:
+      tags: [Auth]
+      summary: 修改密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMessage'
+
+  /api/v1/auth/api-keys:
+    get:
+      tags: [Auth]
+      summary: 列出当前用户的 API Keys
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAPIKeys'
+    post:
+      tags: [Auth]
+      summary: 创建 API Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAPIKey'
+
+  /api/v1/auth/api-keys/{id}:
+    delete:
+      tags: [Auth]
+      summary: 删除 API Key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/engines:
+    get:
+      tags: [Engines]
+      summary: 引擎列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEngines'
 
   /api/v1/agents:
     get:
-      tags:
-        - Agents
-      summary: 列出支持的 Agent
-      description: 获取所有可用的 Agent 类型列表
-      operationId: listAgents
+      tags: [Agents]
+      summary: 列出可用 Agent（仅 active）
       responses:
         '200':
-          description: 成功
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AgentListResponse'
+                $ref: '#/components/schemas/ApiResponseAgents'
 
-  /api/v1/sessions:
-    post:
-      tags:
-        - Sessions
-      summary: 创建会话
-      description: 创建新的 Agent 会话，会自动创建并启动容器
-      operationId: createSession
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateSessionRequest'
-      responses:
-        '201':
-          description: 创建成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionResponse'
-        '400':
-          description: 请求参数错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+  /api/v1/agents/{id}:
     get:
-      tags:
-        - Sessions
-      summary: 列出会话
-      description: 获取所有会话列表，支持分页和过滤
-      operationId: listSessions
+      tags: [Agents]
+      summary: 获取 Agent 详情
       parameters:
-        - name: agent
-          in: query
-          description: 按 Agent 类型过滤
-          schema:
-            type: string
-            example: claude-code
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAgent'
+
+  /api/v1/tasks:
+    get:
+      tags: [Tasks]
+      summary: 任务列表
+      parameters:
         - name: status
           in: query
-          description: 按状态过滤
-          schema:
-            $ref: '#/components/schemas/SessionStatus'
+          schema: { type: string }
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
         - name: limit
           in: query
-          description: 返回数量限制
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
+          schema: { type: integer }
         - name: offset
           in: query
-          description: 偏移量
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
+          schema: { type: integer }
       responses:
         '200':
-          description: 成功
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionListResponse'
-
-  /api/v1/sessions/{id}:
-    get:
-      tags:
-        - Sessions
-      summary: 获取会话详情
-      description: 根据 ID 获取会话详细信息
-      operationId: getSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    delete:
-      tags:
-        - Sessions
-      summary: 删除会话
-      description: 删除会话及其关联的容器
-      operationId: deleteSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200':
-          description: 删除成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeleteResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/sessions/{id}/start:
+                $ref: '#/components/schemas/ApiResponseTaskList'
     post:
-      tags:
-        - Sessions
-      summary: 启动会话
-      description: 启动已停止的会话容器
-      operationId: startSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200':
-          description: 启动成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/sessions/{id}/stop:
-    post:
-      tags:
-        - Sessions
-      summary: 停止会话
-      description: 停止正在运行的会话容器
-      operationId: stopSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200':
-          description: 停止成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/sessions/{id}/reconnect:
-    post:
-      tags:
-        - Sessions
-      summary: 重连会话
-      description: |
-        重新连接到已存在的会话。
-
-        - 如果会话正在运行，直接返回会话信息
-        - 如果会话已停止，尝试重新启动容器
-        - 如果容器不存在或无法启动，返回错误
-      operationId: reconnectSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200':
-          description: 重连成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 重连失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/sessions/{id}/exec:
-    post:
-      tags:
-        - Executions
-      summary: 执行任务
-      description: 在会话中执行 Agent 任务
-      operationId: execSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
+      tags: [Tasks]
+      summary: 创建任务 / 追加多轮
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ExecRequest'
+              $ref: '#/components/schemas/CreateTaskRequest'
       responses:
-        '200':
-          description: 执行成功
+        '201':
+          description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExecResultResponse'
-        '400':
-          description: 请求参数错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiResponseTask'
 
-  /api/v1/sessions/{id}/executions:
+  /api/v1/tasks/stats:
     get:
-      tags:
-        - Executions
-      summary: 获取执行历史
-      description: 获取会话的所有执行记录
-      operationId: getExecutions
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
+      tags: [Tasks]
+      summary: 任务统计
       responses:
         '200':
-          description: 成功
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExecutionListResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiResponseTaskStats'
 
-  /api/v1/sessions/{id}/executions/{execId}:
-    get:
-      tags:
-        - Executions
-      summary: 获取执行详情
-      description: 获取单个执行记录的详细信息
-      operationId: getExecution
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-        - $ref: '#/components/parameters/ExecutionId'
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExecutionResponse'
-        '404':
-          description: 执行记录不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/sessions/{id}/logs:
-    get:
-      tags:
-        - Sessions
-      summary: 获取容器日志
-      description: 获取会话容器的运行日志
-      operationId: getSessionLogs
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LogsResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  # 文件管理
-  /api/v1/sessions/{id}/files:
-    get:
-      tags:
-        - Files
-      summary: 列出文件
-      description: 列出会话工作空间中的文件和目录
-      operationId: listFiles
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-        - name: path
-          in: query
-          description: 相对路径，默认为根目录
-          schema:
-            type: string
-            default: ""
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FileListResponse'
-        '404':
-          description: 会话或路径不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+  /api/v1/tasks/cleanup:
     post:
-      tags:
-        - Files
-      summary: 上传文件
-      description: 上传文件到会话工作空间
-      operationId: uploadFile
+      tags: [Tasks]
+      summary: 清理旧任务
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CleanupTasksRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDeletedCount'
+
+  /api/v1/tasks/{id}:
+    get:
+      tags: [Tasks]
+      summary: 获取任务详情
       parameters:
-        - $ref: '#/components/parameters/SessionId'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTask'
+    delete:
+      tags: [Tasks]
+      summary: 删除任务（终态）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/tasks/{id}/cancel:
+    post:
+      tags: [Tasks]
+      summary: 取消任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTask'
+
+  /api/v1/tasks/{id}/retry:
+    post:
+      tags: [Tasks]
+      summary: 重试任务（创建新任务）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTask'
+
+  /api/v1/tasks/{id}/events:
+    get:
+      tags: [Tasks]
+      summary: 任务事件流（SSE）
+      description: 通过 SSE 推送 task.* 事件。EventSource 可使用 token query。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: token
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/v1/tasks/{id}/output:
+    get:
+      tags: [Tasks]
+      summary: 获取任务输出
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTaskResult'
+
+  /api/v1/batches:
+    get:
+      tags: [Batches]
+      summary: 批量任务列表
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK (带分页)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBatchList'
+    post:
+      tags: [Batches]
+      summary: 创建批量任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+
+  /api/v1/batches/{id}:
+    get:
+      tags: [Batches]
+      summary: 获取批量任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+    delete:
+      tags: [Batches]
+      summary: 删除批量任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/batches/{id}/start:
+    post:
+      tags: [Batches]
+      summary: 启动批量任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+
+  /api/v1/batches/{id}/pause:
+    post:
+      tags: [Batches]
+      summary: 暂停批量任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+
+  /api/v1/batches/{id}/resume:
+    post:
+      tags: [Batches]
+      summary: 恢复批量任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+
+  /api/v1/batches/{id}/cancel:
+    post:
+      tags: [Batches]
+      summary: 取消批量任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+
+  /api/v1/batches/{id}/retry:
+    post:
+      tags: [Batches]
+      summary: 重试失败任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatch'
+
+  /api/v1/batches/{id}/tasks:
+    get:
+      tags: [Batches]
+      summary: 批量任务子任务列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: worker_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK (带分页)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBatchTaskList'
+
+  /api/v1/batches/{id}/tasks/{taskId}:
+    get:
+      tags: [Batches]
+      summary: 获取批量子任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatchTask'
+
+  /api/v1/batches/{id}/stats:
+    get:
+      tags: [Batches]
+      summary: 批量任务统计
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBatchStats'
+
+  /api/v1/batches/{id}/events:
+    get:
+      tags: [Batches]
+      summary: 批量任务事件流（SSE）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: token
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/v1/batches/{id}/export:
+    get:
+      tags: [Batches]
+      summary: 导出批量结果
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        '200':
+          description: 文件
+          content:
+            application/json:
+              schema:
+                type: object
+            text/csv:
+              schema:
+                type: string
+
+  /api/v1/batches/{id}/dead:
+    get:
+      tags: [Batches]
+      summary: 死信队列任务列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDeadTasks'
+
+  /api/v1/batches/{id}/dead/retry:
+    post:
+      tags: [Batches]
+      summary: 重试死信任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryDeadRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRetryDead'
+
+  /api/v1/queue/overview:
+    get:
+      tags: [Queue]
+      summary: 队列总览
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseQueueOverview'
+
+  /api/v1/queue/pool:
+    get:
+      tags: [Queue]
+      summary: Worker 池统计
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponsePoolStats'
+
+  /api/v1/files:
+    get:
+      tags: [Files]
+      summary: 列出上传文件
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFiles'
+    post:
+      tags: [Files]
+      summary: 上传文件
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
+              required: [file]
               properties:
                 file:
                   type: string
                   format: binary
-                  description: 要上传的文件
-                path:
-                  type: string
-                  description: 目标路径（相对于工作空间）
-                  default: ""
-              required:
-                - file
       responses:
         '200':
-          description: 上传成功
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FileUploadResponse'
-        '400':
-          description: 请求参数错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiResponseFile'
 
-  /api/v1/sessions/{id}/files/{path}:
+  /api/v1/files/{id}:
     get:
-      tags:
-        - Files
-      summary: 下载/读取文件
-      description: 下载文件内容或读取文本文件内容
-      operationId: downloadFile
+      tags: [Files]
+      summary: 获取文件信息
       parameters:
-        - $ref: '#/components/parameters/SessionId'
-        - name: path
+        - name: id
           in: path
           required: true
-          description: 文件路径（相对于工作空间）
-          schema:
-            type: string
-        - name: content
-          in: query
-          description: 如果为 true，返回文本内容而非下载
-          schema:
-            type: boolean
-            default: false
+          schema: { type: string }
       responses:
         '200':
-          description: 成功
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFile'
+    delete:
+      tags: [Files]
+      summary: 删除文件
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/files/{id}/download:
+    get:
+      tags: [Files]
+      summary: 下载文件
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 文件流
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FileContentResponse'
-        '404':
-          description: 文件不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
-    delete:
-      tags:
-        - Files
-      summary: 删除文件或目录
-      description: 删除指定的文件或目录
-      operationId: deleteFile
+  /api/v1/webhooks:
+    get:
+      tags: [Webhooks]
+      summary: 列出 Webhooks
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWebhooks'
+    post:
+      tags: [Webhooks]
+      summary: 创建 Webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWebhook'
+
+  /api/v1/webhooks/{id}:
+    get:
+      tags: [Webhooks]
+      summary: 获取 Webhook
       parameters:
-        - $ref: '#/components/parameters/SessionId'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWebhook'
+    put:
+      tags: [Webhooks]
+      summary: 更新 Webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWebhook'
+    delete:
+      tags: [Webhooks]
+      summary: 删除 Webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/history:
+    get:
+      tags: [History]
+      summary: 执行历史列表
+      parameters:
+        - name: source_type
+          in: query
+          schema: { type: string }
+        - name: source_id
+          in: query
+          schema: { type: string }
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: engine
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseHistoryList'
+
+  /api/v1/history/stats:
+    get:
+      tags: [History]
+      summary: 执行历史统计
+      parameters:
+        - name: source_type
+          in: query
+          schema: { type: string }
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: engine
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseHistoryStats'
+
+  /api/v1/history/{id}:
+    get:
+      tags: [History]
+      summary: 获取执行历史
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseHistoryEntry'
+    delete:
+      tags: [History]
+      summary: 删除执行历史
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  # ==================== Admin APIs ====================
+
+  /api/v1/admin/users:
+    get:
+      tags: [Auth]
+      summary: 列出用户（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUsers'
+    post:
+      tags: [Auth]
+      summary: 创建用户（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUser'
+
+  /api/v1/admin/users/{id}:
+    delete:
+      tags: [Auth]
+      summary: 删除用户（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/sessions:
+    get:
+      tags: [Sessions]
+      summary: 列出会话（Admin）
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: agent
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSessions'
+    post:
+      tags: [Sessions]
+      summary: 创建会话（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSession'
+
+  /api/v1/admin/sessions/{id}:
+    get:
+      tags: [Sessions]
+      summary: 获取会话（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSession'
+    delete:
+      tags: [Sessions]
+      summary: 删除会话（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/sessions/{id}/start:
+    post:
+      tags: [Sessions]
+      summary: 启动会话（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSession'
+
+  /api/v1/admin/sessions/{id}/stop:
+    post:
+      tags: [Sessions]
+      summary: 停止会话（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSession'
+
+  /api/v1/admin/sessions/{id}/reconnect:
+    post:
+      tags: [Sessions]
+      summary: 重连会话（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSession'
+
+  /api/v1/admin/sessions/{id}/exec:
+    post:
+      tags: [Sessions]
+      summary: 会话执行（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionExecRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSessionExec'
+
+  /api/v1/admin/sessions/{id}/exec/stream:
+    post:
+      tags: [Sessions]
+      summary: 会话执行流式（SSE，仅 Codex）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionExecRequest'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/v1/admin/sessions/{id}/executions:
+    get:
+      tags: [Sessions]
+      summary: 会话执行记录（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseExecutions'
+
+  /api/v1/admin/sessions/{id}/executions/{execId}:
+    get:
+      tags: [Sessions]
+      summary: 获取执行记录（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: execId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseExecution'
+
+  /api/v1/admin/sessions/{id}/logs:
+    get:
+      tags: [Sessions]
+      summary: 会话日志（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseLogs'
+
+  /api/v1/admin/sessions/{id}/logs/stream:
+    get:
+      tags: [Sessions]
+      summary: 会话日志流（SSE，Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/v1/admin/sessions/{id}/files:
+    get:
+      tags: [Sessions]
+      summary: 会话文件列表（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    post:
+      tags: [Sessions]
+      summary: 上传会话文件（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/sessions/{id}/files/{path}:
+    get:
+      tags: [Sessions]
+      summary: 下载会话文件（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
         - name: path
           in: path
           required: true
-          description: 文件或目录路径（相对于工作空间）
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         '200':
-          description: 删除成功
+          description: 文件
           content:
-            application/json:
+            application/octet-stream:
               schema:
-                $ref: '#/components/schemas/FileDeleteResponse'
-        '404':
-          description: 文件不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/sessions/{id}/directories:
-    post:
-      tags:
-        - Files
-      summary: 创建目录
-      description: 在会话工作空间中创建目录
-      operationId: createDirectory
+                type: string
+                format: binary
+    delete:
+      tags: [Sessions]
+      summary: 删除会话文件（Admin）
       parameters:
-        - $ref: '#/components/parameters/SessionId'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/sessions/{id}/directories:
+    post:
+      tags: [Sessions]
+      summary: 创建会话目录（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -586,656 +1366,2076 @@ paths:
               properties:
                 path:
                   type: string
-                  description: 目录路径（相对于工作空间）
-                  example: "src/components"
-              required:
-                - path
       responses:
         '200':
-          description: 创建成功
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DirectoryCreateResponse'
-        '400':
-          description: 请求参数错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务器错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiResponseAny'
 
-  # WebSocket 流式执行
-  /api/v1/sessions/{id}/stream:
+  /api/v1/admin/sessions/{id}/stream:
     get:
-      tags:
-        - Stream
-      summary: WebSocket 流式执行
-      description: |
-        通过 WebSocket 连接进行流式执行任务。
-
-        ## 连接流程
-        1. 客户端建立 WebSocket 连接
-        2. 客户端发送执行请求 (JSON)
-        3. 服务端流式返回执行输出
-        4. 执行完成后服务端发送 done 消息
-
-        ## 消息格式
-        所有消息都是 JSON 格式：
-        ```json
-        {
-          "type": "message|error|done|ping|start",
-          "content": "输出内容",
-          "timestamp": 1234567890123,
-          "execution_id": "e1f2g3h4"
-        }
-        ```
-
-        ## 消息类型
-        - `start`: 执行开始，包含 execution_id
-        - `message`: 输出消息
-        - `error`: 错误消息
-        - `done`: 执行完成
-        - `ping`: 心跳消息（每30秒）
-      operationId: execStream
+      tags: [Sessions]
+      summary: WebSocket 执行流（Admin）
+      description: WebSocket 连接，用于交互式执行。
       parameters:
-        - $ref: '#/components/parameters/SessionId'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
       responses:
         '101':
-          description: WebSocket 升级成功
-        '400':
-          description: WebSocket 升级失败
-        '404':
-          description: 会话不存在
+          description: Switching Protocols
+
+  /api/v1/admin/agents:
+    get:
+      tags: [Agents]
+      summary: Agent 列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAgents'
+    post:
+      tags: [Agents]
+      summary: 创建 Agent（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAgent'
+
+  /api/v1/admin/agents/{id}:
+    get:
+      tags: [Agents]
+      summary: 获取 Agent（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAgent'
+    put:
+      tags: [Agents]
+      summary: 更新 Agent（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAgent'
+    delete:
+      tags: [Agents]
+      summary: 删除 Agent（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/agents/{id}/run:
+    post:
+      tags: [Agents]
+      summary: 运行 Agent（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunAgentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRunAgent'
+
+  /api/v1/admin/providers:
+    get:
+      tags: [Providers]
+      summary: Provider 列表（Admin）
+      parameters:
+        - name: agent
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: configured
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProviders'
+    post:
+      tags: [Providers]
+      summary: 创建 Provider（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProvider'
+
+  /api/v1/admin/providers/templates:
+    get:
+      tags: [Providers]
+      summary: Provider 模板列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+
+  /api/v1/admin/providers/stats:
+    get:
+      tags: [Providers]
+      summary: Provider 统计（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/providers/verify-all:
+    post:
+      tags: [Providers]
+      summary: 批量验证 Provider Keys（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+
+  /api/v1/admin/providers/probe-models:
+    post:
+      tags: [Providers]
+      summary: 探测 Provider 模型（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/providers/{id}:
+    get:
+      tags: [Providers]
+      summary: 获取 Provider（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProvider'
+    put:
+      tags: [Providers]
+      summary: 更新 Provider（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProvider'
+    delete:
+      tags: [Providers]
+      summary: 删除 Provider（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/providers/{id}/key:
+    put:
+      tags: [Providers]
+      summary: 设置 Provider Key（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProvider'
+    delete:
+      tags: [Providers]
+      summary: 删除 Provider Key（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProvider'
+
+  /api/v1/admin/providers/{id}/verify:
+    post:
+      tags: [Providers]
+      summary: 验证 Provider Key（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/providers/{id}/models:
+    get:
+      tags: [Providers]
+      summary: 获取 Provider 模型列表（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+
+  /api/v1/admin/runtimes:
+    get:
+      tags: [Runtimes]
+      summary: Runtime 列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+    post:
+      tags: [Runtimes]
+      summary: 创建 Runtime（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/runtimes/{id}:
+    get:
+      tags: [Runtimes]
+      summary: 获取 Runtime（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Runtimes]
+      summary: 更新 Runtime（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    delete:
+      tags: [Runtimes]
+      summary: 删除 Runtime（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/runtimes/{id}/set-default:
+    post:
+      tags: [Runtimes]
+      summary: 设为默认 Runtime（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/mcp-servers:
+    get:
+      tags: [MCP Servers]
+      summary: MCP Server 列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+    post:
+      tags: [MCP Servers]
+      summary: 创建 MCP Server（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnyObject'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/mcp-servers/stats:
+    get:
+      tags: [MCP Servers]
+      summary: MCP 统计（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/mcp-servers/{id}:
+    get:
+      tags: [MCP Servers]
+      summary: 获取 MCP Server（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [MCP Servers]
+      summary: 更新 MCP Server（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnyObject'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    delete:
+      tags: [MCP Servers]
+      summary: 删除 MCP Server（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/mcp-servers/{id}/clone:
+    post:
+      tags: [MCP Servers]
+      summary: 克隆 MCP Server（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_id, new_name]
+              properties:
+                new_id: { type: string }
+                new_name: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/mcp-servers/{id}/test:
+    post:
+      tags: [MCP Servers]
+      summary: 测试 MCP Server（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/skills:
+    get:
+      tags: [Skills]
+      summary: Skill 列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+    post:
+      tags: [Skills]
+      summary: 创建 Skill（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnyObject'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/skills/{id}:
+    get:
+      tags: [Skills]
+      summary: 获取 Skill（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Skills]
+      summary: 更新 Skill（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnyObject'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    delete:
+      tags: [Skills]
+      summary: 删除 Skill（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/skills/{id}/clone:
+    post:
+      tags: [Skills]
+      summary: 克隆 Skill（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_id, new_name]
+              properties:
+                new_id: { type: string }
+                new_name: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/skills/{id}/export:
+    get:
+      tags: [Skills]
+      summary: 导出 Skill（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SKILL.md
+          content:
+            text/markdown:
+              schema:
+                type: string
+
+  /api/v1/admin/skill-store/sources:
+    get:
+      tags: [Skills]
+      summary: Skill 源列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+    post:
+      tags: [Skills]
+      summary: 添加 Skill 源（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnyObject'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/skill-store/sources/{id}:
+    delete:
+      tags: [Skills]
+      summary: 删除 Skill 源（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/skill-store/skills:
+    get:
+      tags: [Skills]
+      summary: Skill Store 列表（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+
+  /api/v1/admin/skill-store/skills/{sourceId}:
+    get:
+      tags: [Skills]
+      summary: 获取指定源的 Skills（Admin）
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+
+  /api/v1/admin/skill-store/install:
+    post:
+      tags: [Skills]
+      summary: 安装 Skill（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnyObject'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/skill-store/uninstall/{id}:
+    delete:
+      tags: [Skills]
+      summary: 卸载 Skill（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/skill-store/refresh/{sourceId}:
+    post:
+      tags: [Skills]
+      summary: 刷新 Skill 源（Admin）
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/images:
+    get:
+      tags: [Images]
+      summary: 镜像列表（Admin）
+      parameters:
+        - name: agent_only
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAnyArray'
+
+  /api/v1/admin/images/pull:
+    post:
+      tags: [Images]
+      summary: 拉取镜像（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/images/{id}:
+    delete:
+      tags: [Images]
+      summary: 删除镜像（Admin）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/system/health:
+    get:
+      tags: [System]
+      summary: 系统健康（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseSystemHealth'
+
+  /api/v1/admin/system/stats:
+    get:
+      tags: [System]
+      summary: 系统统计（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/system/cleanup/containers:
+    post:
+      tags: [System]
+      summary: 清理容器（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/system/cleanup/images:
+    post:
+      tags: [System]
+      summary: 清理镜像（Admin）
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/system/gc/stats:
+    get:
+      tags: [System]
+      summary: GC 统计（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/system/gc/trigger:
+    post:
+      tags: [System]
+      summary: 触发 GC（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/system/gc/preview:
+    post:
+      tags: [System]
+      summary: 预览 GC（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/system/gc/config:
+    put:
+      tags: [System]
+      summary: 更新 GC 配置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard 统计（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings:
+    get:
+      tags: [Settings]
+      summary: 获取业务设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Settings]
+      summary: 更新业务设置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings/reset:
+    post:
+      tags: [Settings]
+      summary: 重置设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings/agent:
+    get:
+      tags: [Settings]
+      summary: 获取 Agent 设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Settings]
+      summary: 更新 Agent 设置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings/task:
+    get:
+      tags: [Settings]
+      summary: 获取 Task 设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Settings]
+      summary: 更新 Task 设置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings/batch:
+    get:
+      tags: [Settings]
+      summary: 获取 Batch 设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Settings]
+      summary: 更新 Batch 设置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings/storage:
+    get:
+      tags: [Settings]
+      summary: 获取 Storage 设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Settings]
+      summary: 更新 Storage 设置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+
+  /api/v1/admin/settings/notify:
+    get:
+      tags: [Settings]
+      summary: 获取 Notify 设置（Admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
+    put:
+      tags: [Settings]
+      summary: 更新 Notify 设置（Admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAny'
 
 components:
-  parameters:
-    SessionId:
-      name: id
-      in: path
-      required: true
-      description: 会话 ID
-      schema:
-        type: string
-        example: "a1b2c3d4"
-
-    ExecutionId:
-      name: execId
-      in: path
-      required: true
-      description: 执行记录 ID
-      schema:
-        type: string
-        example: "e1f2g3h4"
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Token 或 API Key（Bearer ab_xxx...）
 
   schemas:
-    # 基础响应
-    Response:
+    ApiResponse:
       type: object
       properties:
-        code:
-          type: integer
-          description: 状态码，0 表示成功
-          example: 0
-        message:
-          type: string
-          description: 状态信息
-          example: success
-      required:
-        - code
-        - message
+        code: { type: integer }
+        message: { type: string }
+        data: {}
+        type: { type: string }
 
-    ErrorResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          example:
-            code: 404
-            message: "session not found: abc123"
-
-    # 分页
     Pagination:
       type: object
       properties:
-        total:
-          type: integer
-          description: 总数量
-          example: 100
-        limit:
-          type: integer
-          description: 每页数量
-          example: 20
-        offset:
-          type: integer
-          description: 偏移量
-          example: 0
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
 
-    # Health
-    HealthResponse:
+    PaginatedResponse:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+        data: {}
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    AnyObject:
+      type: object
+      additionalProperties: true
+
+    ApiResponseAny:
       allOf:
-        - $ref: '#/components/schemas/Response'
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AnyObject'
+
+    ApiResponseAnyArray:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/AnyObject' }
+
+    ApiResponseDelete:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
         - type: object
           properties:
             data:
               type: object
               properties:
-                status:
-                  type: string
-                  example: ok
-                version:
-                  type: string
-                  example: "0.1.0"
+                deleted: { type: boolean }
+                id: { type: string }
 
-    # Agent
-    Agent:
+    ApiResponseDeletedCount:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                deleted: { type: integer }
+
+    ApiResponseMessage:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                message: { type: string }
+
+    HealthInfo:
       type: object
       properties:
-        name:
-          type: string
-          description: Agent 标识符
-          example: claude-code
-        display_name:
-          type: string
-          description: 显示名称
-          example: Claude Code
-        description:
-          type: string
-          description: Agent 描述
-          example: Anthropic Claude Code CLI agent
-        image:
-          type: string
-          description: Docker 镜像
-          example: agentbox/agent:latest
-        required_env:
-          type: array
-          description: 必需的环境变量
-          items:
-            type: string
-          example: ["ANTHROPIC_API_KEY"]
-      required:
-        - name
-        - display_name
-        - image
-        - required_env
+        status: { type: string }
+        version: { type: string }
 
-    AgentListResponse:
+    ApiResponseHealth:
       allOf:
-        - $ref: '#/components/schemas/Response'
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HealthInfo'
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        expires_at: { type: integer }
+        user:
+          $ref: '#/components/schemas/UserInfo'
+
+    ApiResponseLogin:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LoginResponse'
+
+    UserInfo:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string }
+
+    UserResponse:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string }
+        is_active: { type: boolean }
+        created_at: { type: string }
+
+    ApiResponseUserInfo:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserInfo'
+
+    ApiResponseUser:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserResponse'
+
+    ApiResponseUsers:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
         - type: object
           properties:
             data:
               type: array
-              items:
-                $ref: '#/components/schemas/Agent'
+              items: { $ref: '#/components/schemas/UserResponse' }
 
-    # Session
-    SessionStatus:
-      type: string
-      enum:
-        - creating
-        - running
-        - stopped
-        - error
-      description: 会话状态
+    ChangePasswordRequest:
+      type: object
+      required: [old_password, new_password]
+      properties:
+        old_password: { type: string }
+        new_password: { type: string }
 
-    SessionConfig:
+    CreateUserRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        role: { type: string, enum: [admin, user] }
+
+    CreateAPIKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        expires_in: { type: integer, description: 过期天数，0 表示永不过期 }
+
+    APIKeyResponse:
       type: object
       properties:
-        cpu_limit:
-          type: number
-          format: float
-          description: CPU 核心数限制
-          example: 2.0
-        memory_limit:
-          type: integer
-          format: int64
-          description: 内存限制（字节）
-          example: 4294967296
+        id: { type: string }
+        name: { type: string }
+        key_prefix: { type: string }
+        key: { type: string, description: 仅创建时返回 }
+        last_used_at: { type: string }
+        expires_at: { type: string }
+        created_at: { type: string }
+
+    ApiResponseAPIKey:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/APIKeyResponse'
+
+    ApiResponseAPIKeys:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/APIKeyResponse' }
+
+    Engine:
+      type: object
+      additionalProperties: true
+
+    ApiResponseEngines:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Engine' }
+
+    Agent:
+      type: object
+      additionalProperties: true
+
+    CreateAgentRequest:
+      type: object
+      additionalProperties: true
+
+    RunAgentRequest:
+      type: object
+      properties:
+        prompt: { type: string }
+        input:
+          type: object
+          additionalProperties: true
+
+    RunAgentResult:
+      type: object
+      additionalProperties: true
+
+    ApiResponseAgents:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Agent' }
+
+    ApiResponseAgent:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Agent'
+
+    ApiResponseRunAgent:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RunAgentResult'
+
+    TaskStatus:
+      type: string
+      enum: [pending, queued, running, completed, failed, cancelled]
+
+    OutputFile:
+      type: object
+      properties:
+        name: { type: string }
+        path: { type: string }
+        size: { type: integer }
+        mime_type: { type: string }
+        url: { type: string }
+
+    Usage:
+      type: object
+      properties:
+        duration_seconds: { type: integer }
+        input_tokens: { type: integer }
+        output_tokens: { type: integer }
+        total_tokens: { type: integer }
+
+    Result:
+      type: object
+      properties:
+        files:
+          type: array
+          items: { $ref: '#/components/schemas/OutputFile' }
+        text: { type: string }
+        logs: { type: string }
+        summary: { type: string }
+        usage: { $ref: '#/components/schemas/Usage' }
+
+    Turn:
+      type: object
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        created_at: { type: string }
+        result: { $ref: '#/components/schemas/Result' }
+
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        agent_id: { type: string }
+        agent_name: { type: string }
+        agent_type: { type: string }
+        prompt: { type: string }
+        attachments:
+          type: array
+          items: { type: string }
+        output_files:
+          type: array
+          items: { $ref: '#/components/schemas/OutputFile' }
+        turns:
+          type: array
+          items: { $ref: '#/components/schemas/Turn' }
+        turn_count: { type: integer }
+        webhook_url: { type: string }
+        timeout: { type: integer }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        session_id: { type: string }
+        thread_id: { type: string }
+        error_message: { type: string }
+        result: { $ref: '#/components/schemas/Result' }
+        created_at: { type: string }
+        queued_at: { type: string }
+        started_at: { type: string }
+        completed_at: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+
+    CreateTaskRequest:
+      type: object
+      required: [prompt]
+      properties:
+        agent_id: { type: string, description: 新任务必填 }
+        prompt: { type: string }
+        task_id: { type: string, description: 多轮时传入 }
+        attachments:
+          type: array
+          items: { type: string }
+        webhook_url: { type: string }
+        timeout: { type: integer }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+
+    TaskStats:
+      type: object
+      properties:
+        total: { type: integer }
+        by_status:
+          type: object
+          additionalProperties: { type: integer }
+        by_agent:
+          type: object
+          additionalProperties: { type: integer }
+        avg_duration_seconds: { type: number }
+
+    ApiResponseTask:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Task'
+
+    ApiResponseTaskList:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                tasks:
+                  type: array
+                  items: { $ref: '#/components/schemas/Task' }
+                total: { type: integer }
+
+    ApiResponseTaskStats:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TaskStats'
+
+    CleanupTasksRequest:
+      type: object
+      properties:
+        before_days: { type: integer }
+        statuses:
+          type: array
+          items: { type: string }
+
+    ApiResponseTaskResult:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              oneOf:
+                - $ref: '#/components/schemas/Result'
+                - type: object
+
+    BatchStatus:
+      type: string
+      enum: [pending, running, paused, completed, failed, cancelled]
+
+    BatchTaskStatus:
+      type: string
+      enum: [pending, running, completed, failed, dead]
+
+    BatchTemplate:
+      type: object
+      properties:
+        prompt_template: { type: string }
+        timeout: { type: integer }
+        max_retries: { type: integer }
+        runtime_id: { type: string }
+
+    WorkerInfo:
+      type: object
+      properties:
+        id: { type: string }
+        session_id: { type: string }
+        container_id: { type: string }
+        status: { type: string }
+        current_task: { type: string }
+        completed: { type: integer }
+        last_error: { type: string }
+
+    Batch:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        name: { type: string }
+        agent_id: { type: string }
+        template: { $ref: '#/components/schemas/BatchTemplate' }
+        concurrency: { type: integer }
+        status: { $ref: '#/components/schemas/BatchStatus' }
+        total_tasks: { type: integer }
+        completed: { type: integer }
+        failed: { type: integer }
+        progress_percent: { type: number }
+        estimated_eta: { type: string }
+        tasks_per_sec: { type: number }
+        created_at: { type: string }
+        started_at: { type: string }
+        completed_at: { type: string }
+        workers:
+          type: array
+          items: { $ref: '#/components/schemas/WorkerInfo' }
+        error_summary:
+          type: object
+          additionalProperties: { type: integer }
+
+    BatchTask:
+      type: object
+      properties:
+        id: { type: string }
+        batch_id: { type: string }
+        index: { type: integer }
+        input:
+          type: object
+          additionalProperties: true
+        prompt: { type: string }
+        status: { $ref: '#/components/schemas/BatchTaskStatus' }
+        worker_id: { type: string }
+        result: { type: string }
+        error: { type: string }
+        attempts: { type: integer }
+        claimed_at: { type: string }
+        claimed_by: { type: string }
+        dead_at: { type: string }
+        dead_reason: { type: string }
+        created_at: { type: string }
+        started_at: { type: string }
+        duration_ms: { type: integer }
+
+    CreateBatchRequest:
+      type: object
+      required: [name, agent_id, prompt_template, inputs]
+      properties:
+        name: { type: string }
+        agent_id: { type: string }
+        prompt_template: { type: string }
+        inputs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        concurrency: { type: integer }
+        timeout: { type: integer }
+        max_retries: { type: integer }
+        runtime_id: { type: string }
+        auto_start: { type: boolean }
+
+    BatchStats:
+      type: object
+      properties:
+        total_tasks: { type: integer }
+        pending: { type: integer }
+        running: { type: integer }
+        completed: { type: integer }
+        failed: { type: integer }
+        dead: { type: integer }
+        by_worker:
+          type: object
+          additionalProperties: { type: integer }
+        avg_duration_ms: { type: number }
+        error_types:
+          type: object
+          additionalProperties: { type: integer }
+
+    PaginatedBatchList:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                batches:
+                  type: array
+                  items: { $ref: '#/components/schemas/Batch' }
+
+    PaginatedBatchTaskList:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                tasks:
+                  type: array
+                  items: { $ref: '#/components/schemas/BatchTask' }
+
+    ApiResponseBatch:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Batch'
+
+    ApiResponseBatchTask:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BatchTask'
+
+    ApiResponseBatchStats:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BatchStats'
+
+    RetryDeadRequest:
+      type: object
+      properties:
+        task_ids:
+          type: array
+          items: { type: string }
+
+    ApiResponseDeadTasks:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                batch_id: { type: string }
+                tasks:
+                  type: array
+                  items: { $ref: '#/components/schemas/BatchTask' }
+                count: { type: integer }
+
+    ApiResponseRetryDead:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                batch_id: { type: string }
+                retried_count: { type: integer }
+
+    QueueOverview:
+      type: object
+      properties:
+        total_pending: { type: integer }
+        total_running: { type: integer }
+        total_completed: { type: integer }
+        total_failed: { type: integer }
+        total_dead: { type: integer }
+        redis_enabled: { type: boolean }
+        batches:
+          type: array
+          items:
+            type: object
+            properties:
+              batch_id: { type: string }
+              batch_name: { type: string }
+              status: { type: string }
+              pending: { type: integer }
+              running: { type: integer }
+              completed: { type: integer }
+              failed: { type: integer }
+              dead: { type: integer }
+              total: { type: integer }
+              redis_pending: { type: integer }
+              redis_processing: { type: integer }
+              redis_dead: { type: integer }
+
+    PoolStats:
+      type: object
+      additionalProperties: true
+
+    ApiResponseQueueOverview:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/QueueOverview'
+
+    ApiResponsePoolStats:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PoolStats'
+
+    UploadedFile:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        size: { type: integer }
+        mime_type: { type: string }
+        task_id: { type: string }
+        purpose: { type: string }
+        uploaded_at: { type: string }
+        expires_at: { type: string }
+
+    ApiResponseFile:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UploadedFile'
+
+    ApiResponseFiles:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/UploadedFile' }
+
+    Webhook:
+      type: object
+      additionalProperties: true
+
+    CreateWebhookRequest:
+      type: object
+      additionalProperties: true
+
+    UpdateWebhookRequest:
+      type: object
+      additionalProperties: true
+
+    ApiResponseWebhook:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Webhook' }
+
+    ApiResponseWebhooks:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Webhook' }
+
+    HistoryEntry:
+      type: object
+      properties:
+        id: { type: string }
+        source_type: { type: string }
+        source_id: { type: string }
+        source_name: { type: string }
+        engine: { type: string }
+        prompt: { type: string }
+        status: { type: string }
+        output: { type: string }
+        error: { type: string }
+        exit_code: { type: integer }
+        usage:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        started_at: { type: string }
+        ended_at: { type: string }
+
+    HistoryStats:
+      type: object
+      properties:
+        total_executions: { type: integer }
+        completed_count: { type: integer }
+        failed_count: { type: integer }
+        total_input_tokens: { type: integer }
+        total_output_tokens: { type: integer }
+        by_source:
+          type: object
+          additionalProperties: { type: integer }
+        by_engine:
+          type: object
+          additionalProperties: { type: integer }
+
+    ApiResponseHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HistoryEntry'
+
+    ApiResponseHistoryList:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                entries:
+                  type: array
+                  items: { $ref: '#/components/schemas/HistoryEntry' }
+                total: { type: integer }
+                limit: { type: integer }
+                offset: { type: integer }
+
+    ApiResponseHistoryStats:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HistoryStats'
+
+    SessionCreateRequest:
+      type: object
+      additionalProperties: true
 
     Session:
       type: object
-      properties:
-        id:
-          type: string
-          description: 会话 ID
-          example: "a1b2c3d4"
-        agent:
-          type: string
-          description: Agent 类型
-          example: claude-code
-        status:
-          $ref: '#/components/schemas/SessionStatus'
-        workspace:
-          type: string
-          description: 工作空间路径
-          example: /tmp/agentbox/workspaces/myproject
-        container_id:
-          type: string
-          description: Docker 容器 ID
-          example: "abc123def456"
-        config:
-          $ref: '#/components/schemas/SessionConfig'
-        env:
-          type: object
-          additionalProperties:
-            type: string
-          description: 环境变量（敏感值会被隐藏）
-        created_at:
-          type: string
-          format: date-time
-          description: 创建时间
-        updated_at:
-          type: string
-          format: date-time
-          description: 更新时间
-      required:
-        - id
-        - agent
-        - status
-        - workspace
-        - config
-        - created_at
-        - updated_at
+      additionalProperties: true
 
-    CreateSessionRequest:
+    SessionExecRequest:
       type: object
       properties:
-        agent:
-          type: string
-          description: Agent 类型
-          example: claude-code
-        workspace:
-          type: string
-          description: 工作空间路径（绝对路径或相对于 workspace_base）
-          example: /path/to/project
-        env:
+        prompt: { type: string }
+        input:
           type: object
-          additionalProperties:
-            type: string
-          description: 环境变量
-          example:
-            ANTHROPIC_API_KEY: "sk-ant-xxx"
-        config:
-          $ref: '#/components/schemas/SessionConfig'
-      required:
-        - agent
-        - workspace
+          additionalProperties: true
 
-    SessionResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              $ref: '#/components/schemas/Session'
-
-    SessionListResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: array
-              items:
-                $ref: '#/components/schemas/Session'
-            pagination:
-              $ref: '#/components/schemas/Pagination'
-
-    DeleteResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                deleted:
-                  type: string
-                  description: 已删除的会话 ID
-                  example: "a1b2c3d4"
-
-    LogsResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                logs:
-                  type: string
-                  description: 容器日志内容
-                  example: "Starting agent...\nReady to accept commands."
-
-    # Execution
-    ExecutionStatus:
-      type: string
-      enum:
-        - pending
-        - running
-        - success
-        - failed
-      description: 执行状态
+    SessionExecResponse:
+      type: object
+      additionalProperties: true
 
     Execution:
       type: object
-      properties:
-        id:
-          type: string
-          description: 执行记录 ID
-          example: "e1f2g3h4"
-        session_id:
-          type: string
-          description: 所属会话 ID
-          example: "a1b2c3d4"
-        prompt:
-          type: string
-          description: 执行的提示/命令
-          example: "帮我写一个 hello world 程序"
-        status:
-          $ref: '#/components/schemas/ExecutionStatus'
-        output:
-          type: string
-          description: 执行输出
-          example: "已创建 hello.py 文件..."
-        error:
-          type: string
-          description: 错误信息
-        exit_code:
-          type: integer
-          description: 退出码
-          example: 0
-        started_at:
-          type: string
-          format: date-time
-          description: 开始时间
-        ended_at:
-          type: string
-          format: date-time
-          description: 结束时间
-      required:
-        - id
-        - session_id
-        - prompt
-        - status
-        - exit_code
-        - started_at
+      additionalProperties: true
 
-    ExecRequest:
-      type: object
-      properties:
-        prompt:
-          type: string
-          description: 要执行的提示/命令
-          example: "帮我写一个 hello world 程序"
-        max_turns:
-          type: integer
-          description: 最大对话轮数
-          minimum: 1
-          maximum: 100
-          default: 10
-          example: 10
-        timeout:
-          type: integer
-          description: 超时时间（秒）
-          minimum: 10
-          maximum: 3600
-          default: 300
-          example: 300
-        allowed_tools:
-          type: array
-          description: 允许使用的工具列表
-          items:
-            type: string
-          example: ["Read", "Write", "Bash"]
-        disallowed_tools:
-          type: array
-          description: 禁止使用的工具列表
-          items:
-            type: string
-          example: ["WebFetch"]
-      required:
-        - prompt
-
-    ExecResult:
-      type: object
-      properties:
-        execution_id:
-          type: string
-          description: 执行记录 ID
-          example: "e1f2g3h4"
-        output:
-          type: string
-          description: 执行输出
-          example: "已创建 hello.py 文件..."
-        exit_code:
-          type: integer
-          description: 退出码
-          example: 0
-        error:
-          type: string
-          description: 错误信息
-
-    ExecResultResponse:
+    ApiResponseSession:
       allOf:
-        - $ref: '#/components/schemas/Response'
+        - $ref: '#/components/schemas/ApiResponse'
         - type: object
           properties:
-            data:
-              $ref: '#/components/schemas/ExecResult'
+            data: { $ref: '#/components/schemas/Session' }
 
-    ExecutionResponse:
+    ApiResponseSessions:
       allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              $ref: '#/components/schemas/Execution'
-
-    ExecutionListResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
+        - $ref: '#/components/schemas/ApiResponse'
         - type: object
           properties:
             data:
               type: array
-              items:
-                $ref: '#/components/schemas/Execution'
+              items: { $ref: '#/components/schemas/Session' }
 
-    # 文件管理
-    FileType:
-      type: string
-      enum:
-        - file
-        - directory
-      description: 文件类型
+    ApiResponseSessionExec:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/SessionExecResponse' }
 
-    FileInfo:
+    ApiResponseExecutions:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Execution' }
+
+    ApiResponseExecution:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Execution' }
+
+    ApiResponseLogs:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                logs: { type: string }
+
+    ApiResponseProviders:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/AnyObject' }
+
+    ApiResponseProvider:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AnyObject' }
+
+    CreateProviderRequest:
       type: object
-      properties:
-        name:
-          type: string
-          description: 文件名
-          example: "main.go"
-        path:
-          type: string
-          description: 相对路径
-          example: "src/main.go"
-        type:
-          $ref: '#/components/schemas/FileType'
-        size:
-          type: integer
-          format: int64
-          description: 文件大小（字节），仅文件类型有效
-          example: 1024
-        modified_at:
-          type: string
-          format: date-time
-          description: 修改时间
-        children_count:
-          type: integer
-          description: 子项数量，仅目录类型有效
-          example: 5
-      required:
-        - name
-        - path
-        - type
+      additionalProperties: true
 
-    FileListResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                path:
-                  type: string
-                  description: 当前路径
-                  example: "src"
-                files:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/FileInfo'
-
-    FileContentResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                path:
-                  type: string
-                  description: 文件路径
-                  example: "src/main.go"
-                content:
-                  type: string
-                  description: 文件内容
-                  example: "package main\n\nfunc main() {\n\tfmt.Println(\"Hello\")\n}"
-                size:
-                  type: integer
-                  format: int64
-                  description: 文件大小（字节）
-                  example: 56
-                encoding:
-                  type: string
-                  description: 编码
-                  example: "utf-8"
-
-    FileUploadResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                path:
-                  type: string
-                  description: 上传后的文件路径
-                  example: "uploads/image.png"
-                size:
-                  type: integer
-                  format: int64
-                  description: 文件大小（字节）
-                  example: 2048
-
-    FileDeleteResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                deleted:
-                  type: string
-                  description: 已删除的文件路径
-                  example: "src/old_file.go"
-
-    DirectoryCreateResponse:
-      allOf:
-        - $ref: '#/components/schemas/Response'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                path:
-                  type: string
-                  description: 创建的目录路径
-                  example: "src/components"
-
-    # WebSocket 相关
-    StreamExecRequest:
+    RuntimeCreateRequest:
       type: object
-      description: WebSocket 流式执行请求（客户端发送）
-      properties:
-        prompt:
-          type: string
-          description: 要执行的提示/命令
-          example: "帮我写一个 hello world 程序"
-        max_turns:
-          type: integer
-          description: 最大对话轮数
-          minimum: 1
-          maximum: 100
-          default: 10
-        timeout:
-          type: integer
-          description: 超时时间（秒）
-          minimum: 10
-          maximum: 3600
-          default: 300
-        allowed_tools:
-          type: array
-          description: 允许使用的工具列表
-          items:
-            type: string
-        disallowed_tools:
-          type: array
-          description: 禁止使用的工具列表
-          items:
-            type: string
-      required:
-        - prompt
+      additionalProperties: true
 
-    StreamMessage:
+    RuntimeUpdateRequest:
       type: object
-      description: WebSocket 流式消息（服务端返回）
-      properties:
-        type:
-          type: string
-          enum:
-            - start
-            - message
-            - error
-            - done
-            - ping
-          description: 消息类型
-        content:
-          type: string
-          description: 消息内容
-        timestamp:
-          type: integer
-          format: int64
-          description: 时间戳（毫秒）
-        execution_id:
-          type: string
-          description: 执行 ID（仅 start/done 类型有）
-      required:
-        - type
-        - timestamp
+      additionalProperties: true
+
+    ApiResponseSystemHealth:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: true
