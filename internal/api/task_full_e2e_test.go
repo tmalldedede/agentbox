@@ -52,7 +52,7 @@ var testEngines = []struct {
 	BaseURL string
 }{
 	{agent.AdapterCodex, "https://open.bigmodel.cn/api/coding/paas/v4"},
-	{agent.AdapterClaudeCode, "https://open.bigmodel.cn/api/paas/v4"},
+	{agent.AdapterClaudeCode, "https://open.bigmodel.cn/api/anthropic"},
 }
 
 // setupTaskE2E 初始化完整的端到端测试环境
@@ -75,6 +75,10 @@ func setupTaskE2E(t *testing.T, adapterType string, idleTimeout time.Duration) (
 
 	// === 初始化所有 Manager ===
 	tmpDir := t.TempDir()
+	// 解析符号链接，避免 macOS /var/folders -> /private/var/folders 导致路径验证失败
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
 
 	// Provider Manager
 	providerDir := filepath.Join(tmpDir, "providers")
@@ -134,7 +138,7 @@ func setupTaskE2E(t *testing.T, adapterType string, idleTimeout time.Duration) (
 			Adapter:         agent.AdapterClaudeCode,
 			ProviderID:      "zhipu",
 			Model:           "glm-4.7",
-			BaseURLOverride: "https://open.bigmodel.cn/api/paas/v4",
+			BaseURLOverride: "https://open.bigmodel.cn/api/anthropic",
 			SystemPrompt:    "You are a concise assistant. Always respond in English. Keep responses under 30 words.",
 			Permissions: agent.PermissionConfig{
 				SkipAll: true, // --dangerously-skip-permissions

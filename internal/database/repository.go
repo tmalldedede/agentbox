@@ -531,3 +531,61 @@ func (r *BatchTaskRepository) GetStats(batchID string) (map[string]int64, error)
 func (r *BatchTaskRepository) DeleteByBatch(batchID string) error {
 	return r.db.Where("batch_id = ?", batchID).Delete(&BatchTaskModel{}).Error
 }
+
+// ClaimPending claims pending tasks for processing (SQLite-only mode)
+// Uses transaction to prevent race conditions between workers.
+func (r *BatchTaskRepository) ClaimPending(batchID string, limit int) ([]BatchTaskModel, error) {
+	var tasks []BatchTaskModel
+	now := time.Now()
+
+	// Use transaction for atomicity
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		// Find and lock pending tasks
+		if err := tx.Where("batch_id = ? AND status = ?", batchID, "pending").
+			Order("task_index ASC").
+			Limit(limit).
+			Find(&tasks).Error; err != nil {
+			return err
+		}
+
+		if len(tasks) == 0 {
+			return nil
+		}
+
+		// Update them to running atomically
+		taskIDs := make([]string, len(tasks))
+		for i, t := range tasks {
+			taskIDs[i] = t.ID
+		}
+
+		if err := tx.Model(&BatchTaskModel{}).
+			Where("id IN ? AND status = ?", taskIDs, "pending"). // 再次检查状态防止竞争
+			Updates(map[string]interface{}{
+				"status":     "running",
+				"claimed_at": now,
+				"started_at": now,
+				"updated_at": now,
+			}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(tasks) == 0 {
+		return nil, nil
+	}
+
+	// Update in-memory objects
+	for i := range tasks {
+		tasks[i].Status = "running"
+		tasks[i].ClaimedAt = &now
+		tasks[i].StartedAt = &now
+	}
+
+	return tasks, nil
+}

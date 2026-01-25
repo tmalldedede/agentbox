@@ -353,6 +353,10 @@ func TestClaudeCode_MultiTurn_E2E(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
+	// 解析符号链接，避免 macOS /var/folders -> /private/var/folders 导致路径验证失败
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
 
 	// 初始化 Managers
 	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
@@ -386,7 +390,7 @@ func TestClaudeCode_MultiTurn_E2E(t *testing.T) {
 	// === 创建 Session ===
 	sess, err := sessionMgr.Create(ctx, &session.CreateRequest{
 		AgentID:   testAgent.ID,
-		Workspace: filepath.Join(tmpDir, "workspace-multiturn"),
+		Workspace: filepath.Join(tmpDir, "workspaces", "workspace-multiturn"),
 	})
 	require.NoError(t, err)
 	t.Logf("Session created: id=%s, container=%s", sess.ID, sess.ContainerID)

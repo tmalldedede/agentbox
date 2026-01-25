@@ -75,6 +75,7 @@ type ManagerConfig struct {
 	PollInterval     time.Duration
 	ProgressInterval time.Duration
 	RedisQueue       *RedisQueue // Optional Redis queue
+	DisableRecovery  bool        // Disable recovery of interrupted batches on startup (for testing)
 }
 
 // DefaultManagerConfig returns default configuration.
@@ -113,8 +114,10 @@ func NewManager(store Store, sessionMgr *session.Manager, agentMgr *agent.Manage
 		m.redisQueue.StartRecoveryLoop(30*time.Second, m.getRunningBatchIDs)
 	}
 
-	// Recover interrupted batches on startup
-	go m.recoverOnStartup()
+	// Recover interrupted batches on startup (unless disabled for testing)
+	if !cfg.DisableRecovery {
+		go m.recoverOnStartup()
+	}
 
 	return m
 }

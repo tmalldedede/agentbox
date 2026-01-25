@@ -48,6 +48,10 @@ func TestSkillInjection_E2E(t *testing.T) {
 
 	// === 初始化临时目录 ===
 	tmpDir := t.TempDir()
+	// 解析符号链接，避免 macOS /var/folders -> /private/var/folders 导致路径验证失败
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
 
 	// === 初始化所有 Manager ===
 	gin.SetMode(gin.TestMode)

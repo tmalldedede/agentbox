@@ -141,12 +141,19 @@ func (s *GormStore) DeleteTasks(batchID string) error {
 	return s.taskRepo.DeleteByBatch(batchID)
 }
 
-// ClaimPendingTasks is a legacy method - with Redis queue this is handled differently.
-// Kept for SQLite-only fallback mode.
+// ClaimPendingTasks claims pending tasks for processing (SQLite-only mode).
+// When Redis is enabled, this falls back for tasks not in Redis queue.
 func (s *GormStore) ClaimPendingTasks(batchID string, limit int) ([]*BatchTask, error) {
-	// This is only used when Redis is disabled
-	// For now, return empty - Redis queue handles claiming
-	return nil, nil
+	models, err := s.taskRepo.ClaimPending(batchID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := make([]*BatchTask, len(models))
+	for i, m := range models {
+		tasks[i] = s.modelToTask(&m)
+	}
+	return tasks, nil
 }
 
 // RequeueTask puts a task back to pending.
@@ -156,6 +163,7 @@ func (s *GormStore) RequeueTask(task *BatchTask) error {
 		"started_at": nil,
 		"claimed_at": nil,
 		"claimed_by": "",
+		"attempts":   task.Attempts, // 保持重试计数
 	})
 }
 
