@@ -151,7 +151,7 @@ func (a *App) initialize() error {
 
 	// 5.5. 初始化 Runtime 管理器
 	runtimeDataDir := filepath.Join(a.Config.Container.WorkspaceBase, "runtimes")
-	a.Runtime = runtime.NewManager(runtimeDataDir)
+	a.Runtime = runtime.NewManager(runtimeDataDir, a.Config)
 	log.Info("loaded runtimes", "count", len(a.Runtime.List()))
 
 	// 6. 初始化 MCP Server 管理器

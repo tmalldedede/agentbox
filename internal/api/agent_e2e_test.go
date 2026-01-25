@@ -97,7 +97,7 @@ func TestAgentRunE2E_CodexZhipu(t *testing.T) {
 
 	// Runtime Manager
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
-	rtMgr := runtime.NewManager(runtimeDir)
+	rtMgr := runtime.NewManager(runtimeDir, nil)
 
 	// Skill Manager
 	skillDir := filepath.Join(tmpDir, "skills")
@@ -252,7 +252,7 @@ func TestAgentRunE2E_ClaudeCodeZhipu(t *testing.T) {
 	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
 	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
 
-	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"), nil)
 	skillMgr, _ := skill.NewManager(filepath.Join(tmpDir, "skills"))
 	mcpMgr, _ := mcp.NewManager(filepath.Join(tmpDir, "mcp"))
 	agentMgr := agent.NewManager(filepath.Join(tmpDir, "agents"), provMgr, rtMgr, skillMgr, mcpMgr)
@@ -362,7 +362,7 @@ func TestClaudeCode_MultiTurn_E2E(t *testing.T) {
 	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
 	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
 
-	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"), nil)
 	skillMgr, _ := skill.NewManager(filepath.Join(tmpDir, "skills"))
 	mcpMgr, _ := mcp.NewManager(filepath.Join(tmpDir, "mcp"))
 	agentMgr := agent.NewManager(filepath.Join(tmpDir, "agents"), provMgr, rtMgr, skillMgr, mcpMgr)
@@ -522,7 +522,7 @@ func TestEmailOSINT_E2E(t *testing.T) {
 	provMgr := provider.NewManager(filepath.Join(tmpDir, "providers"), "e2e-key-32bytes-for-aes256!!")
 	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
 
-	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"), nil)
 	skillMgr, err := skill.NewManager(filepath.Join(tmpDir, "skills"))
 	require.NoError(t, err)
 	mcpMgr, _ := mcp.NewManager(filepath.Join(tmpDir, "mcp"))

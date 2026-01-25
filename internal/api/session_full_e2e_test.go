@@ -69,7 +69,7 @@ func setupSessionE2E(t *testing.T, adapterType string) (*sessionE2ETestEnv, func
 	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
 
 	// Runtime Manager
-	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"), nil)
 
 	// Skill Manager
 	skillMgr, err := skill.NewManager(filepath.Join(tmpDir, "skills"))

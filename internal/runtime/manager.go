@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/config"
 )
 
 // Manager manages runtime configurations
@@ -13,19 +15,26 @@ type Manager struct {
 	mu       sync.RWMutex
 	runtimes map[string]*AgentRuntime
 	dataDir  string
+	cfg      *config.Config
 }
 
 // NewManager creates a new runtime manager
-func NewManager(dataDir string) *Manager {
+// cfg 可以为 nil，将使用默认配置
+func NewManager(dataDir string, cfg *config.Config) *Manager {
+	if cfg == nil {
+		cfg = config.Default()
+	}
+
 	m := &Manager{
 		runtimes: make(map[string]*AgentRuntime),
 		dataDir:  dataDir,
+		cfg:      cfg,
 	}
 
 	os.MkdirAll(dataDir, 0755)
 
-	// Load built-in runtimes
-	for _, r := range builtinRuntimes {
+	// Load built-in runtimes from config
+	for _, r := range GetBuiltinRuntimes(cfg) {
 		cp := *r
 		m.runtimes[cp.ID] = &cp
 	}
@@ -74,7 +83,12 @@ func (m *Manager) GetDefault() *AgentRuntime {
 	if r, ok := m.runtimes["default"]; ok {
 		return r
 	}
-	return builtinRuntimes[0]
+	// Final fallback to first built-in runtime
+	builtins := GetBuiltinRuntimes(m.cfg)
+	if len(builtins) > 0 {
+		return builtins[0]
+	}
+	return nil
 }
 
 // Create creates a new custom runtime

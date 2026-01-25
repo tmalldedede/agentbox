@@ -79,7 +79,7 @@ func setupDashboardTestRouter(t *testing.T) (*gin.Engine, *DashboardHandler, fun
 	taskStore, err := task.NewGormStore(db)
 	require.NoError(t, err)
 	providerMgr := provider.NewManager(tempDir, "test-encryption-key-32bytes!!")
-	runtimeMgr := runtime.NewManager(tempDir)
+	runtimeMgr := runtime.NewManager(tempDir, nil)
 	skillMgr, _ := skill.NewManager(tempDir)
 	mcpMgr, _ := mcp.NewManager(tempDir)
 	agentMgr := agent.NewManager(tempDir, providerMgr, runtimeMgr, skillMgr, mcpMgr)

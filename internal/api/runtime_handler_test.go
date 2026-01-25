@@ -18,7 +18,7 @@ func setupRuntimeTestRouter(t *testing.T) (*gin.Engine, *RuntimeHandler, string)
 	tempDir, err := os.MkdirTemp("", "runtime_test")
 	require.NoError(t, err)
 
-	mgr := runtime.NewManager(tempDir)
+	mgr := runtime.NewManager(tempDir, nil)
 	handler := NewRuntimeHandler(mgr)
 
 	gin.SetMode(gin.TestMode)

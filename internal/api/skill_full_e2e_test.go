@@ -68,7 +68,7 @@ func setupSkillE2E(t *testing.T, adapterType string) (*skillE2ETestEnv, func()) 
 	require.NoError(t, provMgr.ConfigureKey("zhipu", apiKey))
 
 	// Runtime Manager
-	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"))
+	rtMgr := runtime.NewManager(filepath.Join(tmpDir, "runtimes"), nil)
 
 	// Skill Manager
 	skillDir := filepath.Join(tmpDir, "skills")

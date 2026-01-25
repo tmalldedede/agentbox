@@ -25,7 +25,7 @@ func setupTestManager(t *testing.T) (*Manager, string) {
 	// 2. 创建 Runtime Manager（包含 default runtime）
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
 	os.MkdirAll(runtimeDir, 0755)
-	rtMgr := runtime.NewManager(runtimeDir)
+	rtMgr := runtime.NewManager(runtimeDir, nil)
 
 	// 3. 创建 Skill Manager
 	skillDir := filepath.Join(tmpDir, "skills")
@@ -299,7 +299,7 @@ func TestCreateAgent_Persistence(t *testing.T) {
 	providerDir := filepath.Join(tmpDir, "providers")
 	provMgr := provider.NewManager(providerDir, "test-encryption-key-1234")
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
-	rtMgr := runtime.NewManager(runtimeDir)
+	rtMgr := runtime.NewManager(runtimeDir, nil)
 	skillDir := filepath.Join(tmpDir, "skills")
 	skillMgr, _ := skill.NewManager(skillDir)
 	mcpDir := filepath.Join(tmpDir, "mcp")

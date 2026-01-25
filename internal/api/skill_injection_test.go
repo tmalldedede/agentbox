@@ -62,7 +62,7 @@ func TestSkillInjection_E2E(t *testing.T) {
 
 	// Runtime Manager
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
-	rtMgr := runtime.NewManager(runtimeDir)
+	rtMgr := runtime.NewManager(runtimeDir, nil)
 
 	// Skill Manager
 	skillDir := filepath.Join(tmpDir, "skills")
@@ -322,7 +322,7 @@ func TestSkillInjection_SourceDir(t *testing.T) {
 	provMgr := provider.NewManager(providerDir, "test-encryption-key-32bytes!!")
 
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
-	rtMgr := runtime.NewManager(runtimeDir)
+	rtMgr := runtime.NewManager(runtimeDir, nil)
 
 	skillDir := filepath.Join(tmpDir, "skills")
 	skillMgr, err := skill.NewManager(skillDir)
@@ -516,7 +516,7 @@ func TestAgentHandler_RunWithSkills(t *testing.T) {
 	require.NoError(t, err)
 
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
-	rtMgr := runtime.NewManager(runtimeDir)
+	rtMgr := runtime.NewManager(runtimeDir, nil)
 
 	skillDir := filepath.Join(tmpDir, "skills")
 	skillMgr, err := skill.NewManager(skillDir)

@@ -14,6 +14,15 @@ type Config struct {
 	Database  DatabaseConfig  `json:"database"`
 	Files     FilesConfig     `json:"files"`
 	Redis     RedisConfig     `json:"redis"`
+	Runtime   RuntimeConfig   `json:"runtime"`
+}
+
+// RuntimeConfig 运行时镜像配置
+type RuntimeConfig struct {
+	DefaultImage  string `json:"default_image"`   // 默认运行时镜像
+	LightImage    string `json:"light_image"`     // 轻量运行时镜像
+	HeavyImage    string `json:"heavy_image"`     // 高性能运行时镜像
+	BinaryREImage string `json:"binary_re_image"` // 二进制逆向分析镜像
 }
 
 // RedisConfig Redis 配置
@@ -109,6 +118,12 @@ func Default() *Config {
 			ClaimTimeout:    5 * time.Minute,     // 任务认领 5 分钟超时
 			RecoverInterval: 30 * time.Second,    // 每 30 秒扫描超时任务
 		},
+		Runtime: RuntimeConfig{
+			DefaultImage:  "ghcr.io/tmalldedede/agentbox-agent:v2",
+			LightImage:    "ghcr.io/tmalldedede/agentbox-agent:v2",
+			HeavyImage:    "ghcr.io/tmalldedede/agentbox-agent:v2",
+			BinaryREImage: "ghcr.io/tmalldedede/agentbox-agent:binary-re",
+		},
 	}
 }
 
@@ -196,6 +211,20 @@ func Load() *Config {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Redis.ClaimTimeout = d
 		}
+	}
+
+	// Runtime 镜像配置
+	if v := os.Getenv("AGENTBOX_RUNTIME_DEFAULT_IMAGE"); v != "" {
+		cfg.Runtime.DefaultImage = v
+	}
+	if v := os.Getenv("AGENTBOX_RUNTIME_LIGHT_IMAGE"); v != "" {
+		cfg.Runtime.LightImage = v
+	}
+	if v := os.Getenv("AGENTBOX_RUNTIME_HEAVY_IMAGE"); v != "" {
+		cfg.Runtime.HeavyImage = v
+	}
+	if v := os.Getenv("AGENTBOX_RUNTIME_BINARY_RE_IMAGE"); v != "" {
+		cfg.Runtime.BinaryREImage = v
 	}
 
 	return cfg
