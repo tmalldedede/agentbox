@@ -17,6 +17,8 @@ import {
   Clock,
   FlaskConical,
   Network,
+  Sparkles,
+  Square,
 } from 'lucide-react'
 import type { Agent } from '@/types'
 import { useDockerAvailable } from '@/hooks/useSystemHealth'
@@ -43,6 +45,8 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
+import { EventStream } from './EventStream'
+import { ContainerLogs } from './ContainerLogs'
 
 // --- API Call Log Types ---
 interface ApiCallEntry {
@@ -91,6 +95,9 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
   const [uploadProgress, setUploadProgress] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Current running task tracking
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
+
   // API Call Log
   const [apiCalls, setApiCalls] = useState<ApiCallEntry[]>([])
   const [expandedCalls, setExpandedCalls] = useState<Set<number>>(new Set())
@@ -102,8 +109,13 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
   const eventSourceRef = useRef<EventSource | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
 
+  // Task Events (SSE)
+  const [taskEvents, setTaskEvents] = useState<any[]>([])
+  const [taskEventsConnected, setTaskEventsConnected] = useState(false)
+  const taskEventsRef = useRef<EventSource | null>(null)
+
   // Active tab
-  const [activeTab, setActiveTab] = useState('result')
+  const [activeTab, setActiveTab] = useState('events')
 
   // --- Logged Fetch: 记录所有 API 调用 ---
   const loggedFetch = useCallback(async (
@@ -236,6 +248,9 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
       }
+      if (taskEventsRef.current) {
+        taskEventsRef.current.close()
+      }
     }
   }, [])
 
@@ -281,6 +296,68 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
       eventSourceRef.current.close()
       eventSourceRef.current = null
       setSseConnected(false)
+    }
+  }
+
+  // Task Events Stream
+  const connectTaskEvents = (taskId: string) => {
+    if (taskEventsRef.current) {
+      taskEventsRef.current.close()
+    }
+
+    const token = localStorage.getItem('agentbox_token')
+    const url = token
+      ? `/api/v1/tasks/${taskId}/events?token=${token}`
+      : `/api/v1/tasks/${taskId}/events`
+    const es = new EventSource(url)
+    taskEventsRef.current = es
+
+    es.onopen = () => {
+      setTaskEventsConnected(true)
+      setTaskEvents(prev => [...prev, { type: 'connected', timestamp: new Date().toISOString() }])
+    }
+
+    es.addEventListener('task.started', (event) => {
+      const data = JSON.parse(event.data)
+      setTaskEvents(prev => [...prev, { type: 'task.started', data, timestamp: new Date().toISOString() }])
+    })
+
+    es.addEventListener('task.turn_started', (event) => {
+      const data = JSON.parse(event.data)
+      setTaskEvents(prev => [...prev, { type: 'task.turn_started', data, timestamp: new Date().toISOString() }])
+    })
+
+    es.addEventListener('agent.thinking', () => {
+      setTaskEvents(prev => [...prev, { type: 'agent.thinking', timestamp: new Date().toISOString() }])
+    })
+
+    es.addEventListener('agent.tool_call', (event) => {
+      const data = JSON.parse(event.data)
+      setTaskEvents(prev => [...prev, { type: 'agent.tool_call', data, timestamp: new Date().toISOString() }])
+    })
+
+    es.addEventListener('agent.message', (event) => {
+      const data = JSON.parse(event.data)
+      setTaskEvents(prev => [...prev, { type: 'agent.message', data, timestamp: new Date().toISOString() }])
+    })
+
+    es.addEventListener('task.completed', (event) => {
+      const data = JSON.parse(event.data)
+      setTaskEvents(prev => [...prev, { type: 'task.completed', data, timestamp: new Date().toISOString() }])
+      setTaskEventsConnected(false)
+      es.close()
+    })
+
+    es.addEventListener('task.failed', (event) => {
+      const data = JSON.parse(event.data)
+      setTaskEvents(prev => [...prev, { type: 'task.failed', data, timestamp: new Date().toISOString() }])
+      setTaskEventsConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setTaskEventsConnected(false)
+      es.close()
     }
   }
 
@@ -352,7 +429,8 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
     setResult(null)
     setApiCalls([])
     setContainerLogs([])
-    setActiveTab('api-calls')
+    setTaskEvents([])
+    setActiveTab('events')
     callIdRef.current = 0
 
     const selectedAgent = agents.find(a => a.id === selectedAgentId)
@@ -405,7 +483,11 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
         throw new Error(taskData.message)
       }
       const taskId = taskData.data.id
+      setCurrentTaskId(taskId)
       setContainerLogs(prev => [...prev, `[System] Task created: ${taskId}`])
+
+      // Connect to task events stream
+      connectTaskEvents(taskId)
 
       // 5. Poll for result
       let attempts = 0
@@ -438,6 +520,31 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
       setLoading(false)
       setUploadProgress('')
       disconnectLogStream()
+      setCurrentTaskId(null)
+    }
+  }
+
+  // Stop execution
+  const handleStop = async () => {
+    if (!currentTaskId) return
+
+    try {
+      setContainerLogs(prev => [...prev, `[System] Stopping task ${currentTaskId}...`])
+      await api.cancelTask(currentTaskId)
+      setContainerLogs(prev => [...prev, `[System] Task cancelled`])
+      setError('Task cancelled by user')
+    } catch (err: unknown) {
+      const error = err as Error
+      setContainerLogs(prev => [...prev, `[Error] Failed to cancel task: ${error.message}`])
+    } finally {
+      setLoading(false)
+      disconnectLogStream()
+      if (taskEventsRef.current) {
+        taskEventsRef.current.close()
+        taskEventsRef.current = null
+        setTaskEventsConnected(false)
+      }
+      setCurrentTaskId(null)
     }
   }
 
@@ -654,23 +761,21 @@ print(result)`
             )}
           </div>
 
-          {/* Execute */}
+          {/* Execute / Stop */}
           <div className='flex items-center gap-4 pt-2'>
-            <Button onClick={handleExecute} disabled={loading || !selectedAgentId || !prompt.trim() || !dockerAvailable}>
-              {loading ? (
-                <>
-                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Play className='mr-2 h-4 w-4' />
-                  Execute
-                </>
-              )}
-            </Button>
+            {loading ? (
+              <Button onClick={handleStop} variant='destructive'>
+                <Square className='mr-2 h-4 w-4' />
+                Stop
+              </Button>
+            ) : (
+              <Button onClick={handleExecute} disabled={!selectedAgentId || !prompt.trim() || !dockerAvailable}>
+                <Play className='mr-2 h-4 w-4' />
+                Execute
+              </Button>
+            )}
             {loading && (
-              <span className='text-sm text-muted-foreground'>Task running, check API Calls tab...</span>
+              <span className='text-sm text-muted-foreground'>Task running, check tabs for live output...</span>
             )}
           </div>
 
@@ -687,6 +792,18 @@ print(result)`
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <CardHeader className='pb-0'>
             <TabsList className='w-full justify-start'>
+              <TabsTrigger value='events' className='gap-1.5'>
+                <Sparkles className='h-3.5 w-3.5' />
+                Live Events
+                {taskEventsConnected && (
+                  <span className='w-2 h-2 bg-green-500 rounded-full animate-pulse' />
+                )}
+                {taskEvents.length > 0 && (
+                  <Badge variant='secondary' className='ml-1 text-[10px] px-1.5 py-0'>
+                    {taskEvents.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value='result' className='gap-1.5'>
                 Result
                 {result && (
@@ -723,6 +840,11 @@ print(result)`
           </CardHeader>
 
           <CardContent className='pt-4'>
+            {/* Events Tab */}
+            <TabsContent value='events' className='mt-0'>
+              <EventStream events={taskEvents} isRunning={loading} />
+            </TabsContent>
+
             {/* Result Tab */}
             <TabsContent value='result' className='mt-0'>
               {result ? (
@@ -842,38 +964,7 @@ print(result)`
 
             {/* Container Logs Tab */}
             <TabsContent value='container-logs' className='mt-0'>
-              <div className='space-y-2'>
-                <div className='flex items-center justify-between'>
-                  <div className='flex items-center gap-2'>
-                    <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                    <span className='text-sm text-muted-foreground'>
-                      {sseConnected ? 'SSE Connected' : 'Disconnected'}
-                    </span>
-                  </div>
-                  <span className='text-xs text-muted-foreground'>{containerLogs.length} entries</span>
-                </div>
-                <div className='h-80 overflow-y-auto bg-muted rounded-lg p-4 font-mono text-xs'>
-                  {containerLogs.length === 0 ? (
-                    <div className='text-muted-foreground text-center py-8'>
-                      Container logs will appear here during execution
-                    </div>
-                  ) : (
-                    containerLogs.map((log, index) => (
-                      <div
-                        key={index}
-                        className={`py-0.5 ${log.startsWith('[System]') ? 'text-blue-500' :
-                          log.startsWith('[Connected]') ? 'text-green-500' :
-                            log.startsWith('[Error]') ? 'text-destructive' :
-                              ''
-                          }`}
-                      >
-                        {log}
-                      </div>
-                    ))
-                  )}
-                  <div ref={logsEndRef} />
-                </div>
-              </div>
+              <ContainerLogs logs={containerLogs} connected={sseConnected} />
             </TabsContent>
 
             {/* cURL Tab */}
