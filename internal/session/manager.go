@@ -264,6 +264,15 @@ func ensureWithinBase(path, base string) error {
 
 	rel, err := filepath.Rel(realBase, realPath)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		log.Error("workspace validation failed",
+			"path", path,
+			"base", base,
+			"absPath", absPath,
+			"absBase", absBase,
+			"realPath", realPath,
+			"realBase", realBase,
+			"rel", rel,
+			"err", err)
 		return fmt.Errorf("workspace path must be within base: %s", base)
 	}
 	return nil

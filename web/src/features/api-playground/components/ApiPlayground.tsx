@@ -358,7 +358,7 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agent_id: selectedAgentId,
-          workspace: `/tmp/playground-${Date.now()}`
+          workspace: `playground-${Date.now()}`
         })
       })
       const sessionData = await sessionRes.json()
