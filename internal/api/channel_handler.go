@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmalldedede/agentbox/internal/channel"
@@ -12,6 +13,8 @@ import (
 type ChannelHandler struct {
 	manager       *channel.Manager
 	feishuChannel *feishu.Channel
+	sessionStore  channel.SessionStore
+	messageStore  channel.MessageStore
 }
 
 // NewChannelHandler 创建通道处理器
@@ -19,6 +22,8 @@ func NewChannelHandler(manager *channel.Manager, feishuChannel *feishu.Channel) 
 	return &ChannelHandler{
 		manager:       manager,
 		feishuChannel: feishuChannel,
+		sessionStore:  channel.NewGormSessionStore(),
+		messageStore:  channel.NewGormMessageStore(),
 	}
 }
 
@@ -29,6 +34,19 @@ func (h *ChannelHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		channels.GET("", h.List)
 		channels.POST("/send", h.Send)
 	}
+
+	// 会话管理
+	sessions := rg.Group("/channel-sessions")
+	{
+		sessions.GET("", h.ListSessions)
+		sessions.GET("/:id", h.GetSession)
+		sessions.GET("/:id/messages", h.GetSessionMessages)
+		sessions.POST("/:id/end", h.EndSession)
+	}
+
+	// 消息列表和统计
+	rg.GET("/channel-messages", h.ListMessages)
+	rg.GET("/channel-stats", h.GetStats)
 }
 
 // RegisterWebhookRoutes 注册 Webhook 路由（公开路由，无需认证）
@@ -100,4 +118,196 @@ func (h *ChannelHandler) FeishuWebhook(c *gin.Context) {
 	}
 
 	h.feishuChannel.HandleWebhook(c.Writer, c.Request)
+}
+
+// ListSessions 列出通道会话
+// @Summary 列出通道会话
+// @Tags Channel
+// @Produce json
+// @Param channel_type query string false "通道类型"
+// @Param status query string false "状态"
+// @Param agent_id query string false "Agent ID"
+// @Param limit query int false "限制数量"
+// @Param offset query int false "偏移量"
+// @Success 200 {object} Response
+// @Router /api/v1/admin/channel-sessions [get]
+func (h *ChannelHandler) ListSessions(c *gin.Context) {
+	filter := &channel.SessionFilter{
+		ChannelType: c.Query("channel_type"),
+		Status:      c.Query("status"),
+		AgentID:     c.Query("agent_id"),
+	}
+
+	if limit := c.Query("limit"); limit != "" {
+		if l, err := strconv.Atoi(limit); err == nil {
+			filter.Limit = l
+		}
+	}
+	if filter.Limit == 0 {
+		filter.Limit = 50
+	}
+
+	if offset := c.Query("offset"); offset != "" {
+		if o, err := strconv.Atoi(offset); err == nil {
+			filter.Offset = o
+		}
+	}
+
+	sessions, total, err := h.sessionStore.List(filter)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(c, gin.H{
+		"sessions": sessions,
+		"total":    total,
+		"limit":    filter.Limit,
+		"offset":   filter.Offset,
+	})
+}
+
+// GetSession 获取会话详情
+// @Summary 获取会话详情
+// @Tags Channel
+// @Produce json
+// @Param id path string true "会话 ID"
+// @Success 200 {object} Response
+// @Router /api/v1/admin/channel-sessions/{id} [get]
+func (h *ChannelHandler) GetSession(c *gin.Context) {
+	id := c.Param("id")
+	session, err := h.sessionStore.GetByID(id)
+	if err != nil {
+		Error(c, http.StatusNotFound, "session not found")
+		return
+	}
+	Success(c, session)
+}
+
+// GetSessionMessages 获取会话消息
+// @Summary 获取会话消息
+// @Tags Channel
+// @Produce json
+// @Param id path string true "会话 ID"
+// @Param limit query int false "限制数量"
+// @Param offset query int false "偏移量"
+// @Success 200 {object} Response
+// @Router /api/v1/admin/channel-sessions/{id}/messages [get]
+func (h *ChannelHandler) GetSessionMessages(c *gin.Context) {
+	sessionID := c.Param("id")
+
+	limit := 50
+	offset := 0
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	messages, total, err := h.messageStore.ListBySession(sessionID, limit, offset)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(c, gin.H{
+		"messages": messages,
+		"total":    total,
+		"limit":    limit,
+		"offset":   offset,
+	})
+}
+
+// EndSession 结束会话
+// @Summary 结束会话
+// @Tags Channel
+// @Produce json
+// @Param id path string true "会话 ID"
+// @Success 200 {object} Response
+// @Router /api/v1/admin/channel-sessions/{id}/end [post]
+func (h *ChannelHandler) EndSession(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.sessionStore.UpdateStatus(id, "completed"); err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	Success(c, gin.H{"message": "session ended"})
+}
+
+// ListMessages 列出所有消息
+// @Summary 列出所有消息
+// @Tags Channel
+// @Produce json
+// @Param channel_type query string false "通道类型"
+// @Param direction query string false "方向"
+// @Param limit query int false "限制数量"
+// @Param offset query int false "偏移量"
+// @Success 200 {object} Response
+// @Router /api/v1/admin/channel-messages [get]
+func (h *ChannelHandler) ListMessages(c *gin.Context) {
+	filter := &channel.MessageFilter{
+		ChannelType: c.Query("channel_type"),
+		Direction:   c.Query("direction"),
+		TaskID:      c.Query("task_id"),
+	}
+
+	if limit := c.Query("limit"); limit != "" {
+		if l, err := strconv.Atoi(limit); err == nil {
+			filter.Limit = l
+		}
+	}
+	if filter.Limit == 0 {
+		filter.Limit = 50
+	}
+
+	if offset := c.Query("offset"); offset != "" {
+		if o, err := strconv.Atoi(offset); err == nil {
+			filter.Offset = o
+		}
+	}
+
+	messages, total, err := h.messageStore.List(filter)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(c, gin.H{
+		"messages": messages,
+		"total":    total,
+		"limit":    filter.Limit,
+		"offset":   filter.Offset,
+	})
+}
+
+// GetStats 获取通道统计
+// @Summary 获取通道统计
+// @Tags Channel
+// @Produce json
+// @Param channel_type query string false "通道类型"
+// @Success 200 {object} Response
+// @Router /api/v1/admin/channel-stats [get]
+func (h *ChannelHandler) GetStats(c *gin.Context) {
+	channelType := c.Query("channel_type")
+
+	var stats *channel.SessionStats
+	var err error
+
+	if channelType != "" {
+		stats, err = h.sessionStore.GetStatsByChannel(channelType)
+	} else {
+		stats, err = h.sessionStore.GetStats()
+	}
+
+	if err != nil {
+		Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(c, stats)
 }

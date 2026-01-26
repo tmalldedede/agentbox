@@ -300,3 +300,45 @@ type AuthProfileModel struct {
 func (AuthProfileModel) TableName() string {
 	return "auth_profiles"
 }
+
+// ChannelSessionModel 通道会话（持久化）
+type ChannelSessionModel struct {
+	BaseModel
+	ChannelType   string     `gorm:"size:32;index" json:"channel_type"`       // feishu, dingtalk, slack
+	ChatID        string     `gorm:"size:128;index" json:"chat_id"`           // 外部聊天 ID
+	UserID        string     `gorm:"size:128" json:"user_id"`                 // 外部用户 ID
+	UserName      string     `gorm:"size:255" json:"user_name"`               // 用户名称
+	IsGroup       bool       `gorm:"default:false" json:"is_group"`           // 是否群聊
+	TaskID        string     `gorm:"size:64;index" json:"task_id"`            // 关联 Task
+	AgentID       string     `gorm:"size:64" json:"agent_id"`                 // 使用的 Agent
+	AgentName     string     `gorm:"size:255" json:"agent_name"`              // Agent 名称
+	Status        string     `gorm:"size:32;default:'active'" json:"status"`  // active, completed, expired
+	MessageCount  int        `gorm:"default:0" json:"message_count"`          // 消息计数
+	LastMessageAt *time.Time `json:"last_message_at"`                         // 最后消息时间
+}
+
+func (ChannelSessionModel) TableName() string {
+	return "channel_sessions"
+}
+
+// ChannelMessageModel 通道消息日志
+type ChannelMessageModel struct {
+	ID           string    `gorm:"primaryKey;size:128" json:"id"`         // 外部消息 ID
+	SessionID    string    `gorm:"size:64;index" json:"session_id"`       // 关联会话
+	ChannelType  string    `gorm:"size:32;index" json:"channel_type"`     // 通道类型
+	ChatID       string    `gorm:"size:128" json:"chat_id"`               // 聊天 ID
+	SenderID     string    `gorm:"size:128" json:"sender_id"`             // 发送者 ID
+	SenderName   string    `gorm:"size:255" json:"sender_name"`           // 发送者名称
+	Content      string    `gorm:"type:text" json:"content"`              // 消息内容
+	Direction    string    `gorm:"size:16" json:"direction"`              // inbound, outbound
+	TaskID       string    `gorm:"size:64;index" json:"task_id"`          // 关联 Task
+	TurnID       string    `gorm:"size:64" json:"turn_id"`                // 关联轮次
+	Status       string    `gorm:"size:32;default:'sent'" json:"status"`  // sent, delivered, failed
+	MetadataJSON string    `gorm:"type:text" json:"metadata_json"`        // JSON 元数据
+	ReceivedAt   time.Time `json:"received_at"`                           // 接收时间
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+func (ChannelMessageModel) TableName() string {
+	return "channel_messages"
+}

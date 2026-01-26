@@ -77,6 +77,11 @@ import type {
   BatchSettings,
   StorageSettings,
   NotifySettings,
+  ChannelSession,
+  ChannelMessage,
+  ChannelStats,
+  ChannelSessionFilter,
+  ChannelMessageFilter,
 } from '../types'
 
 export const API_BASE = '/api/v1'
@@ -944,6 +949,47 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+
+  // Channel Sessions
+  listChannelSessions: (filter?: ChannelSessionFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.channel_type) params.set('channel_type', filter.channel_type)
+    if (filter?.status) params.set('status', filter.status)
+    if (filter?.agent_id) params.set('agent_id', filter.agent_id)
+    if (filter?.limit) params.set('limit', filter.limit.toString())
+    if (filter?.offset) params.set('offset', filter.offset.toString())
+    const query = params.toString()
+    return request<{ sessions: ChannelSession[]; total: number }>(`${ADMIN_BASE}/channel-sessions${query ? `?${query}` : ''}`)
+  },
+
+  getChannelSession: (id: string) =>
+    request<ChannelSession>(`${ADMIN_BASE}/channel-sessions/${id}`),
+
+  getSessionMessages: (id: string, limit = 50, offset = 0) =>
+    request<{ messages: ChannelMessage[]; total: number }>(`${ADMIN_BASE}/channel-sessions/${id}/messages?limit=${limit}&offset=${offset}`),
+
+  endChannelSession: (id: string) =>
+    request<{ message: string }>(`${ADMIN_BASE}/channel-sessions/${id}/end`, {
+      method: 'POST',
+    }),
+
+  // Channel Messages
+  listChannelMessages: (filter?: ChannelMessageFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.channel_type) params.set('channel_type', filter.channel_type)
+    if (filter?.direction) params.set('direction', filter.direction)
+    if (filter?.task_id) params.set('task_id', filter.task_id)
+    if (filter?.limit) params.set('limit', filter.limit.toString())
+    if (filter?.offset) params.set('offset', filter.offset.toString())
+    const query = params.toString()
+    return request<{ messages: ChannelMessage[]; total: number }>(`${ADMIN_BASE}/channel-messages${query ? `?${query}` : ''}`)
+  },
+
+  // Channel Stats
+  getChannelStats: (channelType?: string) => {
+    const query = channelType ? `?channel_type=${channelType}` : ''
+    return request<ChannelStats>(`${ADMIN_BASE}/channel-stats${query}`)
+  },
 
   // Feishu Config
   getFeishuConfig: () => request<FeishuConfig>(`${ADMIN_BASE}/feishu/config`),

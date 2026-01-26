@@ -1,7 +1,20 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageSquare, Plus, Trash2, Settings } from 'lucide-react'
+import {
+  MessageSquare,
+  Plus,
+  Trash2,
+  Settings,
+  Activity,
+  Users,
+  MessageCircle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Clock,
+  StopCircle,
+  ExternalLink,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Main } from '@/components/layout/main'
 import { Button } from '@/components/ui/button'
@@ -29,7 +42,23 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { api, FeishuConfig } from '@/services/api'
+import type { ChannelSession, ChannelMessage } from '@/types'
 
 export const Route = createFileRoute('/_authenticated/channels/')({
   component: ChannelsPage,
@@ -48,8 +77,11 @@ function ChannelsPage() {
     verification_token: '',
     default_agent_id: '',
   })
+  const [sessionFilter, setSessionFilter] = useState<{ status?: string; channel_type?: string }>({})
+  const [messageFilter, setMessageFilter] = useState<{ direction?: string; channel_type?: string }>({})
 
-  const { data: feishuConfigs = [], isLoading } = useQuery({
+  // Queries
+  const { data: feishuConfigs = [], isLoading: configsLoading } = useQuery({
     queryKey: ['feishuConfigs'],
     queryFn: api.listFeishuConfigs,
   })
@@ -59,6 +91,31 @@ function ChannelsPage() {
     queryFn: api.listAgents,
   })
 
+  const { data: stats } = useQuery({
+    queryKey: ['channelStats'],
+    queryFn: () => api.getChannelStats(),
+    refetchInterval: 30000,
+  })
+
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['channelSessions', sessionFilter],
+    queryFn: () => api.listChannelSessions({
+      status: sessionFilter.status as 'active' | 'completed' | 'expired' | undefined,
+      channel_type: sessionFilter.channel_type,
+      limit: 50,
+    }),
+  })
+
+  const { data: messagesData, isLoading: messagesLoading } = useQuery({
+    queryKey: ['channelMessages', messageFilter],
+    queryFn: () => api.listChannelMessages({
+      direction: messageFilter.direction as 'inbound' | 'outbound' | undefined,
+      channel_type: messageFilter.channel_type,
+      limit: 50,
+    }),
+  })
+
+  // Mutations
   const saveMutation = useMutation({
     mutationFn: (data: typeof formData) => api.saveFeishuConfig(data),
     onSuccess: () => {
@@ -77,6 +134,18 @@ function ChannelsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feishuConfigs'] })
       toast.success('Configuration deleted')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
+    },
+  })
+
+  const endSessionMutation = useMutation({
+    mutationFn: api.endChannelSession,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['channelSessions'] })
+      queryClient.invalidateQueries({ queryKey: ['channelStats'] })
+      toast.success('Session ended')
     },
     onError: (error: Error) => {
       toast.error(error.message)
@@ -102,7 +171,7 @@ function ChannelsPage() {
       id: config.id,
       name: config.name,
       app_id: config.app_id,
-      app_secret: '', // Don't show existing secret
+      app_secret: '',
       encrypt_key: '',
       verification_token: '',
       default_agent_id: config.default_agent_id || '',
@@ -127,20 +196,102 @@ function ChannelsPage() {
     saveMutation.mutate(formData)
   }
 
+  const formatTime = (dateStr: string | undefined) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleString()
+  }
+
+  const sessions = sessionsData?.sessions || []
+  const messages = messagesData?.messages || []
+
   return (
     <Main>
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Channels</h1>
-        <p className="text-muted-foreground">Configure messaging channels for agent interaction</p>
+        <p className="text-muted-foreground">Manage messaging channels and view conversation history</p>
       </div>
 
-      <Tabs defaultValue="feishu" className="space-y-4">
+      <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="feishu">Feishu / Lark</TabsTrigger>
-          <TabsTrigger value="slack" disabled>Slack (Coming Soon)</TabsTrigger>
-          <TabsTrigger value="discord" disabled>Discord (Coming Soon)</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="feishu">Feishu</TabsTrigger>
+          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="messages">Messages</TabsTrigger>
         </TabsList>
 
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Sessions</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.total_sessions || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats?.active_sessions || 0} active
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Sessions</CardTitle>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.active_sessions || 0}</div>
+                <p className="text-xs text-muted-foreground">Currently active</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Messages</CardTitle>
+                <MessageCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.total_messages || 0}</div>
+                <p className="text-xs text-muted-foreground">All time</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Messages Today</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.messages_today || 0}</div>
+                <p className="text-xs text-muted-foreground">Last 24 hours</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* By Channel Stats */}
+          {stats?.by_channel && Object.keys(stats.by_channel).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">By Channel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {Object.entries(stats.by_channel).map(([channel, stat]) => (
+                    <div key={channel} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <p className="font-medium capitalize">{channel}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {stat.sessions} sessions, {stat.messages} messages
+                        </p>
+                      </div>
+                      <MessageSquare className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Feishu Tab */}
         <TabsContent value="feishu" className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
@@ -155,7 +306,7 @@ function ChannelsPage() {
             </Button>
           </div>
 
-          {isLoading ? (
+          {configsLoading ? (
             <div className="text-center py-8 text-muted-foreground">Loading...</div>
           ) : feishuConfigs.length === 0 ? (
             <Card>
@@ -195,11 +346,7 @@ function ChannelsPage() {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(config)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(config)}>
                         <Settings className="h-4 w-4 mr-1" />
                         Configure
                       </Button>
@@ -238,6 +385,234 @@ function ChannelsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Sessions Tab */}
+        <TabsContent value="sessions" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold">Channel Sessions</h2>
+              <p className="text-sm text-muted-foreground">
+                View and manage active conversations
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Select
+                value={sessionFilter.status || 'all'}
+                onValueChange={(v) => setSessionFilter({ ...sessionFilter, status: v === 'all' ? undefined : v })}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={sessionFilter.channel_type || 'all'}
+                onValueChange={(v) => setSessionFilter({ ...sessionFilter, channel_type: v === 'all' ? undefined : v })}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Channels</SelectItem>
+                  <SelectItem value="feishu">Feishu</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Channel</TableHead>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Messages</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last Active</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessionsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : sessions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No sessions found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    sessions.map((session: ChannelSession) => (
+                      <TableRow key={session.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{session.user_name || session.user_id}</p>
+                            {session.is_group && (
+                              <Badge variant="outline" className="text-xs">Group</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="capitalize">
+                            {session.channel_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{session.agent_name || session.agent_id?.slice(0, 8)}</TableCell>
+                        <TableCell>{session.message_count}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              session.status === 'active'
+                                ? 'default'
+                                : session.status === 'completed'
+                                  ? 'secondary'
+                                  : 'destructive'
+                            }
+                          >
+                            {session.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatTime(session.last_message_at)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {session.task_id && (
+                              <a href={`/tasks/${session.task_id}`}>
+                                <Button variant="ghost" size="sm" title="View Task">
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              </a>
+                            )}
+                            {session.status === 'active' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => endSessionMutation.mutate(session.id)}
+                                title="End Session"
+                              >
+                                <StopCircle className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Messages Tab */}
+        <TabsContent value="messages" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold">Message Log</h2>
+              <p className="text-sm text-muted-foreground">View all channel messages</p>
+            </div>
+            <div className="flex gap-2">
+              <Select
+                value={messageFilter.direction || 'all'}
+                onValueChange={(v) => setMessageFilter({ ...messageFilter, direction: v === 'all' ? undefined : v })}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={messageFilter.channel_type || 'all'}
+                onValueChange={(v) => setMessageFilter({ ...messageFilter, channel_type: v === 'all' ? undefined : v })}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Channels</SelectItem>
+                  <SelectItem value="feishu">Feishu</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">Dir</TableHead>
+                    <TableHead>Sender</TableHead>
+                    <TableHead>Content</TableHead>
+                    <TableHead>Channel</TableHead>
+                    <TableHead>Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {messagesLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : messages.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No messages found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    messages.map((msg: ChannelMessage) => (
+                      <TableRow key={msg.id}>
+                        <TableCell>
+                          {msg.direction === 'inbound' ? (
+                            <span title="Inbound">
+                              <ArrowDownLeft className="h-4 w-4 text-blue-500" />
+                            </span>
+                          ) : (
+                            <span title="Outbound">
+                              <ArrowUpRight className="h-4 w-4 text-green-500" />
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium">{msg.sender_name || msg.sender_id}</p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="max-w-[400px] truncate">{msg.content}</p>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="capitalize">
+                            {msg.channel_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatTime(msg.received_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Config Dialog */}
@@ -247,9 +622,7 @@ function ChannelsPage() {
             <DialogTitle>
               {editingConfig ? 'Edit Feishu Application' : 'Add Feishu Application'}
             </DialogTitle>
-            <DialogDescription>
-              Configure your Feishu application credentials
-            </DialogDescription>
+            <DialogDescription>Configure your Feishu application credentials</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">

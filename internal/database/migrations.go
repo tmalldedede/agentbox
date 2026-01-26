@@ -25,6 +25,8 @@ func AutoMigrate() error {
 		&BatchModel{},
 		&BatchTaskModel{},
 		&FileModel{},
+		&ChannelSessionModel{},
+		&ChannelMessageModel{},
 	}
 
 	for _, model := range models {

@@ -1319,3 +1319,72 @@ export interface MessageGroup {
   role: 'user' | 'assistant' | 'system'
   messages: ChatMessage[]
 }
+
+// ==================== Channel Session & Message Types ====================
+
+export type ChannelSessionStatus = 'active' | 'completed' | 'expired'
+
+export interface ChannelSession {
+  id: string
+  channel_type: string
+  chat_id: string
+  user_id: string
+  user_name: string
+  is_group: boolean
+  task_id: string
+  agent_id: string
+  agent_name: string
+  status: ChannelSessionStatus
+  message_count: number
+  last_message_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export type ChannelMessageDirection = 'inbound' | 'outbound'
+
+export interface ChannelMessage {
+  id: string
+  session_id: string
+  channel_type: string
+  chat_id: string
+  sender_id: string
+  sender_name: string
+  content: string
+  direction: ChannelMessageDirection
+  task_id: string
+  turn_id?: string
+  status: string
+  metadata?: Record<string, string>
+  received_at: string
+  created_at: string
+}
+
+export interface ChannelStat {
+  sessions: number
+  messages: number
+}
+
+export interface ChannelStats {
+  total_sessions: number
+  active_sessions: number
+  total_messages: number
+  messages_today: number
+  by_channel: Record<string, ChannelStat>
+}
+
+export interface ChannelSessionFilter {
+  channel_type?: string
+  status?: ChannelSessionStatus
+  agent_id?: string
+  limit?: number
+  offset?: number
+}
+
+export interface ChannelMessageFilter {
+  channel_type?: string
+  direction?: ChannelMessageDirection
+  task_id?: string
+  limit?: number
+  offset?: number
+}
