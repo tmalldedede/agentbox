@@ -8,11 +8,16 @@ import (
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/auth"
 	"github.com/tmalldedede/agentbox/internal/batch"
+	"github.com/tmalldedede/agentbox/internal/channel"
+	"github.com/tmalldedede/agentbox/internal/channel/feishu"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/coordinate"
+	"github.com/tmalldedede/agentbox/internal/cron"
 	"github.com/tmalldedede/agentbox/internal/engine"
 	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/mcp"
+	"github.com/tmalldedede/agentbox/internal/plugin"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/runtime"
 	"github.com/tmalldedede/agentbox/internal/session"
@@ -45,27 +50,37 @@ type Server struct {
 	dashboardHandler  *DashboardHandler
 	batchHandler      *BatchHandler
 	settingsHandler   *SettingsHandler
+	cronHandler       *CronHandler
+	channelHandler    *ChannelHandler
+	feishuHandler     *FeishuHandler
+	coordinateHandler *CoordinateHandler
+	gatewayHandler    *GatewayHandler
 }
 
 // Deps 服务器依赖（从 App 容器注入）
 type Deps struct {
-	Auth        *auth.Manager
-	Session     *session.Manager
-	Registry    *engine.Registry
-	Container   container.Manager
-	Provider    *provider.Manager
-	Runtime     *runtime.Manager
-	MCP         *mcp.Manager
-	Skill       *skill.Manager
-	Task        *task.Manager
-	Webhook     *webhook.Manager
-	Agent       *agent.Manager
-	History     *history.Manager
-	Batch       *batch.Manager
-	GC          *container.GarbageCollector
-	Settings    *settings.Manager
-	FilesConfig config.FilesConfig
-	FileStore   FileStore
+	Auth          *auth.Manager
+	Session       *session.Manager
+	Registry      *engine.Registry
+	Container     container.Manager
+	Provider      *provider.Manager
+	Runtime       *runtime.Manager
+	MCP           *mcp.Manager
+	Skill         *skill.Manager
+	Task          *task.Manager
+	Webhook       *webhook.Manager
+	Agent         *agent.Manager
+	History       *history.Manager
+	Batch         *batch.Manager
+	GC            *container.GarbageCollector
+	Settings      *settings.Manager
+	Cron          *cron.Manager
+	Channel       *channel.Manager
+	FeishuChannel *feishu.Channel
+	Plugin        *plugin.Manager
+	Coordinate    *coordinate.Manager
+	FilesConfig   config.FilesConfig
+	FileStore     FileStore
 }
 
 // NewServer 创建服务器
@@ -94,6 +109,11 @@ func NewServer(deps *Deps) *Server {
 	dashboardHandler := NewDashboardHandler(deps.Task, deps.Agent, deps.Session, deps.Provider, deps.MCP, deps.Container, deps.History)
 	batchHandler := NewBatchHandler(deps.Batch)
 	settingsHandler := NewSettingsHandler(deps.Settings)
+	cronHandler := NewCronHandler(deps.Cron)
+	channelHandler := NewChannelHandler(deps.Channel, deps.FeishuChannel)
+	feishuHandler := NewFeishuHandler()
+	coordinateHandler := NewCoordinateHandler(deps.Coordinate)
+	gatewayHandler := NewGatewayHandler(deps.Auth, deps.Task)
 
 	s := &Server{
 		engine:            engine,
@@ -116,6 +136,11 @@ func NewServer(deps *Deps) *Server {
 		dashboardHandler:  dashboardHandler,
 		batchHandler:      batchHandler,
 		settingsHandler:   settingsHandler,
+		cronHandler:       cronHandler,
+		channelHandler:    channelHandler,
+		feishuHandler:     feishuHandler,
+		coordinateHandler: coordinateHandler,
+		gatewayHandler:    gatewayHandler,
 	}
 
 	s.setupRoutes()
@@ -133,6 +158,12 @@ func (s *Server) setupRoutes() {
 	// ==================== 公开路由（无需认证）====================
 	v1.GET("/health", s.handler.HealthCheck)
 	v1.POST("/auth/login", s.authHandler.Login)
+
+	// WebSocket Gateway（通过消息认证，不需要 HTTP 层认证）
+	s.gatewayHandler.RegisterPublicRoutes(v1)
+
+	// 通道 Webhook 回调（飞书等）
+	s.channelHandler.RegisterWebhookRoutes(v1)
 
 	// ==================== 认证路由 ====================
 	authenticated := v1.Group("")
@@ -168,6 +199,9 @@ func (s *Server) setupRoutes() {
 
 		// History (只读) - 执行历史记录
 		s.historyHandler.RegisterRoutes(authenticated)
+
+		// Coordinate (跨会话协调) - Agent 可用
+		s.coordinateHandler.RegisterRoutes(authenticated)
 	}
 
 	// ==================== Admin API（需要 admin 角色）====================
@@ -233,6 +267,18 @@ func (s *Server) setupRoutes() {
 
 		// Settings (业务配置)
 		s.settingsHandler.RegisterRoutes(admin)
+
+		// Cron (定时任务)
+		s.cronHandler.RegisterRoutes(admin)
+
+		// Channels (多通道)
+		s.channelHandler.RegisterRoutes(admin)
+
+		// Feishu Config (飞书配置)
+		s.feishuHandler.RegisterRoutes(admin)
+
+		// Gateway (WebSocket 统计)
+		s.gatewayHandler.RegisterRoutes(admin)
 	}
 }
 
@@ -247,6 +293,9 @@ func (s *Server) Run(addr string) error {
 
 // Shutdown 优雅关闭服务器
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.gatewayHandler != nil {
+		s.gatewayHandler.Stop()
+	}
 	if s.publicFileHandler != nil {
 		s.publicFileHandler.Stop()
 	}

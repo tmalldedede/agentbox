@@ -19,6 +19,9 @@ import type {
   VerifyResult,
   CreateProviderRequest,
   UpdateProviderRequest,
+  AuthProfile,
+  RotatorStats,
+  AddAuthProfileRequest,
   MCPServer,
   MCPServerStats,
   MCPTestResult,
@@ -577,6 +580,24 @@ export const api = {
       body: JSON.stringify({ base_url: baseURL, api_key: apiKey, agents }),
     }),
 
+  // Auth Profile Rotation
+  listAuthProfiles: (providerId: string) =>
+    request<AuthProfile[]>(`${ADMIN_BASE}/providers/${providerId}/profiles`),
+
+  addAuthProfile: (providerId: string, req: AddAuthProfileRequest) =>
+    request<AuthProfile>(`${ADMIN_BASE}/providers/${providerId}/profiles`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  removeAuthProfile: (providerId: string, profileId: string) =>
+    request<{ deleted: string }>(`${ADMIN_BASE}/providers/${providerId}/profiles/${profileId}`, {
+      method: 'DELETE',
+    }),
+
+  getRotationStats: (providerId: string) =>
+    request<RotatorStats>(`${ADMIN_BASE}/providers/${providerId}/rotation-stats`),
+
   // Runtimes (管理接口) - 运行环境配置
   listRuntimes: () => request<AgentRuntime[]>(`${ADMIN_BASE}/runtimes`),
 
@@ -832,4 +853,168 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(settings),
     }),
+
+  // ==================== Cron Jobs API ====================
+  listCronJobs: () => request<CronJob[]>(`${ADMIN_BASE}/crons`),
+
+  getCronJob: (id: string) => request<CronJob>(`${ADMIN_BASE}/crons/${id}`),
+
+  createCronJob: (req: CreateCronJobRequest) =>
+    request<CronJob>(`${ADMIN_BASE}/crons`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  updateCronJob: (id: string, req: UpdateCronJobRequest) =>
+    request<CronJob>(`${ADMIN_BASE}/crons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  deleteCronJob: (id: string) =>
+    request<void>(`${ADMIN_BASE}/crons/${id}`, {
+      method: 'DELETE',
+    }),
+
+  triggerCronJob: (id: string) =>
+    request<{ message: string }>(`${ADMIN_BASE}/crons/${id}/trigger`, {
+      method: 'POST',
+    }),
+
+  // ==================== Channels API ====================
+  listChannels: () => request<string[]>(`${ADMIN_BASE}/channels`),
+
+  sendChannelMessage: (req: SendChannelMessageRequest) =>
+    request<{ message_id: string }>(`${ADMIN_BASE}/channels/send`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  // Feishu Config
+  getFeishuConfig: () => request<FeishuConfig>(`${ADMIN_BASE}/feishu/config`),
+
+  saveFeishuConfig: (req: SaveFeishuConfigRequest) =>
+    request<{ id: string; message: string }>(`${ADMIN_BASE}/feishu/config`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  listFeishuConfigs: () => request<FeishuConfigItem[]>(`${ADMIN_BASE}/feishu/configs`),
+
+  deleteFeishuConfig: (id: string) =>
+    request<void>(`${ADMIN_BASE}/feishu/config/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // ==================== Coordinate API ====================
+  listActiveSessions: () => request<CoordinateSession[]>(`${API_BASE}/coordinate/sessions`),
+
+  getSessionHistory: (taskId: string) =>
+    request<CoordinateMessage[]>(`${API_BASE}/coordinate/sessions/${taskId}/history`),
+
+  sendSessionMessage: (taskId: string, message: string) =>
+    request<{ message: string }>(`${API_BASE}/coordinate/sessions/${taskId}/send`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+}
+
+// ==================== Cron Types ====================
+export interface CronJob {
+  id: string
+  name: string
+  schedule: string
+  enabled: boolean
+  agent_id: string
+  prompt: string
+  metadata?: Record<string, string>
+  last_run?: string
+  next_run?: string
+  last_status?: string
+  last_error?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCronJobRequest {
+  name: string
+  schedule: string
+  agent_id: string
+  prompt: string
+  enabled?: boolean
+  metadata?: Record<string, string>
+}
+
+export interface UpdateCronJobRequest {
+  name?: string
+  schedule?: string
+  agent_id?: string
+  prompt?: string
+  enabled?: boolean
+  metadata?: Record<string, string>
+}
+
+// ==================== Channel Types ====================
+export interface SendChannelMessageRequest {
+  channel_type: string
+  channel_id: string
+  content: string
+  reply_to?: string
+}
+
+export interface FeishuConfig {
+  id: string
+  name: string
+  app_id: string
+  app_secret: string
+  verification_token: string
+  encrypt_key: string
+  bot_name: string
+  default_agent_id?: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SaveFeishuConfigRequest {
+  id?: string
+  name: string
+  app_id: string
+  app_secret?: string
+  verification_token?: string
+  encrypt_key?: string
+  bot_name?: string
+  default_agent_id?: string
+}
+
+export interface FeishuConfigItem {
+  id: string
+  name: string
+  app_id: string
+  app_secret: string
+  verification_token: string
+  encrypt_key: string
+  bot_name: string
+  default_agent_id?: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ==================== Coordinate Types ====================
+export interface CoordinateSession {
+  task_id: string
+  agent_id: string
+  agent_name: string
+  status: string
+  prompt: string
+  turn_count: number
+  started_at: string
+  updated_at: string
+}
+
+export interface CoordinateMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
 }

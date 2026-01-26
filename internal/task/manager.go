@@ -68,6 +68,9 @@ type Manager struct {
 	running   map[string]context.CancelFunc // taskID -> cancel func
 	runningMu sync.Mutex
 
+	// Lane Queue (串行执行队列，防止同一 Backend 的并发请求)
+	laneQueue *LaneQueue
+
 	// 事件广播
 	eventSubs   map[string][]chan *TaskEvent // taskID → subscriber channels
 	eventSubsMu sync.RWMutex
@@ -123,6 +126,7 @@ func NewManager(store Store, agentMgr *agent.Manager, sessionMgr *session.Manage
 		ctx:           ctx,
 		cancel:        cancel,
 		running:       make(map[string]context.CancelFunc),
+		laneQueue:     NewLaneQueue(nil), // 使用默认配置
 		eventSubs:     make(map[string][]chan *TaskEvent),
 	}
 }
@@ -627,8 +631,15 @@ func (m *Manager) executeTask(task *Task) {
 
 	log.Info("executing task", "task_id", task.ID, "agent_id", task.AgentID)
 
-	// 执行任务（首轮）
-	err := m.doExecute(ctx, task)
+	// 获取 lane key（Provider + Adapter 组合）
+	laneKey := m.getLaneKey(task)
+
+	// 通过 lane queue 串行执行（防止同一 backend 的并发请求）
+	var err error
+	done := m.laneQueue.Enqueue(laneKey, func() {
+		err = m.doExecute(ctx, task)
+	})
+	<-done // 等待 lane 执行完成
 
 	if err != nil {
 		// 执行失败 → 终态
@@ -1033,4 +1044,32 @@ func (m *Manager) sendWebhook(task *Task) {
 	} else {
 		log.Warn("webhook: non-2xx response", "task_id", task.ID, "url", task.WebhookURL, "status", resp.StatusCode)
 	}
+}
+
+// getLaneKey 获取任务的 lane key（Provider + Adapter 组合）
+// 同一 lane 的任务将串行执行，防止同一 backend 的并发请求
+func (m *Manager) getLaneKey(task *Task) string {
+	providerID := ""
+
+	// 从 Agent 配置获取 Provider ID
+	if m.agentMgr != nil && task.AgentID != "" {
+		if fullConfig, err := m.agentMgr.GetFullConfig(task.AgentID); err == nil && fullConfig.Provider != nil {
+			providerID = fullConfig.Provider.ID
+		}
+	}
+
+	// 如果获取不到 Provider ID，使用 AgentID 作为 fallback
+	if providerID == "" {
+		providerID = task.AgentID
+	}
+
+	return GetLaneKey(providerID, task.AgentType)
+}
+
+// GetLaneStats 获取 lane queue 统计信息
+func (m *Manager) GetLaneStats() *LaneStats {
+	if m.laneQueue == nil {
+		return nil
+	}
+	return m.laneQueue.Stats()
 }

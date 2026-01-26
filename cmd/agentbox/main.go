@@ -151,23 +151,28 @@ func main() {
 
 	// 创建 HTTP 服务器
 	server := api.NewServer(&api.Deps{
-		Auth:        application.Auth,
-		Session:     application.Session,
-		Registry:    application.AgentRegistry,
-		Container:   application.Container,
-		Provider:    application.Provider,
-		Runtime:     application.Runtime,
-		MCP:         application.MCP,
-		Skill:       application.Skill,
-		Task:        application.Task,
-		Webhook:     application.Webhook,
-		Agent:       application.Agent,
-		History:     application.History,
-		Batch:       application.Batch,
-		GC:          application.GC,
-		Settings:    application.Settings,
-		FilesConfig: cfg.Files,
-		FileStore:   fileStore,
+		Auth:          application.Auth,
+		Session:       application.Session,
+		Registry:      application.AgentRegistry,
+		Container:     application.Container,
+		Provider:      application.Provider,
+		Runtime:       application.Runtime,
+		MCP:           application.MCP,
+		Skill:         application.Skill,
+		Task:          application.Task,
+		Webhook:       application.Webhook,
+		Agent:         application.Agent,
+		History:       application.History,
+		Batch:         application.Batch,
+		GC:            application.GC,
+		Settings:      application.Settings,
+		Cron:          application.Cron,
+		Channel:       application.Channel,
+		FeishuChannel: application.FeishuChannel,
+		Plugin:        application.Plugin,
+		Coordinate:    application.Coordinate,
+		FilesConfig:   cfg.Files,
+		FileStore:     fileStore,
 	})
 
 	// 打印 API 路由信息
@@ -228,6 +233,8 @@ func printRoutes() {
 	fmt.Println("  *      /api/v1/files/*                - File upload (CRUD)")
 	fmt.Println("  *      /api/v1/webhooks/*             - Webhook management (CRUD)")
 	fmt.Println("  *      /api/v1/history/*              - Execution history (Read)")
+	fmt.Println("  *      /api/v1/coordinate/*           - Cross-session coordination")
+	fmt.Println("  POST   /api/v1/webhooks/feishu        - Feishu event callback")
 	fmt.Println()
 	fmt.Println("Admin API (平台管理):")
 	fmt.Println("  *      /api/v1/admin/runtimes/*       - Runtime management")
@@ -236,5 +243,7 @@ func printRoutes() {
 	fmt.Println("  *      /api/v1/admin/images/*         - Image management")
 	fmt.Println("  *      /api/v1/admin/system/*         - System management")
 	fmt.Println("  *      /api/v1/admin/settings/*       - Business settings")
+	fmt.Println("  *      /api/v1/admin/crons/*          - Cron job management")
+	fmt.Println("  *      /api/v1/admin/channels/*       - Channel management (Feishu, etc.)")
 	fmt.Println()
 }

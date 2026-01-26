@@ -13,6 +13,7 @@ func AutoMigrate() error {
 	models := []interface{}{
 		&UserModel{},
 		&APIKeyModel{},
+		&AuthProfileModel{},
 		&MCPServerModel{},
 		&SkillModel{},
 		&SessionModel{},
@@ -23,6 +24,7 @@ func AutoMigrate() error {
 		&HistoryModel{},
 		&BatchModel{},
 		&BatchTaskModel{},
+		&FileModel{},
 	}
 
 	for _, model := range models {

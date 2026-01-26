@@ -15,6 +15,8 @@ import {
   LayoutDashboard,
   Wrench,
   Users,
+  Clock,
+  MessageSquare,
 } from 'lucide-react'
 import { AgentBoxLogo } from '@/components/icons/agentbox-logo'
 import { type SidebarData } from '../types'
@@ -73,6 +75,8 @@ export function getSidebarData(role: string): SidebarData {
         items: [
           { title: 'MCP Servers', url: '/mcp-servers', icon: Server },
           { title: 'Skills', url: '/skills', icon: Zap },
+          { title: 'Cron Jobs', url: '/crons', icon: Clock },
+          { title: 'Channels', url: '/channels', icon: MessageSquare },
         ],
       },
       {

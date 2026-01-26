@@ -1060,3 +1060,81 @@ export interface NotifySettings {
   notify_on_failed: boolean
   notify_on_batch_complete: boolean
 }
+
+// ==================== Auth Profile Types (API Key Rotation) ====================
+
+export interface AuthProfile {
+  id: string
+  provider_id: string
+  key_masked: string          // 脱敏的 Key（显示用）
+  priority: number            // 优先级（0=最高）
+  is_enabled: boolean
+  cooldown_until?: string     // 冷却结束时间
+  fail_count: number
+  success_count: number
+  last_used_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RotatorStats {
+  total_profiles: number
+  active_profiles: number
+  all_in_cooldown: boolean
+  next_available_in: string
+}
+
+export interface AddAuthProfileRequest {
+  api_key: string
+  priority?: number
+}
+
+// ==================== Feishu Channel Types ====================
+
+export interface FeishuConfig {
+  id: string
+  name: string
+  app_id: string
+  app_secret: string           // 脱敏显示
+  verification_token?: string  // 脱敏显示
+  encrypt_key?: string         // 脱敏显示
+  bot_name?: string
+  default_agent_id?: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateFeishuConfigRequest {
+  name: string
+  app_id: string
+  app_secret: string
+  verification_token?: string
+  encrypt_key?: string
+  bot_name?: string
+  default_agent_id?: string
+}
+
+export interface UpdateFeishuConfigRequest {
+  id: string
+  name?: string
+  app_id?: string
+  app_secret?: string          // 可选，不提供则保持原值
+  verification_token?: string
+  encrypt_key?: string
+  bot_name?: string
+  default_agent_id?: string
+}
+
+export interface FeishuMessageLog {
+  id: string
+  chat_id: string
+  sender_id: string
+  sender_name: string
+  content: string
+  message_type: string
+  reply_id?: string
+  task_id?: string
+  received_at: string
+  created_at: string
+}

@@ -282,3 +282,21 @@ type APIKeyModel struct {
 func (APIKeyModel) TableName() string {
 	return "api_keys"
 }
+
+// AuthProfileModel represents an API key credential with rotation support
+type AuthProfileModel struct {
+	BaseModel
+	ProviderID    string     `gorm:"size:64;index;not null" json:"provider_id"`
+	EncryptedKey  string     `gorm:"type:text;not null" json:"-"`
+	KeyMasked     string     `gorm:"size:64" json:"key_masked"`
+	Priority      int        `gorm:"default:0" json:"priority"`
+	IsEnabled     bool       `gorm:"default:true" json:"is_enabled"`
+	CooldownUntil *time.Time `json:"cooldown_until"`
+	FailCount     int        `gorm:"default:0" json:"fail_count"`
+	SuccessCount  int        `gorm:"default:0" json:"success_count"`
+	LastUsedAt    *time.Time `json:"last_used_at"`
+}
+
+func (AuthProfileModel) TableName() string {
+	return "auth_profiles"
+}

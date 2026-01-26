@@ -37,6 +37,12 @@ func (h *ProviderHandler) RegisterRoutes(r *gin.RouterGroup) {
 		providers.POST("/:id/verify", h.VerifyKey)
 		providers.DELETE("/:id/key", h.DeleteKey)
 		providers.GET("/:id/models", h.FetchModels)
+
+		// Auth Profile rotation
+		providers.GET("/:id/profiles", h.ListAuthProfiles)
+		providers.POST("/:id/profiles", h.AddAuthProfile)
+		providers.DELETE("/:id/profiles/:profileId", h.RemoveAuthProfile)
+		providers.GET("/:id/rotation-stats", h.GetRotationStats)
 	}
 }
 
@@ -419,4 +425,152 @@ func (h *ProviderHandler) ProbeModels(c *gin.Context) {
 	}
 
 	Success(c, models)
+}
+
+// --- Auth Profile Rotation ---
+
+// AuthProfileResponse represents a safe auth profile for API response (no encrypted key)
+type AuthProfileResponse struct {
+	ID            string `json:"id"`
+	ProviderID    string `json:"provider_id"`
+	KeyMasked     string `json:"key_masked"`
+	Priority      int    `json:"priority"`
+	IsEnabled     bool   `json:"is_enabled"`
+	CooldownUntil string `json:"cooldown_until,omitempty"`
+	FailCount     int    `json:"fail_count"`
+	SuccessCount  int    `json:"success_count"`
+	LastUsedAt    string `json:"last_used_at,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+// ListAuthProfiles godoc
+// @Summary List auth profiles for a provider
+// @Tags Providers
+// @Produce json
+// @Param id path string true "Provider ID"
+// @Success 200 {object} Response{data=[]AuthProfileResponse}
+// @Router /providers/{id}/profiles [get]
+func (h *ProviderHandler) ListAuthProfiles(c *gin.Context) {
+	id := c.Param("id")
+
+	profiles := h.manager.ListAuthProfiles(id)
+	if profiles == nil {
+		Success(c, []AuthProfileResponse{})
+		return
+	}
+
+	// Convert to safe response (without encrypted key)
+	response := make([]AuthProfileResponse, 0, len(profiles))
+	for _, p := range profiles {
+		r := AuthProfileResponse{
+			ID:           p.ID,
+			ProviderID:   p.ProviderID,
+			KeyMasked:    p.KeyMasked,
+			Priority:     p.Priority,
+			IsEnabled:    p.IsEnabled,
+			FailCount:    p.FailCount,
+			SuccessCount: p.SuccessCount,
+			CreatedAt:    p.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt:    p.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+		if !p.CooldownUntil.IsZero() {
+			r.CooldownUntil = p.CooldownUntil.Format("2006-01-02T15:04:05Z")
+		}
+		if !p.LastUsedAt.IsZero() {
+			r.LastUsedAt = p.LastUsedAt.Format("2006-01-02T15:04:05Z")
+		}
+		response = append(response, r)
+	}
+
+	Success(c, response)
+}
+
+// AddAuthProfileRequest represents the request body for adding an auth profile
+type AddAuthProfileRequest struct {
+	APIKey   string `json:"api_key" binding:"required"`
+	Priority int    `json:"priority"`
+}
+
+// AddAuthProfile godoc
+// @Summary Add an auth profile for a provider
+// @Tags Providers
+// @Accept json
+// @Produce json
+// @Param id path string true "Provider ID"
+// @Param request body AddAuthProfileRequest true "Auth profile"
+// @Success 201 {object} Response{data=AuthProfileResponse}
+// @Router /providers/{id}/profiles [post]
+func (h *ProviderHandler) AddAuthProfile(c *gin.Context) {
+	id := c.Param("id")
+
+	var req AddAuthProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleError(c, apperr.Validation(err.Error()))
+		return
+	}
+
+	profile, err := h.manager.AddAuthProfile(id, req.APIKey, req.Priority)
+	if err != nil {
+		HandleError(c, apperr.Wrap(err, "failed to add auth profile"))
+		return
+	}
+
+	// Convert to safe response (without encrypted key)
+	response := AuthProfileResponse{
+		ID:           profile.ID,
+		ProviderID:   profile.ProviderID,
+		KeyMasked:    profile.KeyMasked,
+		Priority:     profile.Priority,
+		IsEnabled:    profile.IsEnabled,
+		FailCount:    profile.FailCount,
+		SuccessCount: profile.SuccessCount,
+		CreatedAt:    profile.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:    profile.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+
+	Created(c, response)
+}
+
+// RemoveAuthProfile godoc
+// @Summary Remove an auth profile
+// @Tags Providers
+// @Produce json
+// @Param id path string true "Provider ID"
+// @Param profileId path string true "Profile ID"
+// @Success 200 {object} Response
+// @Router /providers/{id}/profiles/{profileId} [delete]
+func (h *ProviderHandler) RemoveAuthProfile(c *gin.Context) {
+	id := c.Param("id")
+	profileID := c.Param("profileId")
+
+	if err := h.manager.RemoveAuthProfile(id, profileID); err != nil {
+		HandleError(c, apperr.Wrap(err, "failed to remove auth profile"))
+		return
+	}
+
+	Success(c, gin.H{"deleted": profileID})
+}
+
+// GetRotationStats godoc
+// @Summary Get rotation stats for a provider
+// @Tags Providers
+// @Produce json
+// @Param id path string true "Provider ID"
+// @Success 200 {object} Response
+// @Router /providers/{id}/rotation-stats [get]
+func (h *ProviderHandler) GetRotationStats(c *gin.Context) {
+	id := c.Param("id")
+
+	stats := h.manager.GetRotatorStats(id)
+	if stats == nil {
+		stats = map[string]interface{}{
+			"total_profiles":    0,
+			"active_profiles":   0,
+			"all_in_cooldown":   false,
+			"next_available_in": "0s",
+		}
+	}
+
+	Success(c, stats)
 }

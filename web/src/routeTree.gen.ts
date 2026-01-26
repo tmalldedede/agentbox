@@ -39,8 +39,10 @@ import { Route as AuthenticatedHistoryIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedFilesIndexRouteImport } from './routes/_authenticated/files/index'
 import { Route as AuthenticatedDemoIndexRouteImport } from './routes/_authenticated/demo/index'
+import { Route as AuthenticatedCronsIndexRouteImport } from './routes/_authenticated/crons/index'
 import { Route as AuthenticatedCommandCenterIndexRouteImport } from './routes/_authenticated/command-center/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
+import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedBatchesIndexRouteImport } from './routes/_authenticated/batches/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedApiPlaygroundIndexRouteImport } from './routes/_authenticated/api-playground/index'
@@ -248,6 +250,11 @@ const AuthenticatedDemoIndexRoute = AuthenticatedDemoIndexRouteImport.update({
   path: '/demo/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCronsIndexRoute = AuthenticatedCronsIndexRouteImport.update({
+  id: '/crons/',
+  path: '/crons/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCommandCenterIndexRoute =
   AuthenticatedCommandCenterIndexRouteImport.update({
     id: '/command-center/',
@@ -259,6 +266,12 @@ const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
   path: '/chats/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedChannelsIndexRoute =
+  AuthenticatedChannelsIndexRouteImport.update({
+    id: '/channels/',
+    path: '/channels/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBatchesIndexRoute =
   AuthenticatedBatchesIndexRouteImport.update({
     id: '/batches/',
@@ -567,8 +580,10 @@ export interface FileRoutesByFullPath {
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/batches': typeof AuthenticatedBatchesIndexRoute
+  '/channels': typeof AuthenticatedChannelsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/command-center': typeof AuthenticatedCommandCenterIndexRoute
+  '/crons': typeof AuthenticatedCronsIndexRoute
   '/demo': typeof AuthenticatedDemoIndexRoute
   '/files': typeof AuthenticatedFilesIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
@@ -642,8 +657,10 @@ export interface FileRoutesByTo {
   '/api-playground': typeof AuthenticatedApiPlaygroundIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/batches': typeof AuthenticatedBatchesIndexRoute
+  '/channels': typeof AuthenticatedChannelsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/command-center': typeof AuthenticatedCommandCenterIndexRoute
+  '/crons': typeof AuthenticatedCronsIndexRoute
   '/demo': typeof AuthenticatedDemoIndexRoute
   '/files': typeof AuthenticatedFilesIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
@@ -720,8 +737,10 @@ export interface FileRoutesById {
   '/_authenticated/api-playground/': typeof AuthenticatedApiPlaygroundIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/batches/': typeof AuthenticatedBatchesIndexRoute
+  '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/command-center/': typeof AuthenticatedCommandCenterIndexRoute
+  '/_authenticated/crons/': typeof AuthenticatedCronsIndexRoute
   '/_authenticated/demo/': typeof AuthenticatedDemoIndexRoute
   '/_authenticated/files/': typeof AuthenticatedFilesIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
@@ -798,8 +817,10 @@ export interface FileRouteTypes {
     | '/api-playground'
     | '/apps'
     | '/batches'
+    | '/channels'
     | '/chats'
     | '/command-center'
+    | '/crons'
     | '/demo'
     | '/files'
     | '/help-center'
@@ -873,8 +894,10 @@ export interface FileRouteTypes {
     | '/api-playground'
     | '/apps'
     | '/batches'
+    | '/channels'
     | '/chats'
     | '/command-center'
+    | '/crons'
     | '/demo'
     | '/files'
     | '/help-center'
@@ -950,8 +973,10 @@ export interface FileRouteTypes {
     | '/_authenticated/api-playground/'
     | '/_authenticated/apps/'
     | '/_authenticated/batches/'
+    | '/_authenticated/channels/'
     | '/_authenticated/chats/'
     | '/_authenticated/command-center/'
+    | '/_authenticated/crons/'
     | '/_authenticated/demo/'
     | '/_authenticated/files/'
     | '/_authenticated/help-center/'
@@ -1197,6 +1222,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDemoIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/crons/': {
+      id: '/_authenticated/crons/'
+      path: '/crons'
+      fullPath: '/crons'
+      preLoaderRoute: typeof AuthenticatedCronsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/command-center/': {
       id: '/_authenticated/command-center/'
       path: '/command-center'
@@ -1209,6 +1241,13 @@ declare module '@tanstack/react-router' {
       path: '/chats'
       fullPath: '/chats'
       preLoaderRoute: typeof AuthenticatedChatsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/channels/': {
+      id: '/_authenticated/channels/'
+      path: '/channels'
+      fullPath: '/channels'
+      preLoaderRoute: typeof AuthenticatedChannelsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/batches/': {
@@ -1610,8 +1649,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedApiPlaygroundIndexRoute: typeof AuthenticatedApiPlaygroundIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedBatchesIndexRoute: typeof AuthenticatedBatchesIndexRoute
+  AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCommandCenterIndexRoute: typeof AuthenticatedCommandCenterIndexRoute
+  AuthenticatedCronsIndexRoute: typeof AuthenticatedCronsIndexRoute
   AuthenticatedDemoIndexRoute: typeof AuthenticatedDemoIndexRoute
   AuthenticatedFilesIndexRoute: typeof AuthenticatedFilesIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
@@ -1649,8 +1690,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApiPlaygroundIndexRoute: AuthenticatedApiPlaygroundIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedBatchesIndexRoute: AuthenticatedBatchesIndexRoute,
+  AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCommandCenterIndexRoute: AuthenticatedCommandCenterIndexRoute,
+  AuthenticatedCronsIndexRoute: AuthenticatedCronsIndexRoute,
   AuthenticatedDemoIndexRoute: AuthenticatedDemoIndexRoute,
   AuthenticatedFilesIndexRoute: AuthenticatedFilesIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,

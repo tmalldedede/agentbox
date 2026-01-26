@@ -5,6 +5,7 @@ import { ProviderActionDialog } from './provider-action-dialog'
 import { DeleteProviderDialog } from './delete-provider-dialog'
 import { ConfigureKeyDialog } from './configure-key-dialog'
 import { DeleteKeyDialog } from './delete-key-dialog'
+import { AuthProfilesDialog } from './auth-profiles-dialog'
 
 export function ProvidersDialogs() {
   const { open, setOpen, currentRow, setCurrentRow } = useProvidersContext()
@@ -72,6 +73,16 @@ export function ProvidersDialogs() {
           <DeleteKeyDialog
             key={`delete-key-${currentRow.id}`}
             open={open === 'delete-key'}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) closeDialog()
+            }}
+            provider={currentRow}
+          />
+
+          {/* Manage API Keys (Multi-Key Rotation) */}
+          <AuthProfilesDialog
+            key={`manage-keys-${currentRow.id}`}
+            open={open === 'manage-keys'}
             onOpenChange={(isOpen) => {
               if (!isOpen) closeDialog()
             }}

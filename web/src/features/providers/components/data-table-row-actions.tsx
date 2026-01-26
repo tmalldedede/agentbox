@@ -1,6 +1,6 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
-import { Key, Shield, Trash2, ExternalLink, Pencil } from 'lucide-react'
+import { Key, Shield, Trash2, ExternalLink, Pencil, KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -43,6 +43,17 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           {provider.is_configured ? 'Update Key' : 'Configure Key'}
           <DropdownMenuShortcut>
             <Key size={16} />
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            setCurrentRow(provider)
+            setOpen('manage-keys')
+          }}
+        >
+          Manage Keys
+          <DropdownMenuShortcut>
+            <KeyRound size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
         {provider.is_configured && (

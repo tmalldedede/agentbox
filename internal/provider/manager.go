@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tmalldedede/agentbox/internal/apperr"
 )
 
 // Manager manages provider configurations and API keys
@@ -19,6 +21,7 @@ type Manager struct {
 	mu        sync.RWMutex
 	providers map[string]*Provider
 	keys      map[string]*ProviderKeyData // providerID -> key data
+	rotators  map[string]*ProfileRotator  // providerID -> rotator
 	crypto    *Crypto
 	dataDir   string
 }
@@ -28,6 +31,7 @@ func NewManager(dataDir string, encryptionKey string) *Manager {
 	m := &Manager{
 		providers: make(map[string]*Provider),
 		keys:      make(map[string]*ProviderKeyData),
+		rotators:  make(map[string]*ProfileRotator),
 		crypto:    NewCrypto(encryptionKey),
 		dataDir:   dataDir,
 	}
@@ -808,4 +812,164 @@ func (m *Manager) saveCustomProviders() error {
 	}
 
 	return os.WriteFile(m.customProvidersFile(), data, 0644)
+}
+
+// --- Auth Profile Rotation ---
+
+// GetDecryptedKeyWithRotation returns the decrypted API key using rotation
+// Returns: apiKey, profileID, error
+// If no profiles configured, falls back to single key mode
+func (m *Manager) GetDecryptedKeyWithRotation(providerID string) (string, string, error) {
+	m.mu.RLock()
+	rotator, hasRotator := m.rotators[providerID]
+	m.mu.RUnlock()
+
+	// If rotator exists and has profiles, use it
+	if hasRotator && rotator != nil {
+		profile := rotator.GetActiveProfile()
+		if profile != nil {
+			apiKey, err := m.crypto.Decrypt(profile.EncryptedKey)
+			if err != nil {
+				return "", "", fmt.Errorf("failed to decrypt profile key: %w", err)
+			}
+			return apiKey, profile.ID, nil
+		}
+		// All profiles in cooldown
+		if rotator.AllInCooldown() {
+			waitTime := rotator.NextAvailableIn()
+			return "", "", fmt.Errorf("all API keys in cooldown, next available in %v", waitTime)
+		}
+	}
+
+	// Fall back to single key mode
+	apiKey, err := m.GetDecryptedKey(providerID)
+	if err != nil {
+		return "", "", err
+	}
+	return apiKey, "", nil // Empty profileID means single key mode
+}
+
+// MarkProfileFailed marks a profile as failed (for rotation)
+func (m *Manager) MarkProfileFailed(providerID, profileID string, reason string) {
+	m.mu.RLock()
+	rotator, ok := m.rotators[providerID]
+	m.mu.RUnlock()
+
+	if ok && rotator != nil && profileID != "" {
+		// Convert reason string to FailoverReason
+		var failReason = classifyReasonString(reason)
+		rotator.MarkFailed(profileID, failReason)
+	}
+}
+
+// MarkProfileSuccess marks a profile as successful (for rotation)
+func (m *Manager) MarkProfileSuccess(providerID, profileID string) {
+	m.mu.RLock()
+	rotator, ok := m.rotators[providerID]
+	m.mu.RUnlock()
+
+	if ok && rotator != nil && profileID != "" {
+		rotator.MarkSuccess(profileID)
+	}
+}
+
+// AddAuthProfile adds a new auth profile for a provider
+func (m *Manager) AddAuthProfile(providerID string, apiKey string, priority int) (*AuthProfile, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.providers[providerID]; !ok {
+		return nil, ErrProviderNotFound
+	}
+
+	encrypted, err := m.crypto.Encrypt(apiKey)
+	if err != nil {
+		return nil, ErrEncryptionFailed
+	}
+
+	profile := &AuthProfile{
+		ID:           fmt.Sprintf("prof-%s", time.Now().Format("20060102150405")),
+		ProviderID:   providerID,
+		EncryptedKey: encrypted,
+		KeyMasked:    MaskAPIKey(apiKey),
+		Priority:     priority,
+		IsEnabled:    true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	// Get or create rotator
+	rotator, ok := m.rotators[providerID]
+	if !ok {
+		rotator = NewProfileRotator(nil, nil)
+		m.rotators[providerID] = rotator
+	}
+	rotator.AddProfile(profile)
+
+	return profile, nil
+}
+
+// ListAuthProfiles returns all auth profiles for a provider
+func (m *Manager) ListAuthProfiles(providerID string) []*AuthProfile {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rotator, ok := m.rotators[providerID]
+	if !ok {
+		return nil
+	}
+	return rotator.GetAllProfiles()
+}
+
+// RemoveAuthProfile removes an auth profile
+func (m *Manager) RemoveAuthProfile(providerID, profileID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	rotator, ok := m.rotators[providerID]
+	if !ok {
+		return ErrProviderNotFound
+	}
+	if !rotator.RemoveProfile(profileID) {
+		return errors.New("profile not found")
+	}
+	return nil
+}
+
+// GetRotatorStats returns rotation statistics for a provider
+func (m *Manager) GetRotatorStats(providerID string) map[string]interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rotator, ok := m.rotators[providerID]
+	if !ok {
+		return nil
+	}
+
+	profiles := rotator.GetAllProfiles()
+	stats := map[string]interface{}{
+		"total_profiles":    len(profiles),
+		"active_profiles":   rotator.ActiveCount(),
+		"all_in_cooldown":   rotator.AllInCooldown(),
+		"next_available_in": rotator.NextAvailableIn().String(),
+	}
+	return stats
+}
+
+// classifyReasonString converts a reason string to apperr.FailoverReason
+func classifyReasonString(reason string) apperr.FailoverReason {
+	reason = strings.ToLower(reason)
+	if strings.Contains(reason, "rate") || strings.Contains(reason, "429") {
+		return apperr.ReasonRateLimit
+	}
+	if strings.Contains(reason, "auth") || strings.Contains(reason, "401") || strings.Contains(reason, "403") {
+		return apperr.ReasonAuthFailed
+	}
+	if strings.Contains(reason, "timeout") {
+		return apperr.ReasonTimeout
+	}
+	if strings.Contains(reason, "overload") || strings.Contains(reason, "503") {
+		return apperr.ReasonOverloaded
+	}
+	return apperr.ReasonUnknown
 }

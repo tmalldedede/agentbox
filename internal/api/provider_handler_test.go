@@ -327,3 +327,237 @@ func TestProviderDeleteBuiltIn(t *testing.T) {
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+// ==================== Auth Profile Tests ====================
+
+func TestAuthProfileList_Empty(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/anthropic/profiles", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, resp.Code)
+
+	profiles, ok := resp.Data.([]interface{})
+	require.True(t, ok)
+	assert.Len(t, profiles, 0, "Should have no profiles initially")
+}
+
+func TestAuthProfileAddAndList(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	// Add first profile
+	addReq := AddAuthProfileRequest{
+		APIKey:   "sk-test-key-12345",
+		Priority: 0,
+	}
+
+	body, _ := json.Marshal(addReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/anthropic/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, resp.Code)
+
+	profile, ok := resp.Data.(map[string]interface{})
+	require.True(t, ok)
+	assert.Contains(t, profile["key_masked"], "...") // Masked key format: first4...last4
+	assert.Equal(t, float64(0), profile["priority"])
+	assert.Equal(t, true, profile["is_enabled"])
+	assert.NotContains(t, profile, "encrypted_key", "Should not expose encrypted key")
+
+	// Add second profile with different priority
+	addReq2 := AddAuthProfileRequest{
+		APIKey:   "sk-another-key-67890",
+		Priority: 1,
+	}
+
+	body, _ = json.Marshal(addReq2)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/anthropic/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	// List profiles
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/anthropic/profiles", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	profiles, ok := resp.Data.([]interface{})
+	require.True(t, ok)
+	assert.Len(t, profiles, 2, "Should have 2 profiles")
+}
+
+func TestAuthProfileRemove(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	// Add a profile
+	addReq := AddAuthProfileRequest{
+		APIKey:   "sk-to-delete-key",
+		Priority: 0,
+	}
+
+	body, _ := json.Marshal(addReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/anthropic/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	profile := resp.Data.(map[string]interface{})
+	profileID := profile["id"].(string)
+
+	// Delete the profile
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/providers/anthropic/profiles/"+profileID, nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	deleteData := resp.Data.(map[string]interface{})
+	assert.Equal(t, profileID, deleteData["deleted"])
+
+	// Verify profile is gone
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/anthropic/profiles", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	profiles := resp.Data.([]interface{})
+	assert.Len(t, profiles, 0)
+}
+
+func TestRotationStats_Empty(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/anthropic/rotation-stats", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, resp.Code)
+
+	stats, ok := resp.Data.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, float64(0), stats["total_profiles"])
+	assert.Equal(t, float64(0), stats["active_profiles"])
+	assert.Equal(t, false, stats["all_in_cooldown"])
+}
+
+func TestRotationStats_WithProfiles(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	// Add profiles
+	for i := 0; i < 3; i++ {
+		addReq := AddAuthProfileRequest{
+			APIKey:   "sk-test-key-" + string(rune('a'+i)),
+			Priority: i,
+		}
+		body, _ := json.Marshal(addReq)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/anthropic/profiles", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusCreated, w.Code)
+	}
+
+	// Get stats
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/anthropic/rotation-stats", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	stats, ok := resp.Data.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, float64(3), stats["total_profiles"])
+	assert.Equal(t, float64(3), stats["active_profiles"])
+	assert.Equal(t, false, stats["all_in_cooldown"])
+}
+
+func TestAuthProfileAdd_InvalidProvider(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	addReq := AddAuthProfileRequest{
+		APIKey:   "sk-test-key",
+		Priority: 0,
+	}
+
+	body, _ := json.Marshal(addReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/nonexistent/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should return error for non-existent provider
+	assert.NotEqual(t, http.StatusCreated, w.Code)
+}
+
+func TestAuthProfileAdd_MissingAPIKey(t *testing.T) {
+	router, _, tempDir := setupProviderTestRouter(t)
+	defer os.RemoveAll(tempDir)
+
+	// Empty request (missing api_key)
+	addReq := map[string]interface{}{
+		"priority": 0,
+	}
+
+	body, _ := json.Marshal(addReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/anthropic/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}

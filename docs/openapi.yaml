@@ -1706,6 +1706,85 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponseAnyArray'
 
+  /api/v1/admin/providers/{id}/profiles:
+    get:
+      tags: [Providers]
+      summary: 列出 Auth Profiles（多 Key 轮换）
+      description: 获取 Provider 配置的所有 API Key profiles，用于多 Key 轮换
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuthProfileArray'
+    post:
+      tags: [Providers]
+      summary: 添加 Auth Profile
+      description: 为 Provider 添加一个新的 API Key profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddAuthProfileRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuthProfile'
+
+  /api/v1/admin/providers/{id}/profiles/{profileId}:
+    delete:
+      tags: [Providers]
+      summary: 删除 Auth Profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: profileId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDelete'
+
+  /api/v1/admin/providers/{id}/rotation-stats:
+    get:
+      tags: [Providers]
+      summary: 获取轮换统计
+      description: 获取 Provider 的 API Key 轮换状态统计
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRotatorStats'
+
   /api/v1/admin/runtimes:
     get:
       tags: [Runtimes]
@@ -2583,6 +2662,62 @@ components:
     AnyObject:
       type: object
       additionalProperties: true
+
+    # Auth Profile (Multi-Key Rotation)
+    AuthProfile:
+      type: object
+      properties:
+        id: { type: string }
+        provider_id: { type: string }
+        key_masked: { type: string, description: '脱敏的 API Key（如 sk-...xxx）' }
+        priority: { type: integer, description: '优先级（0=最高）' }
+        is_enabled: { type: boolean }
+        cooldown_until: { type: string, format: date-time, description: '冷却结束时间' }
+        fail_count: { type: integer }
+        success_count: { type: integer }
+        last_used_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RotatorStats:
+      type: object
+      properties:
+        total_profiles: { type: integer }
+        active_profiles: { type: integer }
+        all_in_cooldown: { type: boolean }
+        next_available_in: { type: string, description: '下一个可用 Key 的等待时间' }
+
+    AddAuthProfileRequest:
+      type: object
+      required: [api_key]
+      properties:
+        api_key: { type: string }
+        priority: { type: integer, default: 0 }
+
+    ApiResponseAuthProfile:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthProfile'
+
+    ApiResponseAuthProfileArray:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/AuthProfile' }
+
+    ApiResponseRotatorStats:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RotatorStats'
 
     ApiResponseAny:
       allOf:

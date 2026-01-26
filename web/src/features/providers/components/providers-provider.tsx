@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import useDialogState from '@/hooks/use-dialog-state'
 import type { Provider } from '@/types'
 
-type ProvidersDialogType = 'add' | 'edit' | 'delete' | 'configure' | 'verify' | 'delete-key'
+type ProvidersDialogType = 'add' | 'edit' | 'delete' | 'configure' | 'verify' | 'delete-key' | 'manage-keys'
 
 type ProvidersContextType = {
   open: ProvidersDialogType | null

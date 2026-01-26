@@ -11,8 +11,12 @@ import (
 	"github.com/tmalldedede/agentbox/internal/agent"
 	"github.com/tmalldedede/agentbox/internal/auth"
 	"github.com/tmalldedede/agentbox/internal/batch"
+	"github.com/tmalldedede/agentbox/internal/channel"
+	"github.com/tmalldedede/agentbox/internal/channel/feishu"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
+	"github.com/tmalldedede/agentbox/internal/coordinate"
+	"github.com/tmalldedede/agentbox/internal/cron"
 	"github.com/tmalldedede/agentbox/internal/database"
 	"github.com/tmalldedede/agentbox/internal/engine"
 	_ "github.com/tmalldedede/agentbox/internal/engine/claude"   // 注册 Claude Code 适配器
@@ -21,6 +25,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/logger"
 	"github.com/tmalldedede/agentbox/internal/mcp"
+	"github.com/tmalldedede/agentbox/internal/plugin"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/runtime"
 	"github.com/tmalldedede/agentbox/internal/session"
@@ -68,6 +73,19 @@ type App struct {
 
 	// 业务配置
 	Settings *settings.Manager
+
+	// 多通道支持 (Phase 2)
+	Channel       *channel.Manager
+	FeishuChannel *feishu.Channel
+
+	// 定时任务 (Phase 1)
+	Cron *cron.Manager
+
+	// 插件系统 (Phase 1)
+	Plugin *plugin.Manager
+
+	// 跨会话协调 (Phase 2)
+	Coordinate *coordinate.Manager
 
 	// Redis 队列
 	RedisQueue *batch.RedisQueue
@@ -248,6 +266,39 @@ func (a *App) initialize() error {
 	})
 	log.Info("batch manager initialized")
 
+	// 16. 初始化 Plugin Manager (Phase 1)
+	a.Plugin = plugin.NewManager()
+	log.Info("plugin manager initialized")
+
+	// 16.5. 初始化 Coordinate Manager (Phase 2)
+	a.Coordinate = coordinate.NewManager(a.Task)
+	log.Info("coordinate manager initialized")
+
+	// 17. 初始化 Cron Manager (Phase 1)
+	cronStore := cron.NewDBStore()
+	a.Cron = cron.NewManager(cronStore, a.cronJobExecutor)
+	log.Info("cron manager initialized")
+
+	// 18. 初始化 Channel Manager (Phase 2)
+	a.Channel = channel.NewManager()
+
+	// 尝试加载飞书配置
+	feishuStore := feishu.NewStore()
+	if feishuCfg, err := feishuStore.GetEnabledConfig(); err == nil {
+		a.FeishuChannel = feishu.New(feishuCfg)
+		if err := a.Channel.Register(a.FeishuChannel); err != nil {
+			log.Warn("register feishu channel failed", "error", err)
+		} else {
+			log.Info("feishu channel registered")
+		}
+	} else {
+		log.Info("feishu channel not configured")
+	}
+
+	// 添加消息处理器（将消息转发到 Task API）
+	a.Channel.AddHandler(a.channelMessageHandler)
+	log.Info("channel manager initialized")
+
 	return nil
 }
 
@@ -255,6 +306,21 @@ func (a *App) initialize() error {
 func (a *App) Start() {
 	a.Task.Start()
 	a.GC.Start()
+
+	// 启动 Cron
+	if a.Cron != nil {
+		if err := a.Cron.Start(context.Background()); err != nil {
+			log.Error("start cron failed", "error", err)
+		}
+	}
+
+	// 启动 Channel
+	if a.Channel != nil {
+		if err := a.Channel.Start(context.Background()); err != nil {
+			log.Error("start channel failed", "error", err)
+		}
+	}
+
 	log.Info("app started")
 }
 
@@ -263,6 +329,18 @@ func (a *App) Close() error {
 	log.Info("closing app...")
 
 	// 按初始化的逆序关闭
+	if a.Channel != nil {
+		a.Channel.Stop()
+	}
+
+	if a.Cron != nil {
+		a.Cron.Stop()
+	}
+
+	if a.Plugin != nil {
+		a.Plugin.Shutdown()
+	}
+
 	if a.Batch != nil {
 		a.Batch.Shutdown()
 	}
@@ -298,4 +376,217 @@ func (a *App) Close() error {
 // ServerAddr 返回服务器监听地址
 func (a *App) ServerAddr() string {
 	return fmt.Sprintf("%s:%d", a.Config.Server.Host, a.Config.Server.Port)
+}
+
+// cronJobExecutor Cron 任务执行器
+func (a *App) cronJobExecutor(ctx context.Context, job *cron.Job) error {
+	log.Info("executing cron job", "id", job.ID, "name", job.Name, "agent_id", job.AgentID)
+
+	// 创建 Task
+	taskReq := &task.CreateTaskRequest{
+		AgentID: job.AgentID,
+		Prompt:  job.Prompt,
+	}
+
+	t, err := a.Task.CreateTask(taskReq)
+	if err != nil {
+		return fmt.Errorf("create task: %w", err)
+	}
+
+	log.Info("cron job task created", "cron_id", job.ID, "task_id", t.ID)
+	return nil
+}
+
+// channelMessageHandler 通道消息处理器
+func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) error {
+	log.Info("received channel message",
+		"channel", msg.ChannelType,
+		"chat_id", msg.ChannelID,
+		"sender", msg.SenderID,
+		"content", msg.Content,
+	)
+
+	// 获取 Agent ID（优先使用通道配置的默认 Agent）
+	agentID := a.getAgentForChannel(msg.ChannelType, msg.ChannelID)
+	if agentID == "" {
+		log.Warn("no agent configured for channel, ignoring message",
+			"channel", msg.ChannelType,
+			"chat_id", msg.ChannelID,
+		)
+		return nil
+	}
+
+	// 保存消息日志（仅飞书）
+	if msg.ChannelType == "feishu" {
+		a.saveFeishuMessageLog(msg, "")
+	}
+
+	// 创建 Task
+	taskReq := &task.CreateTaskRequest{
+		AgentID: agentID,
+		Prompt:  msg.Content,
+		Metadata: map[string]string{
+			"channel_type": msg.ChannelType,
+			"channel_id":   msg.ChannelID,
+			"message_id":   msg.ID,
+			"sender_id":    msg.SenderID,
+		},
+	}
+
+	t, err := a.Task.CreateTask(taskReq)
+	if err != nil {
+		log.Error("create task from channel message failed", "error", err)
+		// 发送错误提示到通道
+		a.sendChannelReply(msg.ChannelType, msg.ChannelID, msg.ID, "❌ 任务创建失败，请稍后重试")
+		return fmt.Errorf("create task: %w", err)
+	}
+
+	log.Info("channel message task created", "message_id", msg.ID, "task_id", t.ID)
+
+	// 更新消息日志关联 Task ID
+	if msg.ChannelType == "feishu" {
+		feishuStore := feishu.NewStore()
+		feishuStore.UpdateMessageTaskID(msg.ID, t.ID)
+	}
+
+	// 异步等待 Task 完成并回复
+	go a.waitAndReplyChannel(msg.ChannelType, msg.ChannelID, msg.ID, t.ID)
+
+	return nil
+}
+
+// getAgentForChannel 获取通道对应的 Agent ID
+func (a *App) getAgentForChannel(channelType, channelID string) string {
+	// 飞书：使用配置的 default_agent_id
+	if channelType == "feishu" && a.FeishuChannel != nil {
+		cfg := a.FeishuChannel.GetConfig()
+		if cfg != nil && cfg.DefaultAgentID != "" {
+			return cfg.DefaultAgentID
+		}
+	}
+
+	// 后备：使用第一个可用的 Agent
+	agents := a.Agent.List()
+	if len(agents) > 0 {
+		return agents[0].ID
+	}
+
+	return ""
+}
+
+// saveFeishuMessageLog 保存飞书消息日志
+func (a *App) saveFeishuMessageLog(msg *channel.Message, taskID string) {
+	store := feishu.NewStore()
+	msgLog := &feishu.MessageLog{
+		ID:          msg.ID,
+		ChatID:      msg.ChannelID,
+		SenderID:    msg.SenderID,
+		SenderName:  msg.SenderName,
+		Content:     msg.Content,
+		MessageType: msg.Metadata["message_type"],
+		ReplyID:     msg.ReplyTo,
+		TaskID:      taskID,
+		ReceivedAt:  msg.ReceivedAt,
+	}
+	if err := store.SaveMessageLog(msgLog); err != nil {
+		log.Warn("save feishu message log failed", "error", err)
+	}
+}
+
+// waitAndReplyChannel 等待 Task 完成并回复通道
+func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string) {
+	// 订阅任务事件
+	eventCh := a.Task.SubscribeEvents(taskID)
+	defer a.Task.UnsubscribeEvents(taskID, eventCh)
+
+	// 设置超时（10 分钟）
+	timeout := time.After(10 * time.Minute)
+
+	var result string
+	var completed bool
+
+	for !completed {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				// 通道关闭
+				completed = true
+				break
+			}
+
+			switch event.Type {
+			case "task.completed":
+				// 获取任务结果
+				t, err := a.Task.GetTask(taskID)
+				if err != nil {
+					log.Error("get completed task failed", "task_id", taskID, "error", err)
+					result = "❌ 获取结果失败"
+				} else if t.Result != nil && t.Result.Text != "" {
+					result = t.Result.Text
+				} else {
+					result = "✅ 任务已完成"
+				}
+				completed = true
+
+			case "task.failed":
+				// 获取错误信息
+				t, err := a.Task.GetTask(taskID)
+				if err != nil {
+					result = "❌ 任务执行失败"
+				} else if t.ErrorMessage != "" {
+					result = fmt.Sprintf("❌ 任务失败: %s", t.ErrorMessage)
+				} else {
+					result = "❌ 任务执行失败"
+				}
+				completed = true
+
+			case "task.cancelled":
+				result = "⚠️ 任务已取消"
+				completed = true
+			}
+
+		case <-timeout:
+			log.Warn("task timeout waiting for completion", "task_id", taskID)
+			result = "⏱️ 任务执行超时，请稍后查看结果"
+			completed = true
+		}
+	}
+
+	// 发送回复
+	if result != "" {
+		a.sendChannelReply(channelType, channelID, replyTo, result)
+	}
+}
+
+// sendChannelReply 发送通道回复
+func (a *App) sendChannelReply(channelType, channelID, replyTo, content string) {
+	if a.Channel == nil {
+		return
+	}
+
+	// 限制回复长度（飞书单条消息限制 4000 字符）
+	const maxLength = 3800
+	if len(content) > maxLength {
+		content = content[:maxLength] + "\n\n... (内容过长已截断)"
+	}
+
+	resp, err := a.Channel.Send(context.Background(), channelType, &channel.SendRequest{
+		ChannelID: channelID,
+		Content:   content,
+		ReplyTo:   replyTo,
+	})
+	if err != nil {
+		log.Error("send channel reply failed",
+			"channel", channelType,
+			"chat_id", channelID,
+			"error", err,
+		)
+		return
+	}
+
+	log.Info("channel reply sent",
+		"channel", channelType,
+		"chat_id", channelID,
+		"message_id", resp.MessageID,
+	)
 }
