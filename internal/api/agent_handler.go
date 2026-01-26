@@ -42,35 +42,35 @@ func (h *AgentHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 // CreateAgentReq represents a request to create an agent
 type CreateAgentReq struct {
-	ID                 string            `json:"id" binding:"required"`
-	Name               string            `json:"name" binding:"required"`
-	Description        string            `json:"description"`
-	Icon               string            `json:"icon"`
-	Adapter            string            `json:"adapter" binding:"required"`
-	ProviderID         string            `json:"provider_id" binding:"required"`
-	RuntimeID          string            `json:"runtime_id"`
-	Model              string            `json:"model"`
-	BaseURLOverride    string            `json:"base_url_override"`
-	ModelConfig        agent.ModelConfig  `json:"model_config"`
-	SkillIDs           []string          `json:"skill_ids"`
-	MCPServerIDs       []string          `json:"mcp_server_ids"`
-	SystemPrompt       string            `json:"system_prompt"`
-	AppendSystemPrompt string            `json:"append_system_prompt"`
+	ID                 string                 `json:"id" binding:"required"`
+	Name               string                 `json:"name" binding:"required"`
+	Description        string                 `json:"description"`
+	Icon               string                 `json:"icon"`
+	Adapter            string                 `json:"adapter" binding:"required"`
+	ProviderID         string                 `json:"provider_id" binding:"required"`
+	RuntimeID          string                 `json:"runtime_id"`
+	Model              string                 `json:"model"`
+	BaseURLOverride    string                 `json:"base_url_override"`
+	ModelConfig        agent.ModelConfig      `json:"model_config"`
+	SkillIDs           []string               `json:"skill_ids"`
+	MCPServerIDs       []string               `json:"mcp_server_ids"`
+	SystemPrompt       string                 `json:"system_prompt"`
+	AppendSystemPrompt string                 `json:"append_system_prompt"`
 	Permissions        agent.PermissionConfig `json:"permissions"`
-	Env                map[string]string `json:"env"`
-	APIAccess          string            `json:"api_access"`
-	RateLimit          int               `json:"rate_limit"`
-	WebhookURL         string            `json:"webhook_url"`
-	OutputFormat       string            `json:"output_format"`
-	Features           agent.FeatureConfig `json:"features"`
-	ConfigOverrides    map[string]string `json:"config_overrides"`
+	Env                map[string]string      `json:"env"`
+	APIAccess          string                 `json:"api_access"`
+	RateLimit          int                    `json:"rate_limit"`
+	WebhookURL         string                 `json:"webhook_url"`
+	OutputFormat       string                 `json:"output_format"`
+	Features           agent.FeatureConfig    `json:"features"`
+	ConfigOverrides    map[string]string      `json:"config_overrides"`
 }
 
 // ListPublic 公开 API - 列出可用 Agent（只返回 active）
 // GET /api/v1/agents
 func (h *AgentHandler) ListPublic(c *gin.Context) {
 	allAgents := h.manager.List()
-	var activeAgents []*agent.Agent
+	activeAgents := make([]*agent.Agent, 0)
 	for _, ag := range allAgents {
 		if ag.Status == agent.StatusActive {
 			activeAgents = append(activeAgents, ag)

@@ -38,28 +38,28 @@ interface KPICardProps {
 
 function KPICard({ label, value, subValue, color, icon, history }: KPICardProps) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 backdrop-blur-sm transition-all hover:border-zinc-700 hover:bg-zinc-800/80 group">
+    <div className="relative overflow-hidden rounded-xl border border-border bg-card/50 p-4 backdrop-blur-sm transition-all hover:border-border/80 hover:bg-accent/20 group">
       {/* Background Glow */}
-      <div 
-        className="absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-0 blur-3xl transition-opacity duration-500 group-hover:opacity-10" 
-        style={{ backgroundColor: color }} 
+      <div
+        className="absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-0 blur-3xl transition-opacity duration-500 group-hover:opacity-10"
+        style={{ backgroundColor: color }}
       />
-      
+
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1.5 z-10">
-          <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-400 uppercase tracking-wide">
-             <div className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-800 text-zinc-300 shadow-sm border border-zinc-700/50">
-               {icon}
-             </div>
-             {label}
+          <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-accent text-foreground shadow-sm border border-border/50">
+              {icon}
+            </div>
+            {label}
           </div>
-          <div className="mt-1 text-2xl font-bold text-white tracking-tight flex items-baseline">
-             {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
-             {subValue && <span className="text-sm font-medium text-zinc-500 ml-1 translate-y-[-1px]">{subValue}</span>}
+          <div className="mt-1 text-2xl font-bold text-foreground tracking-tight flex items-baseline">
+            {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
+            {subValue && <span className="text-sm font-medium text-muted-foreground ml-1 translate-y-[-1px]">{subValue}</span>}
           </div>
         </div>
         <div className="opacity-80 group-hover:opacity-100 transition-opacity">
-           <SparklineChart data={history} color={color} />
+          <SparklineChart data={history} color={color} />
         </div>
       </div>
     </div>

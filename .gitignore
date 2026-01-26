@@ -54,3 +54,13 @@ temp/
 
 # Binary in root
 agentbox
+
+# Dev scripts & Local files
+start.ps1
+prepare-pr.ps1
+list_tables.go
+check_users.go
+*.db
+*.sqlite
+logs/
+bin/

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { api } from '@/services/api'
 import {
   Play,
   Copy,
@@ -74,13 +75,14 @@ interface UploadedFile {
 
 interface ApiPlaygroundProps {
   preselectedAgentId?: string
+  initialPrompt?: string
 }
 
-export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps) {
+export default function ApiPlayground({ preselectedAgentId, initialPrompt }: ApiPlaygroundProps) {
   const dockerAvailable = useDockerAvailable()
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState('')
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt || '')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TaskResult | null>(null)
   const [error, setError] = useState('')
@@ -153,14 +155,27 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     }
     setApiCalls(prev => [...prev, entry])
 
+    // Include Auth Header if not present
+    const token = localStorage.getItem('agentbox_token')
+    const finalOptions = {
+      ...options,
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      } as Record<string, string>,
+    }
+
+    // Remove Content-Type for FormData
+    if (options?.body instanceof FormData) {
+      delete finalOptions.headers['Content-Type']
+    }
+
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      })
+      const response = await fetch(url, finalOptions)
       const duration = Date.now() - startTime
 
-      // 克隆 response 以读取 body（原始 response 仍可被调用者消费）
+      // 克隆 response 以读取 body
       const cloned = response.clone()
       let responseBody: string | null = null
       try {
@@ -185,43 +200,45 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     }
   }, [])
 
-  // Fetch agents
+  // Fetch agents list
   useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        const token = localStorage.getItem('agentbox_token')
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        }
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`
-        }
-
-        const res = await fetch('/api/v1/agents', { headers })
-        const data = await res.json()
-
-        if (data.code !== 0) {
-          console.error('Failed to fetch agents:', data.message)
-          return
-        }
-
-        const allAgents = (data.data || []) as Agent[]
-        const publicAgents = allAgents.filter((a: Agent) => a.api_access === 'public' || a.api_access === 'api_key')
-        const displayAgents = publicAgents.length > 0 ? publicAgents : allAgents
-        setAgents(displayAgents)
-
-        if (preselectedAgentId && allAgents.find(a => a.id === preselectedAgentId)) {
-          setSelectedAgentId(preselectedAgentId)
-        } else if (displayAgents.length > 0) {
-          setSelectedAgentId(displayAgents[0].id)
-        }
-      } catch (err) {
+    api.listAdminAgents()
+      .then((data: Agent[]) => {
+        setAgents(data || [])
+      })
+      .catch((err: Error) => {
         console.error('Failed to fetch agents:', err)
+        setError('Failed to fetch agents. Please ensure you are logged in.')
+      })
+  }, [])
+
+  // Sync selected agent and prompt from URL parameters
+  useEffect(() => {
+    if (agents.length === 0) return
+
+    // 1. Sync selection if URL param provides a valid agent ID
+    if (preselectedAgentId) {
+      if (agents.find(a => a.id === preselectedAgentId)) {
+        setSelectedAgentId(preselectedAgentId)
       }
+    } else if (!selectedAgentId && agents.length > 0) {
+      // Default selection (e.g. first public agent)
+      const publicAgents = agents.filter(a => a.api_access !== 'private')
+      setSelectedAgentId(publicAgents.length > 0 ? publicAgents[0].id : agents[0].id)
     }
 
-    fetchAgents()
-  }, [preselectedAgentId])
+    // 2. Sync prompt from URL or selected agent's description
+    if (initialPrompt !== undefined) {
+      setPrompt(initialPrompt)
+    } else if (!prompt) {
+      // Only default to agent description if prompt is currently empty and no initialPrompt given
+      const targetAgentId = preselectedAgentId || selectedAgentId
+      const currentAgent = agents.find(a => a.id === targetAgentId)
+      if (currentAgent?.description) {
+        setPrompt(currentAgent.description)
+      }
+    }
+  }, [preselectedAgentId, initialPrompt, agents]) // Note: selectedAgentId and prompt are NOT deps to avoid loops
 
   // Auto-scroll container logs
   useEffect(() => {
@@ -859,12 +876,11 @@ print(result)`
                     containerLogs.map((log, index) => (
                       <div
                         key={index}
-                        className={`py-0.5 ${
-                          log.startsWith('[System]') ? 'text-blue-500' :
+                        className={`py-0.5 ${log.startsWith('[System]') ? 'text-blue-500' :
                           log.startsWith('[Connected]') ? 'text-green-500' :
-                          log.startsWith('[Error]') ? 'text-destructive' :
-                          ''
-                        }`}
+                            log.startsWith('[Error]') ? 'text-destructive' :
+                              ''
+                          }`}
                       >
                         {log}
                       </div>

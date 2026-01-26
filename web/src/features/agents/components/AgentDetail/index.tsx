@@ -269,7 +269,7 @@ export default function AgentDetail({ agentId }: AgentDetailProps) {
     onSubmit={handleSubmit}
     isSaving={isSaving}
     onBack={() => navigate({ to: '/agents' })}
-    onTestRun={() => navigate({ to: '/api-playground', search: { agent: id } })}
+    onTestRun={() => navigate({ to: '/api-playground', search: { agent: id, prompt: formData.description } })}
     dockerAvailable={dockerAvailable}
   />
 }
@@ -332,7 +332,7 @@ function NewAgentWizard({
             <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-colors
               ${i < step ? 'bg-primary text-primary-foreground' :
                 i === step ? 'bg-primary text-primary-foreground' :
-                'bg-muted text-muted-foreground'}`}
+                  'bg-muted text-muted-foreground'}`}
             >
               {i < step ? <Check className="w-4 h-4" /> : i + 1}
             </div>

@@ -9,11 +9,16 @@ export const agentsQueryKey = ['agents']
  * Query all agents
  */
 export function useAgents() {
-  return useQuery({
+  const query = useQuery({
     queryKey: agentsQueryKey,
     queryFn: api.listAgents,
     staleTime: 1000 * 60,
   })
+
+  return {
+    ...query,
+    data: query.data ?? [],
+  }
 }
 
 /**

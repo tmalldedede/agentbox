@@ -112,6 +112,12 @@ make build
 
 # 运行（默认端口 18080）
 ./bin/agentbox
+
+#找到占用 18080 端口的进程 PID 并杀掉它
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 18080).OwningProcess -Force
+
+#启动后端
+go run cmd/agentbox/main.go
 ```
 
 ### 3. 运行 Web UI

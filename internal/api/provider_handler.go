@@ -61,7 +61,7 @@ func (h *ProviderHandler) List(c *gin.Context) {
 	category := c.Query("category")
 	configured := c.Query("configured")
 
-	var providers []*provider.Provider
+	providers := make([]*provider.Provider, 0)
 
 	if configured == "true" {
 		providers = h.manager.ListConfigured()
@@ -71,6 +71,10 @@ func (h *ProviderHandler) List(c *gin.Context) {
 		providers = h.manager.ListByCategory(provider.ProviderCategory(category))
 	} else {
 		providers = h.manager.List()
+	}
+
+	if providers == nil {
+		providers = make([]*provider.Provider, 0)
 	}
 
 	Success(c, providers)

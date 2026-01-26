@@ -54,7 +54,7 @@ export default function CommandCenter() {
     success: Array.from({ length: 16 }, () => randomInt(88, 99)),
     duration: Array.from({ length: 16 }, () => randomInt(10, 40)),
   })
-  
+
   const [perfKpis, setPerfKpis] = useState({
     tasksCompleted: 1284, tokensUsed: 6400000, avgLatency: 23.5,
     tasksCompletedChange: 24, tokensChange: 18, latencyChange: -12,
@@ -236,7 +236,7 @@ export default function CommandCenter() {
   }, [])
 
   return (
-    <div data-layout="fixed" className={`h-full bg-zinc-950 text-zinc-200 p-5 font-sans flex flex-col overflow-hidden ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+    <div data-layout="fixed" className={`h-full bg-background text-foreground p-5 font-sans flex flex-col overflow-hidden ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       <div className="mx-auto flex w-full max-w-[1800px] flex-1 min-h-0 flex-col gap-4">
 
         {/* HEADER */}
@@ -246,37 +246,37 @@ export default function CommandCenter() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M9 12l2 2 4-4" /></svg>
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">AgentBox Command</h1>
-              <p className="text-[11px] font-medium text-zinc-500">System Status: <span className="text-emerald-400">Operational</span></p>
+              <h1 className="text-lg font-bold text-foreground tracking-tight">AgentBox Command</h1>
+              <p className="text-[11px] font-medium text-muted-foreground">System Status: <span className="text-emerald-400">Operational</span></p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 backdrop-blur-sm">
-               <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">
-                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-               </div>
-               <div>
-                 <div className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Active Agents</div>
-                 <div className="text-base font-bold text-white leading-none tabular-nums">{headerKpis.activeAgents}</div>
-               </div>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-3 py-1.5 backdrop-blur-sm">
+              <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+              </div>
+              <div>
+                <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Active Agents</div>
+                <div className="text-base font-bold text-foreground leading-none tabular-nums">{headerKpis.activeAgents}</div>
+              </div>
             </div>
-            <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 backdrop-blur-sm">
-               <div className="flex h-7 w-7 items-center justify-center rounded bg-blue-500/10 text-blue-400">
-                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-               </div>
-               <div>
-                 <div className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Tasks Today</div>
-                 <div className="text-base font-bold text-white leading-none tabular-nums">{headerKpis.tasksToday}</div>
-               </div>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-3 py-1.5 backdrop-blur-sm">
+              <div className="flex h-7 w-7 items-center justify-center rounded bg-blue-500/10 text-blue-400">
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+              </div>
+              <div>
+                <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Tasks Today</div>
+                <div className="text-base font-bold text-foreground leading-none tabular-nums">{headerKpis.tasksToday}</div>
+              </div>
             </div>
 
             <button
               onClick={toggleFullscreen}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
             >
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                {isFullscreen ? <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/> : <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>}
+                {isFullscreen ? <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /> : <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />}
               </svg>
             </button>
           </div>

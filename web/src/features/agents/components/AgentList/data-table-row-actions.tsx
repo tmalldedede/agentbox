@@ -39,7 +39,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         <DropdownMenuItem
           onClick={(e) => {
             e.stopPropagation()
-            navigate({ to: '/api-playground', search: { agent: agent.id } })
+            navigate({ to: '/api-playground', search: { agent: agent.id, prompt: agent.description } })
           }}
         >
           Test Run

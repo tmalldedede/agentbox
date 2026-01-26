@@ -37,48 +37,48 @@ function AnimatedNumber({ value }: { value: number }) {
 
 export function TeamStats({ teams }: { teams: TeamStat[] }) {
   return (
-    <div className="flex h-full flex-col rounded-xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+    <div className="flex h-full flex-col rounded-xl border border-border bg-card/50 backdrop-blur-sm">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
-          <Users className="text-blue-400" size={16} />
-          <h3 className="font-semibold text-zinc-100">Agent Teams</h3>
+          <Users className="text-blue-500" size={16} />
+          <h3 className="font-semibold text-foreground">Agent Teams</h3>
         </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3 overflow-y-auto custom-scrollbar">
         {teams.map((team) => (
-          <div 
+          <div
             key={team.name}
-            className="group flex cursor-pointer items-center gap-3 rounded-lg border border-transparent p-2.5 hover:border-zinc-700 hover:bg-zinc-800/50 transition-all"
+            className="group flex cursor-pointer items-center gap-3 rounded-lg border border-transparent p-2.5 hover:border-border hover:bg-accent/50 transition-all"
           >
             {/* Icon Box */}
-            <div 
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg shadow-sm border border-transparent group-hover:border-white/5 transition-all"
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg shadow-sm border border-transparent group-hover:border-border/5 transition-all"
               style={{ backgroundColor: `${team.color}15`, color: team.color }}
             >
               {team.icon}
             </div>
-            
+
             {/* Main Info */}
             <div className="flex flex-1 min-w-0 flex-col gap-0.5">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm text-zinc-200 group-hover:text-white transition-colors">{team.name}</span>
-                <span className="flex items-center justify-center rounded bg-zinc-800 border border-zinc-700/50 min-w-[50px] px-1.5 py-0.5 text-[9px] font-medium text-zinc-400 group-hover:bg-zinc-700 transition-colors">
+                <span className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">{team.name}</span>
+                <span className="flex items-center justify-center rounded bg-accent border border-border/50 min-w-[50px] px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground group-hover:bg-accent transition-colors">
                   {team.agents} Agents
                 </span>
               </div>
-              <span className="truncate text-xs text-zinc-500">{team.desc}</span>
+              <span className="truncate text-xs text-muted-foreground">{team.desc}</span>
             </div>
 
             {/* Right Stats */}
             <div className="flex items-center gap-3">
-               <div className="flex flex-col items-end">
-                 <span className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors tabular-nums">
-                   <AnimatedNumber value={team.tasks} />
-                 </span>
-                 <span className="text-[9px] text-zinc-600 uppercase font-medium tracking-wide">Tasks</span>
-               </div>
-               <ChevronRight size={14} className="text-zinc-700 group-hover:text-zinc-400 transition-colors" />
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors tabular-nums">
+                  <AnimatedNumber value={team.tasks} />
+                </span>
+                <span className="text-[9px] text-muted-foreground/60 uppercase font-medium tracking-wide">Tasks</span>
+              </div>
+              <ChevronRight size={14} className="text-border group-hover:text-muted-foreground transition-colors" />
             </div>
           </div>
         ))}

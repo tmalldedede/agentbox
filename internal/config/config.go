@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -27,21 +28,21 @@ type RuntimeConfig struct {
 
 // RedisConfig Redis 配置
 type RedisConfig struct {
-	Enabled         bool          `json:"enabled"`           // 是否启用 Redis 队列
-	Addr            string        `json:"addr"`              // Redis 地址 host:port
-	Password        string        `json:"password"`          // 密码
-	DB              int           `json:"db"`                // 数据库编号
-	PoolSize        int           `json:"pool_size"`         // 连接池大小
-	ClaimTimeout    time.Duration `json:"claim_timeout"`     // 任务认领超时（超时后重新入队）
-	RecoverInterval time.Duration `json:"recover_interval"`  // 恢复扫描间隔
+	Enabled         bool          `json:"enabled"`          // 是否启用 Redis 队列
+	Addr            string        `json:"addr"`             // Redis 地址 host:port
+	Password        string        `json:"password"`         // 密码
+	DB              int           `json:"db"`               // 数据库编号
+	PoolSize        int           `json:"pool_size"`        // 连接池大小
+	ClaimTimeout    time.Duration `json:"claim_timeout"`    // 任务认领超时（超时后重新入队）
+	RecoverInterval time.Duration `json:"recover_interval"` // 恢复扫描间隔
 }
 
 // FilesConfig 文件上传配置
 type FilesConfig struct {
-	UploadDir      string        `json:"upload_dir"`       // 上传文件存储目录
-	RetentionHours int           `json:"retention_hours"`  // 文件保留时长（小时），0 表示永不过期
+	UploadDir       string        `json:"upload_dir"`       // 上传文件存储目录
+	RetentionHours  int           `json:"retention_hours"`  // 文件保留时长（小时），0 表示永不过期
 	CleanupInterval time.Duration `json:"cleanup_interval"` // 清理扫描间隔
-	MaxFileSize    int64         `json:"max_file_size"`    // 单文件最大大小 (bytes)
+	MaxFileSize     int64         `json:"max_file_size"`    // 单文件最大大小 (bytes)
 }
 
 // ServerConfig HTTP 服务器配置
@@ -52,15 +53,15 @@ type ServerConfig struct {
 
 // ContainerConfig 容器默认配置
 type ContainerConfig struct {
-	CPULimit      float64       `json:"cpu_limit"`       // CPU 核心数
-	MemoryLimit   int64         `json:"memory_limit"`    // 内存限制 (bytes)
-	DiskLimit     int64         `json:"disk_limit"`      // 磁盘限制 (bytes)
-	Timeout       time.Duration `json:"timeout"`         // 执行超时
-	NetworkMode   string        `json:"network_mode"`    // 网络模式
-	WorkspaceBase string        `json:"workspace_base"`  // 工作空间基础目录
-	GCInterval    time.Duration `json:"gc_interval"`     // GC 扫描间隔
-	ContainerTTL  time.Duration `json:"container_ttl"`   // 容器最大存活时间
-	IdleTimeout   time.Duration `json:"idle_timeout"`    // Stopped 状态后多久删除
+	CPULimit      float64       `json:"cpu_limit"`      // CPU 核心数
+	MemoryLimit   int64         `json:"memory_limit"`   // 内存限制 (bytes)
+	DiskLimit     int64         `json:"disk_limit"`     // 磁盘限制 (bytes)
+	Timeout       time.Duration `json:"timeout"`        // 执行超时
+	NetworkMode   string        `json:"network_mode"`   // 网络模式
+	WorkspaceBase string        `json:"workspace_base"` // 工作空间基础目录
+	GCInterval    time.Duration `json:"gc_interval"`    // GC 扫描间隔
+	ContainerTTL  time.Duration `json:"container_ttl"`  // 容器最大存活时间
+	IdleTimeout   time.Duration `json:"idle_timeout"`   // Stopped 状态后多久删除
 }
 
 // StorageConfig 存储配置
@@ -85,11 +86,11 @@ func Default() *Config {
 		},
 		Container: ContainerConfig{
 			CPULimit:      2.0,
-			MemoryLimit:   4 * 1024 * 1024 * 1024, // 4GB
+			MemoryLimit:   4 * 1024 * 1024 * 1024,  // 4GB
 			DiskLimit:     10 * 1024 * 1024 * 1024, // 10GB
 			Timeout:       1 * time.Hour,
 			NetworkMode:   "bridge",
-			WorkspaceBase: "/tmp/agentbox/workspaces",
+			WorkspaceBase: "data/workspaces",
 			GCInterval:    60 * time.Second,
 			ContainerTTL:  2 * time.Hour,
 			IdleTimeout:   10 * time.Minute,
@@ -110,13 +111,13 @@ func Default() *Config {
 			MaxFileSize:     100 * 1024 * 1024, // 100MB
 		},
 		Redis: RedisConfig{
-			Enabled:         true,                // 默认启用 Redis 队列
+			Enabled:         true, // 默认启用 Redis 队列
 			Addr:            "localhost:6379",
 			Password:        "",
 			DB:              0,
 			PoolSize:        10,
-			ClaimTimeout:    5 * time.Minute,     // 任务认领 5 分钟超时
-			RecoverInterval: 30 * time.Second,    // 每 30 秒扫描超时任务
+			ClaimTimeout:    5 * time.Minute,  // 任务认领 5 分钟超时
+			RecoverInterval: 30 * time.Second, // 每 30 秒扫描超时任务
 		},
 		Runtime: RuntimeConfig{
 			DefaultImage:  "ghcr.io/tmalldedede/agentbox-agent:v2",
@@ -142,6 +143,11 @@ func Load() *Config {
 	}
 	if workspace := os.Getenv("AGENTBOX_WORKSPACE_BASE"); workspace != "" {
 		cfg.Container.WorkspaceBase = workspace
+	}
+
+	// 确保 WorkspaceBase 是绝对路径 (处理 Windows 盘符问题)
+	if abs, err := filepath.Abs(cfg.Container.WorkspaceBase); err == nil {
+		cfg.Container.WorkspaceBase = abs
 	}
 
 	// GC 配置

@@ -9,11 +9,16 @@ export const providersQueryKey = ['providers']
  * Query all providers
  */
 export function useProviders(options?: { agent?: string; category?: string; configured?: boolean }) {
-  return useQuery({
+  const query = useQuery({
     queryKey: [...providersQueryKey, options],
     queryFn: () => api.listProviders(options),
     staleTime: 1000 * 60 * 5,
   })
+
+  return {
+    ...query,
+    data: query.data ?? [],
+  }
 }
 
 /**
@@ -27,11 +32,16 @@ export function useConfiguredProviders() {
  * Query provider templates (for Add Provider dialog)
  */
 export function useProviderTemplates() {
-  return useQuery({
+  const query = useQuery({
     queryKey: [...providersQueryKey, 'templates'],
     queryFn: () => api.listProviderTemplates(),
     staleTime: 1000 * 60 * 30,
   })
+
+  return {
+    ...query,
+    data: query.data ?? [],
+  }
 }
 
 /**
