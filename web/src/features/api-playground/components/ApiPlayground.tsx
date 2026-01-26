@@ -115,22 +115,7 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
     const path = url.startsWith('http') ? new URL(url).pathname : url
     const startTime = Date.now()
 
-    // 添加认证 token
-    const token = localStorage.getItem('agentbox_token')
-    const headers: HeadersInit = {
-      ...(options?.headers || {}),
-    }
-    if (token && !headers['Authorization']) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-    // 如果没有 FormData，添加 Content-Type
-    if (!options?.body || !(options.body instanceof FormData)) {
-      if (!headers['Content-Type']) {
-        headers['Content-Type'] = 'application/json'
-      }
-    }
-
-    // 记录请求体
+    // Record request body
     let requestBody: string | null = null
     if (options?.body) {
       if (typeof options.body === 'string') {
@@ -140,7 +125,7 @@ export default function ApiPlayground({ preselectedAgentId, initialPrompt }: Api
       }
     }
 
-    // 添加进行中的调用
+    // Add pending call entry
     const entry: ApiCallEntry = {
       id,
       timestamp: startTime,
