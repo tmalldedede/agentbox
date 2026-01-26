@@ -33,6 +33,8 @@ import type {
   SkillCheckResult,
   SkillStats,
   SkillLoadLevel,
+  SkillStatusReport,
+  SkillConfig,
   CreateSkillRequest,
   UpdateSkillRequest,
   CloneSkillRequest,
@@ -738,6 +740,19 @@ export const api = {
 
   // 获取统计信息
   getSkillStats: () => request<SkillStats>(`${ADMIN_BASE}/skills/stats`),
+
+  // 获取完整状态报告（借鉴 Clawdbot）
+  getSkillStatus: () => request<SkillStatusReport>(`${ADMIN_BASE}/skills/status`),
+
+  // 列出所有需要的二进制
+  listRequiredBins: () => request<{ bins: string[] }>(`${ADMIN_BASE}/skills/bins`),
+
+  // 更新 Skill 配置
+  updateSkillConfig: (id: string, config: Partial<SkillConfig>) =>
+    request<{ skill_id: string; config: SkillConfig }>(`${ADMIN_BASE}/skills/${id}/config`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
 
   exportSkill: (id: string) => {
     const token = localStorage.getItem(TOKEN_KEY)

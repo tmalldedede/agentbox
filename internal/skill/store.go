@@ -25,8 +25,8 @@ func init() {
 	log = logger.Module("skill")
 }
 
-// SkillSource GitHub 仓库源
-type SkillSource struct {
+// RepoSource GitHub 仓库源（Skill 商店源）
+type RepoSource struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Owner       string    `json:"owner"`       // GitHub owner
@@ -58,7 +58,7 @@ type RemoteSkill struct {
 
 // SkillStore Skill 商店管理器
 type SkillStore struct {
-	sources     map[string]*SkillSource
+	sources     map[string]*RepoSource
 	cache       map[string][]RemoteSkill // sourceID -> skills
 	cacheMu     sync.RWMutex
 	cacheTime   map[string]time.Time
@@ -77,7 +77,7 @@ func NewSkillStore(manager *Manager) *SkillStore {
 	}
 
 	store := &SkillStore{
-		sources:   make(map[string]*SkillSource),
+		sources:   make(map[string]*RepoSource),
 		cache:     make(map[string][]RemoteSkill),
 		cacheTime: make(map[string]time.Time),
 		httpClient: &http.Client{
@@ -100,7 +100,7 @@ func (s *SkillStore) setGitHubHeaders(req *http.Request) {
 }
 
 // AddSource 添加仓库源
-func (s *SkillStore) AddSource(source *SkillSource) {
+func (s *SkillStore) AddSource(source *RepoSource) {
 	if source.Branch == "" {
 		source.Branch = "main"
 	}
@@ -122,8 +122,8 @@ func (s *SkillStore) RemoveSource(id string) {
 }
 
 // ListSources 列出所有源
-func (s *SkillStore) ListSources() []*SkillSource {
-	sources := make([]*SkillSource, 0, len(s.sources))
+func (s *SkillStore) ListSources() []*RepoSource {
+	sources := make([]*RepoSource, 0, len(s.sources))
 	for _, src := range s.sources {
 		sources = append(sources, src)
 	}
@@ -131,7 +131,7 @@ func (s *SkillStore) ListSources() []*SkillSource {
 }
 
 // GetSource 获取源
-func (s *SkillStore) GetSource(id string) (*SkillSource, bool) {
+func (s *SkillStore) GetSource(id string) (*RepoSource, bool) {
 	src, ok := s.sources[id]
 	return src, ok
 }
@@ -201,7 +201,7 @@ func (s *SkillStore) FetchAllSkills(ctx context.Context) ([]RemoteSkill, error) 
 }
 
 // fetchFromGitHub 从 GitHub API 获取 skills
-func (s *SkillStore) fetchFromGitHub(ctx context.Context, source *SkillSource) ([]RemoteSkill, error) {
+func (s *SkillStore) fetchFromGitHub(ctx context.Context, source *RepoSource) ([]RemoteSkill, error) {
 	// 获取目录内容
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s?ref=%s",
 		source.Owner, source.Repo, source.Path, source.Branch)
@@ -261,7 +261,7 @@ func (s *SkillStore) fetchFromGitHub(ctx context.Context, source *SkillSource) (
 }
 
 // fetchSkillMD 获取并解析 SKILL.md
-func (s *SkillStore) fetchSkillMD(ctx context.Context, source *SkillSource, skillPath string) (*RemoteSkill, error) {
+func (s *SkillStore) fetchSkillMD(ctx context.Context, source *RepoSource, skillPath string) (*RemoteSkill, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s/SKILL.md?ref=%s",
 		source.Owner, source.Repo, skillPath, source.Branch)
 
@@ -452,7 +452,7 @@ func (s *SkillStore) InstallSkill(ctx context.Context, sourceID, skillID string)
 }
 
 // parseFullSkillMD 解析完整的 SKILL.md 为 Skill
-func (s *SkillStore) parseFullSkillMD(content, skillID string, source *SkillSource) (*Skill, error) {
+func (s *SkillStore) parseFullSkillMD(content, skillID string, source *RepoSource) (*Skill, error) {
 	skill := &Skill{
 		ID:        skillID,
 		IsBuiltIn: false,

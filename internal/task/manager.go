@@ -608,11 +608,23 @@ func (m *Manager) UnsubscribeEvents(taskID string, ch <-chan *TaskEvent) {
 // broadcastEvent 广播事件到所有订阅者
 func (m *Manager) broadcastEvent(taskID string, event *TaskEvent) {
 	m.eventSubsMu.RLock()
+	subCount := len(m.eventSubs[taskID])
+	m.eventSubsMu.RUnlock()
+
+	log.Info("broadcasting event",
+		"task_id", taskID,
+		"event_type", event.Type,
+		"subscribers", subCount)
+
+	m.eventSubsMu.RLock()
 	for _, ch := range m.eventSubs[taskID] {
 		select {
 		case ch <- event:
 		default:
 			// channel 满了，跳过
+			log.Warn("event channel full, dropping event",
+				"task_id", taskID,
+				"event_type", event.Type)
 		}
 	}
 	m.eventSubsMu.RUnlock()

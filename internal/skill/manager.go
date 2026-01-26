@@ -13,13 +13,19 @@ type Manager struct {
 	dataDir string
 	skills  map[string]*Skill
 	mu      sync.RWMutex
+
+	// 新组件
+	loader   *Loader
+	watcher  *Watcher
+	priority *PriorityManager
 }
 
 // NewManager 创建 Manager
 func NewManager(dataDir string) (*Manager, error) {
 	m := &Manager{
-		dataDir: dataDir,
-		skills:  make(map[string]*Skill),
+		dataDir:  dataDir,
+		skills:   make(map[string]*Skill),
+		priority: NewPriorityManager(),
 	}
 
 	// 确保数据目录存在
@@ -35,7 +41,54 @@ func NewManager(dataDir string) (*Manager, error) {
 		return nil, err
 	}
 
+	// 初始化 Loader
+	m.loader = NewLoader(m, dataDir)
+
+	// 初始化 Watcher
+	m.watcher = NewWatcher(m)
+
+	// 设置优先级管理器
+	m.rebuildPriority()
+
 	return m, nil
+}
+
+// rebuildPriority 重建优先级管理器
+func (m *Manager) rebuildPriority() {
+	var bundled, managed, extra []*Skill
+
+	for _, s := range m.skills {
+		switch {
+		case s.IsBuiltIn:
+			bundled = append(bundled, s)
+		case s.Source == SourceExtra:
+			extra = append(extra, s)
+		case s.Source == SourceManaged:
+			managed = append(managed, s)
+		default:
+			// 未设置来源的自定义 Skill 视为用户添加
+			extra = append(extra, s)
+		}
+	}
+
+	m.priority.SetBundled(bundled)
+	m.priority.SetManaged(managed)
+	m.priority.SetExtra(extra)
+}
+
+// GetLoader 获取 Loader
+func (m *Manager) GetLoader() *Loader {
+	return m.loader
+}
+
+// GetWatcher 获取 Watcher
+func (m *Manager) GetWatcher() *Watcher {
+	return m.watcher
+}
+
+// GetPriorityManager 获取优先级管理器
+func (m *Manager) GetPriorityManager() *PriorityManager {
+	return m.priority
 }
 
 // loadBuiltInSkills 加载内置 Skills
@@ -60,6 +113,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"git", "commit", "automation"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -84,6 +142,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"review", "pr", "code-quality"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -107,6 +170,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"explain", "documentation", "learning"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -133,6 +201,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"refactor", "clean-code", "improvement"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -157,6 +230,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"test", "unit-test", "quality"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -180,6 +258,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"docs", "documentation", "comments"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -207,6 +290,11 @@ func (m *Manager) loadBuiltInSkills() {
 			Tags:      []string{"security", "audit", "vulnerability"},
 			IsBuiltIn: true,
 			IsEnabled: true,
+			Source:    SourceBundled,
+			Invocation: InvocationPolicy{
+				UserInvocable: true,
+				AutoInvocable: false,
+			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -356,6 +444,27 @@ func (m *Manager) Create(req *CreateSkillRequest) (*Skill, error) {
 		IsEnabled:    true,
 		CreatedAt:    now,
 		UpdatedAt:    now,
+
+		// 新字段
+		Source:       req.Source,
+		Requirements: req.Requirements,
+		Runtime:      req.Runtime,
+	}
+
+	// 设置调用策略
+	if req.Invocation != nil {
+		skill.Invocation = *req.Invocation
+	} else {
+		// 默认可用户调用
+		skill.Invocation = InvocationPolicy{
+			UserInvocable: true,
+			AutoInvocable: false,
+		}
+	}
+
+	// 默认来源
+	if skill.Source == "" {
+		skill.Source = SourceExtra
 	}
 
 	// 默认类别
@@ -372,6 +481,14 @@ func (m *Manager) Create(req *CreateSkillRequest) (*Skill, error) {
 	if err := m.saveSkills(); err != nil {
 		delete(m.skills, skill.ID)
 		return nil, err
+	}
+
+	// 更新优先级管理器
+	m.rebuildPriority()
+
+	// 清除 Loader 缓存
+	if m.loader != nil {
+		m.loader.InvalidateCache(skill.ID)
 	}
 
 	return skill, nil
@@ -437,6 +554,17 @@ func (m *Manager) Update(id string, req *UpdateSkillRequest) (*Skill, error) {
 		skill.IsEnabled = *req.IsEnabled
 	}
 
+	// 新字段
+	if req.Requirements != nil {
+		skill.Requirements = req.Requirements
+	}
+	if req.Runtime != nil {
+		skill.Runtime = req.Runtime
+	}
+	if req.Invocation != nil {
+		skill.Invocation = *req.Invocation
+	}
+
 	skill.UpdatedAt = time.Now()
 
 	if err := skill.Validate(); err != nil {
@@ -445,6 +573,14 @@ func (m *Manager) Update(id string, req *UpdateSkillRequest) (*Skill, error) {
 
 	if err := m.saveSkills(); err != nil {
 		return nil, err
+	}
+
+	// 更新优先级管理器
+	m.rebuildPriority()
+
+	// 清除 Loader 缓存
+	if m.loader != nil {
+		m.loader.InvalidateCache(skill.ID)
 	}
 
 	return skill, nil
@@ -466,7 +602,19 @@ func (m *Manager) Delete(id string) error {
 
 	delete(m.skills, id)
 
-	return m.saveSkills()
+	if err := m.saveSkills(); err != nil {
+		return err
+	}
+
+	// 更新优先级管理器
+	m.rebuildPriority()
+
+	// 清除 Loader 缓存
+	if m.loader != nil {
+		m.loader.InvalidateCache(id)
+	}
+
+	return nil
 }
 
 // Clone 克隆 Skill
@@ -501,5 +649,115 @@ func (m *Manager) Clone(id, newID, newName string) (*Skill, error) {
 		return nil, err
 	}
 
+	// 更新优先级管理器
+	m.rebuildPriority()
+
 	return clone, nil
+}
+
+// LoadWorkspaceSkills 加载工作区 Skills
+func (m *Manager) LoadWorkspaceSkills(workspacePath string) ([]*Skill, error) {
+	if m.watcher == nil {
+		return nil, nil
+	}
+	skills, err := m.watcher.LoadWorkspaceSkills(workspacePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// 更新优先级管理器
+	m.priority.SetWorkspaceSkills(workspacePath, skills)
+
+	return skills, nil
+}
+
+// GetMergedSkills 获取合并后的所有 Skills（包含工作区）
+func (m *Manager) GetMergedSkills() []*Skill {
+	return m.priority.List()
+}
+
+// GetMergedSkill 从合并集合中获取 Skill
+func (m *Manager) GetMergedSkill(id string) *Skill {
+	return m.priority.Get(id)
+}
+
+// GetSkillStats 获取 Skill 统计信息
+func (m *Manager) GetSkillStats() map[string]int {
+	return m.priority.Stats()
+}
+
+// ListBySource 按来源列出 Skills
+func (m *Manager) ListBySource(source SkillSource) []*Skill {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var skills []*Skill
+	for _, s := range m.skills {
+		if s.Source == source {
+			skills = append(skills, s)
+		}
+	}
+	return skills
+}
+
+// WatchWorkspace 开始监视指定工作区的 Skills 目录
+func (m *Manager) WatchWorkspace(workspacePath string) error {
+	if m.watcher == nil {
+		return nil
+	}
+
+	// 先加载工作区 Skills
+	skills, err := m.watcher.LoadWorkspaceSkills(workspacePath)
+	if err != nil {
+		log.Warn("failed to load workspace skills", "path", workspacePath, "error", err)
+	}
+
+	// 更新优先级管理器
+	if len(skills) > 0 {
+		m.priority.SetWorkspaceSkills(workspacePath, skills)
+	}
+
+	// 设置变更回调
+	m.watcher.SetOnChange(func(workspace string, added, updated, removed []string) {
+		log.Info("workspace skills changed",
+			"workspace", workspace,
+			"added", added,
+			"updated", updated,
+			"removed", removed,
+		)
+
+		// 刷新工作区 Skills
+		refreshed, _ := m.watcher.GetWorkspaceSkills(workspace), error(nil)
+		m.priority.SetWorkspaceSkills(workspace, refreshed)
+
+		// 清除相关缓存
+		if m.loader != nil {
+			for _, id := range append(append(added, updated...), removed...) {
+				m.loader.InvalidateCache(id)
+			}
+		}
+	})
+
+	// 开始监视
+	return m.watcher.WatchWorkspace(workspacePath)
+}
+
+// UnwatchWorkspace 停止监视指定工作区
+func (m *Manager) UnwatchWorkspace(workspacePath string) error {
+	if m.watcher == nil {
+		return nil
+	}
+
+	// 从优先级管理器移除
+	m.priority.RemoveWorkspace(workspacePath)
+
+	return m.watcher.UnwatchWorkspace(workspacePath)
+}
+
+// Stop 停止 Manager（清理资源）
+func (m *Manager) Stop() error {
+	if m.watcher != nil {
+		return m.watcher.Close()
+	}
+	return nil
 }

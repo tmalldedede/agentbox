@@ -309,6 +309,19 @@ func (a *App) Start() {
 	a.Task.Start()
 	a.GC.Start()
 
+	// 启动 Skill Watcher（监控工作区 Skills）
+	if a.Skill != nil {
+		// 监控默认工作区目录
+		workspaceBase := a.Config.Container.WorkspaceBase
+		if workspaceBase != "" {
+			if err := a.Skill.WatchWorkspace(workspaceBase); err != nil {
+				log.Warn("failed to watch workspace for skills", "path", workspaceBase, "error", err)
+			} else {
+				log.Info("skill watcher started", "workspace", workspaceBase)
+			}
+		}
+	}
+
 	// 启动 Cron
 	if a.Cron != nil {
 		if err := a.Cron.Start(context.Background()); err != nil {
@@ -370,6 +383,11 @@ func (a *App) Close() error {
 
 	if a.Task != nil {
 		a.Task.Stop()
+	}
+
+	// 停止 Skill Watcher
+	if a.Skill != nil {
+		a.Skill.Stop()
 	}
 
 	if a.taskStore != nil {

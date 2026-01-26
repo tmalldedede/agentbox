@@ -425,10 +425,35 @@ export interface SkillFile {
 
 export interface SkillRequirements {
   bins?: string[]
+  any_bins?: string[]
   env?: string[]
   config?: string[]
   pip?: string[]
   npm?: string[]
+  os?: string[]
+}
+
+// 安装方式
+export type InstallKind = 'brew' | 'node' | 'go' | 'uv' | 'pip' | 'download'
+
+// 安装规范
+export interface InstallSpec {
+  id?: string
+  kind: InstallKind
+  label?: string
+  bins?: string[]
+  formula?: string
+  package?: string
+  module?: string
+  url?: string
+  os?: string[]
+}
+
+// Skill 配置（用户可配置）
+export interface SkillConfig {
+  enabled: boolean
+  api_key?: string
+  env?: Record<string, string>
 }
 
 export interface SkillInvocationPolicy {
@@ -469,6 +494,11 @@ export interface Skill {
   requirements?: SkillRequirements
   runtime?: SkillRuntimeConfig
   invocation?: SkillInvocationPolicy
+  install?: InstallSpec[]
+  primary_env?: string
+  always?: boolean
+  emoji?: string
+  homepage?: string
   created_at: string
   updated_at: string
 }
@@ -496,12 +526,68 @@ export interface SkillCheckResult {
   satisfied: boolean
   missing?: {
     bins?: string[]
+    any_bins?: string[]
     env?: string[]
     config?: string[]
     pip?: string[]
     npm?: string[]
+    os?: string[]
   }
   error?: string
+}
+
+// 配置检查结果
+export interface ConfigCheck {
+  path: string
+  value: unknown
+  satisfied: boolean
+}
+
+// 安装选项
+export interface InstallOption {
+  id: string
+  kind: InstallKind
+  label: string
+  bins?: string[]
+}
+
+// Skill 状态条目（完整状态报告）
+export interface SkillStatusEntry {
+  name: string
+  description: string
+  source: string
+  file_path: string
+  skill_key: string
+  primary_env?: string
+  emoji?: string
+  homepage?: string
+  always: boolean
+  disabled: boolean
+  blocked_by_allowlist: boolean
+  eligible: boolean
+  requirements: {
+    bins?: string[]
+    any_bins?: string[]
+    env?: string[]
+    config?: string[]
+    os?: string[]
+  }
+  missing: {
+    bins?: string[]
+    any_bins?: string[]
+    env?: string[]
+    config?: string[]
+    os?: string[]
+  }
+  config_checks?: ConfigCheck[]
+  install?: InstallOption[]
+}
+
+// Skill 状态报告
+export interface SkillStatusReport {
+  workspace_dir: string
+  managed_skills_dir: string
+  skills: SkillStatusEntry[]
 }
 
 // Skill 统计信息

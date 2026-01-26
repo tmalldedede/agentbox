@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -300,6 +301,8 @@ func (h *TaskHandler) StreamEvents(c *gin.Context) {
 	eventCh := h.manager.SubscribeEvents(taskID)
 	defer h.manager.UnsubscribeEvents(taskID, eventCh)
 
+	log.Info("SSE client connected", "task_id", taskID)
+
 	// 发送初始状态
 	initData, _ := json.Marshal(map[string]interface{}{
 		"task_id":    t.ID,
@@ -308,24 +311,41 @@ func (h *TaskHandler) StreamEvents(c *gin.Context) {
 	})
 	c.Writer.WriteString(fmt.Sprintf("event: task.status\ndata: %s\n\n", string(initData)))
 	c.Writer.Flush()
+	log.Info("sent initial status", "task_id", taskID, "status", t.Status)
 
 	// 转发事件
 	clientGone := c.Request.Context().Done()
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		log.Error("Writer doesn't support flushing", "task_id", taskID)
+		c.String(http.StatusInternalServerError, "Streaming unsupported")
+		return
+	}
+
 	for {
 		select {
 		case <-clientGone:
+			log.Info("SSE client disconnected", "task_id", taskID)
 			return
 		case event, ok := <-eventCh:
 			if !ok {
+				log.Info("event channel closed", "task_id", taskID)
 				return
 			}
 
 			data, _ := json.Marshal(event.Data)
-			c.Writer.WriteString(fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, string(data)))
-			c.Writer.Flush()
+			message := fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, string(data))
+
+			if _, err := c.Writer.WriteString(message); err != nil {
+				log.Error("failed to write SSE event", "task_id", taskID, "error", err)
+				return
+			}
+			flusher.Flush()
+			log.Info("sent SSE event", "task_id", taskID, "event_type", event.Type)
 
 			// 终态事件后关闭连接
 			if event.Type == "task.completed" || event.Type == "task.failed" || event.Type == "task.cancelled" {
+				log.Info("task terminated, closing SSE", "task_id", taskID, "event_type", event.Type)
 				return
 			}
 		}

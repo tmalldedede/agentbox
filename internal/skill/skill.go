@@ -20,6 +20,95 @@ const (
 	CategoryOther    Category = "other"
 )
 
+// LoadLevel 加载级别（渐进式加载）
+type LoadLevel string
+
+const (
+	LoadLevelMetadata LoadLevel = "metadata" // 仅 name/description/command
+	LoadLevelBody     LoadLevel = "body"     // 包含 prompt
+	LoadLevelFull     LoadLevel = "full"     // 包含 references 和所有文件
+)
+
+// SkillSource Skill 来源
+type SkillSource string
+
+const (
+	SourceExtra     SkillSource = "extra"     // 用户手动添加
+	SourceBundled   SkillSource = "bundled"   // 代码内置
+	SourceManaged   SkillSource = "managed"   // 远程仓库安装
+	SourceWorkspace SkillSource = "workspace" // 工作区
+)
+
+// Requirements 依赖要求
+type Requirements struct {
+	Bins    []string `yaml:"bins" json:"bins,omitempty"`       // 必需二进制（全部需要）
+	AnyBins []string `yaml:"any_bins" json:"any_bins,omitempty"` // 任选其一二进制（满足一个即可）
+	Env     []string `yaml:"env" json:"env,omitempty"`         // 必需环境变量
+	Config  []string `yaml:"config" json:"config,omitempty"`   // 必需配置项（如 mcpServers.xxx）
+	Pip     []string `yaml:"pip" json:"pip,omitempty"`         // Python 依赖
+	Npm     []string `yaml:"npm" json:"npm,omitempty"`         // Node.js 依赖
+	OS      []string `yaml:"os" json:"os,omitempty"`           // 支持的操作系统（darwin, linux, windows）
+}
+
+// InstallKind 安装方式
+type InstallKind string
+
+const (
+	InstallKindBrew     InstallKind = "brew"     // Homebrew
+	InstallKindNode     InstallKind = "node"     // npm/pnpm/yarn
+	InstallKindGo       InstallKind = "go"       // go install
+	InstallKindUV       InstallKind = "uv"       // uv pip install
+	InstallKindPip      InstallKind = "pip"      // pip install
+	InstallKindDownload InstallKind = "download" // 下载二进制
+)
+
+// InstallSpec 安装规范
+type InstallSpec struct {
+	ID      string      `yaml:"id" json:"id,omitempty"`           // 安装方式 ID
+	Kind    InstallKind `yaml:"kind" json:"kind"`                 // 安装方式类型
+	Label   string      `yaml:"label" json:"label,omitempty"`     // 显示标签
+	Bins    []string    `yaml:"bins" json:"bins,omitempty"`       // 安装后提供的二进制
+	Formula string      `yaml:"formula" json:"formula,omitempty"` // brew formula
+	Package string      `yaml:"package" json:"package,omitempty"` // npm/pip/uv 包名
+	Module  string      `yaml:"module" json:"module,omitempty"`   // go module 路径
+	URL     string      `yaml:"url" json:"url,omitempty"`         // 下载 URL
+	OS      []string    `yaml:"os" json:"os,omitempty"`           // 支持的操作系统
+}
+
+// HasRequirements 检查是否有依赖要求
+func (r *Requirements) HasRequirements() bool {
+	if r == nil {
+		return false
+	}
+	return len(r.Bins) > 0 || len(r.AnyBins) > 0 || len(r.Env) > 0 ||
+		len(r.Config) > 0 || len(r.Pip) > 0 || len(r.Npm) > 0 || len(r.OS) > 0
+}
+
+// InvocationPolicy 调用策略
+type InvocationPolicy struct {
+	UserInvocable bool     `yaml:"user_invocable" json:"user_invocable,omitempty"` // /command 调用
+	AutoInvocable bool     `yaml:"auto_invocable" json:"auto_invocable,omitempty"` // Agent 自动触发
+	HookInvocable []string `yaml:"hook_invocable" json:"hook_invocable,omitempty"` // 事件触发（如 pre-commit）
+}
+
+// RuntimeConfig 运行时配置
+type RuntimeConfig struct {
+	Python   string `yaml:"python" json:"python,omitempty"`     // Python 版本要求，如 ">=3.8"
+	Node     string `yaml:"node" json:"node,omitempty"`         // Node.js 版本要求
+	Memory   string `yaml:"memory" json:"memory,omitempty"`     // 内存要求，如 "256Mi"
+	Timeout  int    `yaml:"timeout" json:"timeout,omitempty"`   // 执行超时（秒）
+	Sandbox  string `yaml:"sandbox" json:"sandbox,omitempty"`   // 沙箱模式
+	Network  bool   `yaml:"network" json:"network,omitempty"`   // 是否需要网络
+	Image    string `yaml:"image" json:"image,omitempty"`       // 自定义镜像
+}
+
+// SkillConfig Skill 级别配置（用户可配置）
+type SkillConfig struct {
+	Enabled bool              `json:"enabled"`           // 是否启用
+	APIKey  string            `json:"api_key,omitempty"` // API Key（如 VIRUSTOTAL_API_KEY）
+	Env     map[string]string `json:"env,omitempty"`     // 环境变量覆盖
+}
+
 // Skill 技能定义
 type Skill struct {
 	ID          string `json:"id"`
@@ -52,6 +141,61 @@ type Skill struct {
 	// 时间戳
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// === Phase 1: 渐进式加载 ===
+	LoadLevel  LoadLevel `json:"load_level,omitempty"`  // 当前加载级别
+	BodyLoaded bool      `json:"body_loaded,omitempty"` // 是否已加载 body
+
+	// === Phase 2: 来源与依赖 ===
+	Source       SkillSource    `json:"source,omitempty"`        // 来源类型
+	SourcePath   string         `json:"source_path,omitempty"`   // 来源路径（工作区路径或仓库路径）
+	Requirements *Requirements  `json:"requirements,omitempty"`  // 依赖要求
+	Runtime      *RuntimeConfig `json:"runtime,omitempty"`       // 运行时配置
+	Install      []InstallSpec  `json:"install,omitempty"`       // 安装规范
+	PrimaryEnv   string         `json:"primary_env,omitempty"`   // 主环境变量（用于 API Key）
+	Always       bool           `json:"always,omitempty"`        // 始终包含（忽略依赖检查）
+	Emoji        string         `json:"emoji,omitempty"`         // 显示图标
+	Homepage     string         `json:"homepage,omitempty"`      // 主页链接
+
+	// === Phase 3: 调用策略 ===
+	Invocation InvocationPolicy `json:"invocation,omitempty"` // 调用策略
+}
+
+// SkillMetadata Skill 元数据（用于快速列表）
+type SkillMetadata struct {
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description,omitempty"`
+	Command     string       `json:"command"`
+	Category    Category     `json:"category"`
+	Tags        []string     `json:"tags,omitempty"`
+	Author      string       `json:"author,omitempty"`
+	Version     string       `json:"version,omitempty"`
+	Source      SkillSource  `json:"source,omitempty"`
+	IsBuiltIn   bool         `json:"is_built_in"`
+	IsEnabled   bool         `json:"is_enabled"`
+	HasDeps     bool         `json:"has_deps,omitempty"`     // 是否有依赖要求
+	DepsSatisfied *bool      `json:"deps_satisfied,omitempty"` // 依赖是否满足
+	UpdatedAt   time.Time    `json:"updated_at"`
+}
+
+// ToMetadata 转换为元数据
+func (s *Skill) ToMetadata() *SkillMetadata {
+	return &SkillMetadata{
+		ID:          s.ID,
+		Name:        s.Name,
+		Description: s.Description,
+		Command:     s.Command,
+		Category:    s.Category,
+		Tags:        s.Tags,
+		Author:      s.Author,
+		Version:     s.Version,
+		Source:      s.Source,
+		IsBuiltIn:   s.IsBuiltIn,
+		IsEnabled:   s.IsEnabled,
+		HasDeps:     s.Requirements.HasRequirements(),
+		UpdatedAt:   s.UpdatedAt,
+	}
 }
 
 // SkillFile Skill 附加文件
@@ -92,6 +236,7 @@ func (s *Skill) Validate() error {
 func (s *Skill) Clone() *Skill {
 	clone := *s
 	clone.IsBuiltIn = false
+	clone.Source = SourceExtra // 克隆的 Skill 变为用户添加
 
 	// 深拷贝 slice
 	if s.Files != nil {
@@ -109,6 +254,43 @@ func (s *Skill) Clone() *Skill {
 	if s.Tags != nil {
 		clone.Tags = make([]string, len(s.Tags))
 		copy(clone.Tags, s.Tags)
+	}
+
+	// 深拷贝 Requirements
+	if s.Requirements != nil {
+		clone.Requirements = &Requirements{}
+		if s.Requirements.Bins != nil {
+			clone.Requirements.Bins = make([]string, len(s.Requirements.Bins))
+			copy(clone.Requirements.Bins, s.Requirements.Bins)
+		}
+		if s.Requirements.Env != nil {
+			clone.Requirements.Env = make([]string, len(s.Requirements.Env))
+			copy(clone.Requirements.Env, s.Requirements.Env)
+		}
+		if s.Requirements.Config != nil {
+			clone.Requirements.Config = make([]string, len(s.Requirements.Config))
+			copy(clone.Requirements.Config, s.Requirements.Config)
+		}
+		if s.Requirements.Pip != nil {
+			clone.Requirements.Pip = make([]string, len(s.Requirements.Pip))
+			copy(clone.Requirements.Pip, s.Requirements.Pip)
+		}
+		if s.Requirements.Npm != nil {
+			clone.Requirements.Npm = make([]string, len(s.Requirements.Npm))
+			copy(clone.Requirements.Npm, s.Requirements.Npm)
+		}
+	}
+
+	// 深拷贝 Runtime
+	if s.Runtime != nil {
+		cloneRuntime := *s.Runtime
+		clone.Runtime = &cloneRuntime
+	}
+
+	// 深拷贝 Invocation.HookInvocable
+	if s.Invocation.HookInvocable != nil {
+		clone.Invocation.HookInvocable = make([]string, len(s.Invocation.HookInvocable))
+		copy(clone.Invocation.HookInvocable, s.Invocation.HookInvocable)
 	}
 
 	return &clone
@@ -154,6 +336,12 @@ type CreateSkillRequest struct {
 	Tags         []string    `json:"tags,omitempty"`
 	Author       string      `json:"author,omitempty"`
 	Version      string      `json:"version,omitempty"`
+
+	// 新增字段
+	Source       SkillSource      `json:"source,omitempty"`
+	Requirements *Requirements    `json:"requirements,omitempty"`
+	Runtime      *RuntimeConfig   `json:"runtime,omitempty"`
+	Invocation   *InvocationPolicy `json:"invocation,omitempty"`
 }
 
 // UpdateSkillRequest 更新 Skill 请求
@@ -171,6 +359,11 @@ type UpdateSkillRequest struct {
 	Author       *string     `json:"author,omitempty"`
 	Version      *string     `json:"version,omitempty"`
 	IsEnabled    *bool       `json:"is_enabled,omitempty"`
+
+	// 新增字段
+	Requirements *Requirements     `json:"requirements,omitempty"`
+	Runtime      *RuntimeConfig    `json:"runtime,omitempty"`
+	Invocation   *InvocationPolicy `json:"invocation,omitempty"`
 }
 
 // 错误定义 - 使用 apperr 提供正确的 HTTP 状态码

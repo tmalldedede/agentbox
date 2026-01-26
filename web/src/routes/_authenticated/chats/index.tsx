@@ -1,6 +1,26 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Chats } from '@/features/chats'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { ThemeSwitch } from '@/components/theme-switch'
+import { ChatContainer } from '@/features/chat'
 
 export const Route = createFileRoute('/_authenticated/chats/')({
-  component: Chats,
+  component: ChatPage,
 })
+
+function ChatPage() {
+  return (
+    <>
+      <Header fixed>
+        <div className='ms-auto flex items-center space-x-4'>
+          <ThemeSwitch />
+          <ProfileDropdown />
+        </div>
+      </Header>
+      <Main className='flex flex-1 flex-col p-0'>
+        <ChatContainer />
+      </Main>
+    </>
+  )
+}
