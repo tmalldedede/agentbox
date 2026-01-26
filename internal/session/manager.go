@@ -225,7 +225,7 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	}
 
 	// 注入 Skills 文件到容器（独立于配置文件）
-	if err := m.injectSkills(ctx, ctr.ID, req); err != nil {
+	if err := m.injectSkills(ctx, ctr.ID, req, workspace); err != nil {
 		log.Warn("failed to inject skills", "session_id", sessionID, "error", err)
 	}
 
@@ -257,12 +257,9 @@ func ensureWithinBase(path, base string) error {
 	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
 		realPath = resolved
 	} else {
-		// 如果完整路径不存在（目录尚未创建），尝试解析父目录的符号链接
+		// 如果完整路径不存在（目录尚未创建），递归解析父目录的符号链接
 		// 这处理了 macOS 上 /tmp -> /private/tmp 的情况
-		parent := filepath.Dir(absPath)
-		if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
-			realPath = filepath.Join(resolvedParent, filepath.Base(absPath))
-		}
+		realPath = resolvePathWithSymlinks(absPath)
 	}
 
 	rel, err := filepath.Rel(realBase, realPath)
@@ -270,6 +267,28 @@ func ensureWithinBase(path, base string) error {
 		return fmt.Errorf("workspace path must be within base: %s", base)
 	}
 	return nil
+}
+
+// resolvePathWithSymlinks 递归解析路径中的符号链接
+// 如果路径不存在，会找到第一个存在的父目录并解析其符号链接，然后重建完整路径
+func resolvePathWithSymlinks(path string) string {
+	// 尝试直接解析
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+
+	// 路径不存在，递归查找存在的父目录
+	parent := filepath.Dir(path)
+	if parent == path || parent == "." || parent == "/" {
+		// 已经到根目录，无法继续
+		return path
+	}
+
+	// 递归解析父目录
+	resolvedParent := resolvePathWithSymlinks(parent)
+
+	// 重建路径
+	return filepath.Join(resolvedParent, filepath.Base(path))
 }
 
 // writeConfigFiles 写入配置文件到容器
@@ -385,14 +404,108 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, 
 }
 
 // injectSkills 注入 Skills 到容器（独立于适配器配置）
-func (m *Manager) injectSkills(ctx context.Context, containerID string, req *CreateRequest) error {
+// 包括 Agent 配置的 Skills 和工作区 Skills
+func (m *Manager) injectSkills(ctx context.Context, containerID string, req *CreateRequest, workspace string) error {
 	var skillIDs []string
 	if req.AgentID != "" && m.agentMgr != nil {
 		if fullConfig, err := m.agentMgr.GetFullConfig(req.AgentID); err == nil {
 			skillIDs = fullConfig.Agent.SkillIDs
 		}
 	}
-	return m.writeSkillFiles(ctx, containerID, skillIDs)
+
+	// 加载工作区 Skills
+	var workspaceSkills []*skill.Skill
+	if m.skillMgr != nil {
+		ws, err := m.skillMgr.LoadWorkspaceSkills(workspace)
+		if err != nil {
+			log.Warn("failed to load workspace skills", "workspace", workspace, "error", err)
+		} else {
+			workspaceSkills = ws
+			log.Debug("loaded workspace skills", "workspace", workspace, "count", len(ws))
+		}
+	}
+
+	// 写入 Agent 配置的 Skills
+	if err := m.writeSkillFiles(ctx, containerID, skillIDs); err != nil {
+		return err
+	}
+
+	// 写入工作区 Skills（优先级较低，不覆盖已有的同名 Skill）
+	if len(workspaceSkills) > 0 {
+		if err := m.writeWorkspaceSkills(ctx, containerID, workspaceSkills, skillIDs); err != nil {
+			log.Warn("failed to write workspace skills", "error", err)
+		}
+	}
+
+	return nil
+}
+
+// writeWorkspaceSkills 写入工作区 Skills
+func (m *Manager) writeWorkspaceSkills(ctx context.Context, containerID string, skills []*skill.Skill, existingIDs []string) error {
+	// 构建已存在的 ID 集合
+	existingSet := make(map[string]bool)
+	for _, id := range existingIDs {
+		existingSet[id] = true
+	}
+
+	// 获取容器内 HOME 目录
+	homeResult, err := m.containerMgr.Exec(ctx, containerID, []string{"sh", "-c", "echo $HOME"})
+	if err != nil {
+		return err
+	}
+	containerHome := strings.TrimSpace(homeResult.Stdout)
+	if containerHome == "" {
+		containerHome = "/home/node"
+	}
+
+	for _, s := range skills {
+		// 跳过已存在的 Skill（Agent 配置的优先级更高）
+		if existingSet[s.ID] {
+			log.Debug("skipping workspace skill (already exists)", "skill_id", s.ID)
+			continue
+		}
+
+		skillDir := fmt.Sprintf("$HOME/.codex/skills/%s", s.ID)
+		containerSkillDir := fmt.Sprintf("%s/.codex/skills/%s", containerHome, s.ID)
+
+		// 复制 SourceDir（如果有）
+		if s.SourceDir != "" {
+			mkdirCmd := []string{"sh", "-c", fmt.Sprintf("mkdir -p %s/.codex/skills", containerHome)}
+			if _, err := m.containerMgr.Exec(ctx, containerID, mkdirCmd); err != nil {
+				log.Error("failed to create skills dir", "skill_id", s.ID, "error", err)
+				continue
+			}
+
+			dstPath := fmt.Sprintf("%s/.codex/skills/", containerHome)
+			if err := m.containerMgr.CopyToContainer(ctx, containerID, s.SourceDir, dstPath); err != nil {
+				log.Error("failed to copy workspace skill", "skill_id", s.ID, "error", err)
+				continue
+			}
+
+			// 修复权限
+			chownCmd := []string{"sh", "-c", fmt.Sprintf("chmod -R 755 %s", containerSkillDir)}
+			m.containerMgr.Exec(ctx, containerID, chownCmd)
+		}
+
+		// 生成 SKILL.md
+		skillContent := s.ToSkillMD()
+		skillPath := fmt.Sprintf("%s/SKILL.md", skillDir)
+
+		escapedContent := strings.ReplaceAll(skillContent, "'", "'\"'\"'")
+		writeCmd := []string{
+			"sh", "-c",
+			fmt.Sprintf("mkdir -p %s && cat > %s << 'AGENTBOX_SKILL_EOF'\n%s\nAGENTBOX_SKILL_EOF", skillDir, skillPath, escapedContent),
+		}
+
+		if _, err := m.containerMgr.Exec(ctx, containerID, writeCmd); err != nil {
+			log.Error("failed to write workspace skill", "skill_id", s.ID, "error", err)
+			continue
+		}
+
+		log.Debug("workspace skill injected", "skill_id", s.ID)
+	}
+
+	return nil
 }
 
 // writeSkillFiles 写入 Skills 文件到容器
@@ -432,6 +545,28 @@ func (m *Manager) writeSkillFiles(ctx context.Context, containerID string, skill
 		if !s.IsEnabled {
 			log.Debug("skill is disabled, skipping", "skill_id", skillID)
 			continue
+		}
+
+		// 检查依赖要求（仅记录警告，不阻止注入）
+		if s.Requirements != nil && s.Requirements.HasRequirements() {
+			var missing []string
+			if len(s.Requirements.Bins) > 0 {
+				missing = append(missing, fmt.Sprintf("bins: %v", s.Requirements.Bins))
+			}
+			if len(s.Requirements.Env) > 0 {
+				missing = append(missing, fmt.Sprintf("env: %v", s.Requirements.Env))
+			}
+			if len(s.Requirements.Pip) > 0 {
+				missing = append(missing, fmt.Sprintf("pip: %v", s.Requirements.Pip))
+			}
+			if len(s.Requirements.Npm) > 0 {
+				missing = append(missing, fmt.Sprintf("npm: %v", s.Requirements.Npm))
+			}
+			if len(missing) > 0 {
+				log.Warn("skill has requirements that may not be satisfied",
+					"skill_id", skillID,
+					"requirements", strings.Join(missing, "; "))
+			}
 		}
 
 		// Skills 目录: ~/.codex/skills/{skill-id}/

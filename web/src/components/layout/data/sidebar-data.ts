@@ -17,6 +17,8 @@ import {
   Users,
   Clock,
   MessageSquare,
+  MessagesSquare,
+  FlaskConical,
 } from 'lucide-react'
 import { AgentBoxLogo } from '@/components/icons/agentbox-logo'
 import { type SidebarData } from '../types'
@@ -25,6 +27,11 @@ export function getSidebarData(role: string): SidebarData {
   const isAdmin = role === 'admin'
 
   const coreItems = [
+    {
+      title: 'Chat',
+      url: '/chats',
+      icon: MessagesSquare,
+    },
     {
       title: 'Tasks',
       url: '/tasks',
@@ -86,6 +93,7 @@ export function getSidebarData(role: string): SidebarData {
           { title: 'Settings', url: '/settings', icon: Settings },
           { title: 'Maintenance', url: '/system', icon: Wrench },
           { title: 'API Docs', url: '/api-docs', icon: FileCode2 },
+          { title: 'API Playground', url: '/api-playground', icon: FlaskConical },
           { title: 'Help', url: '/help-center', icon: HelpCircle },
         ],
       },
