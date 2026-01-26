@@ -1,12 +1,55 @@
 import { type ColumnDef } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table'
-import { CheckCircle2, AlertCircle, KeyRound } from 'lucide-react'
+import { CheckCircle2, AlertCircle, KeyRound, Shield } from 'lucide-react'
 import type { Provider } from '@/types'
 import { categories, agents, categoryColorMap, agentColorMap } from '../data/data'
 import { getProviderIcon } from '../data/icons'
 import { DataTableRowActions } from './data-table-row-actions'
+import { useProvidersContext } from './providers-provider'
+
+function KeyStatusCell({ provider }: { provider: Provider }) {
+  const { setOpen, setCurrentRow } = useProvidersContext()
+  const { is_configured, is_valid, api_key_masked } = provider
+
+  if (!is_configured) {
+    return (
+      <div className='flex items-center gap-1.5 text-amber-600 dark:text-amber-400'>
+        <AlertCircle className='h-4 w-4' />
+        <span className='text-sm'>Not configured</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className='flex items-center gap-2'>
+      <div className='flex items-center gap-1.5'>
+        {is_valid ? (
+          <CheckCircle2 className='h-4 w-4 text-emerald-500' />
+        ) : (
+          <KeyRound className='h-4 w-4 text-red-500' />
+        )}
+        <span className='text-sm font-mono text-muted-foreground'>
+          {api_key_masked || (is_valid ? 'Valid' : 'Invalid')}
+        </span>
+      </div>
+      <Button
+        variant='ghost'
+        size='sm'
+        className='h-7 gap-1.5 text-xs'
+        onClick={() => {
+          setCurrentRow(provider)
+          setOpen('verify')
+        }}
+      >
+        <Shield className='h-3.5 w-3.5' />
+        Verify
+      </Button>
+    </div>
+  )
+}
 
 export const providersColumns: ColumnDef<Provider>[] = [
   {
@@ -94,29 +137,7 @@ export const providersColumns: ColumnDef<Provider>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Key Status' />
     ),
-    cell: ({ row }) => {
-      const { is_configured, is_valid, api_key_masked } = row.original
-      if (!is_configured) {
-        return (
-          <div className='flex items-center gap-1.5 text-amber-600 dark:text-amber-400'>
-            <AlertCircle className='h-4 w-4' />
-            <span className='text-sm'>Not configured</span>
-          </div>
-        )
-      }
-      return (
-        <div className='flex items-center gap-1.5'>
-          {is_valid ? (
-            <CheckCircle2 className='h-4 w-4 text-emerald-500' />
-          ) : (
-            <KeyRound className='h-4 w-4 text-red-500' />
-          )}
-          <span className='text-sm font-mono text-muted-foreground'>
-            {api_key_masked || (is_valid ? 'Valid' : 'Invalid')}
-          </span>
-        </div>
-      )
-    },
+    cell: ({ row }) => <KeyStatusCell provider={row.original} />,
     enableSorting: false,
   },
   {

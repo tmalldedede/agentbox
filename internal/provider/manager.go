@@ -910,11 +910,42 @@ func (m *Manager) AddAuthProfile(providerID string, apiKey string, priority int)
 }
 
 // ListAuthProfiles returns all auth profiles for a provider
+// If no profiles exist but a legacy key is configured, automatically migrates it
 func (m *Manager) ListAuthProfiles(providerID string) []*AuthProfile {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	rotator, ok := m.rotators[providerID]
+
+	// Auto-migrate: if no rotator or empty profiles, check for legacy key
+	if (!ok || rotator.GetAllProfiles() == nil || len(rotator.GetAllProfiles()) == 0) {
+		if keyData, hasKey := m.keys[providerID]; hasKey && keyData.EncryptedKey != "" {
+			// Decrypt the legacy key
+			decrypted, err := m.crypto.Decrypt(keyData.EncryptedKey)
+			if err == nil {
+				// Create auth profile with priority 0
+				encrypted, _ := m.crypto.Encrypt(decrypted)
+				profile := &AuthProfile{
+					ID:           fmt.Sprintf("prof-migrated-%d", time.Now().Unix()),
+					ProviderID:   providerID,
+					EncryptedKey: encrypted,
+					KeyMasked:    keyData.KeyMasked,
+					Priority:     0,
+					IsEnabled:    true,
+					CreatedAt:    time.Now(),
+					UpdatedAt:    time.Now(),
+				}
+
+				// Get or create rotator
+				if !ok {
+					rotator = NewProfileRotator(nil, nil)
+					m.rotators[providerID] = rotator
+				}
+				rotator.AddProfile(profile)
+			}
+		}
+	}
+
 	if !ok {
 		return nil
 	}
