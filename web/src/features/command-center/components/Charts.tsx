@@ -21,19 +21,19 @@ export function DashboardChart({ data, color = '#22c55e' }: DashboardChartProps)
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="opacity-[0.05]" />
           <XAxis dataKey="name" hide />
-          <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: 'currentColor', fontSize: 10 }} className="opacity-50" axisLine={false} tickLine={false} />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1f2937',
-              borderColor: 'rgba(255,255,255,0.1)',
+              backgroundColor: 'hsl(var(--card))',
+              borderColor: 'hsl(var(--border))',
               borderRadius: '8px',
               fontSize: '12px',
-              color: '#f3f4f6',
+              color: 'hsl(var(--foreground))',
             }}
             itemStyle={{ color: color }}
-            cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
+            cursor={{ stroke: 'currentColor', strokeOpacity: 0.1, strokeWidth: 2 }}
           />
           <Area
             type="monotone"

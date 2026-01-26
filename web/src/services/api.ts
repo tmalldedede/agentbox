@@ -492,6 +492,8 @@ export const api = {
     request<{ logs: string }>(`${ADMIN_BASE}/sessions/${id}/logs`),
 
   // Agents (admin CRUD + Run)
+  listAdminAgents: () => request<Agent[]>(`${ADMIN_BASE}/agents`),
+
   createAgent: (req: CreateAgentRequest) =>
     request<Agent>(`${ADMIN_BASE}/agents`, {
       method: 'POST',

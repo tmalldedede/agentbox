@@ -25,4 +25,7 @@ package-lock.json
 *.njsproj
 *.sln
 *.sw?
+
+# Generated files
 src/routeTree.gen.ts
+package-lock.json
