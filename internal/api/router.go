@@ -9,7 +9,9 @@ import (
 	"github.com/tmalldedede/agentbox/internal/auth"
 	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/channel"
+	"github.com/tmalldedede/agentbox/internal/channel/dingtalk"
 	"github.com/tmalldedede/agentbox/internal/channel/feishu"
+	"github.com/tmalldedede/agentbox/internal/channel/wecom"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/coordinate"
@@ -54,6 +56,8 @@ type Server struct {
 	cronHandler       *CronHandler
 	channelHandler    *ChannelHandler
 	feishuHandler     *FeishuHandler
+	wecomHandler      *WecomHandler
+	dingtalkHandler   *DingtalkHandler
 	coordinateHandler *CoordinateHandler
 	gatewayHandler    *GatewayHandler
 	oauthSyncHandler  *OAuthSyncAPI
@@ -77,9 +81,11 @@ type Deps struct {
 	GC            *container.GarbageCollector
 	Settings      *settings.Manager
 	Cron          *cron.Manager
-	Channel       *channel.Manager
-	FeishuChannel *feishu.Channel
-	Plugin        *plugin.Manager
+	Channel         *channel.Manager
+	FeishuChannel   *feishu.Channel
+	WecomChannel    *wecom.Channel
+	DingtalkChannel *dingtalk.Channel
+	Plugin          *plugin.Manager
 	Coordinate    *coordinate.Manager
 	FilesConfig   config.FilesConfig
 	FileStore     FileStore
@@ -113,8 +119,10 @@ func NewServer(deps *Deps) *Server {
 	batchHandler := NewBatchHandler(deps.Batch)
 	settingsHandler := NewSettingsHandler(deps.Settings)
 	cronHandler := NewCronHandler(deps.Cron)
-	channelHandler := NewChannelHandler(deps.Channel, deps.FeishuChannel)
+	channelHandler := NewChannelHandler(deps.Channel, deps.FeishuChannel, deps.WecomChannel, deps.DingtalkChannel)
 	feishuHandler := NewFeishuHandler()
+	wecomHandler := NewWecomHandler()
+	dingtalkHandler := NewDingtalkHandler()
 	coordinateHandler := NewCoordinateHandler(deps.Coordinate)
 	gatewayHandler := NewGatewayHandler(deps.Auth, deps.Task)
 	oauthSyncHandler := NewOAuthSyncAPI(deps.OAuthSync, deps.Provider)
@@ -143,6 +151,8 @@ func NewServer(deps *Deps) *Server {
 		cronHandler:       cronHandler,
 		channelHandler:    channelHandler,
 		feishuHandler:     feishuHandler,
+		wecomHandler:      wecomHandler,
+		dingtalkHandler:   dingtalkHandler,
 		coordinateHandler: coordinateHandler,
 		gatewayHandler:    gatewayHandler,
 		oauthSyncHandler:  oauthSyncHandler,
@@ -287,6 +297,12 @@ func (s *Server) setupRoutes() {
 
 		// Feishu Config (飞书配置)
 		s.feishuHandler.RegisterRoutes(admin)
+
+		// WeCom Config (企业微信配置)
+		s.wecomHandler.RegisterRoutes(admin)
+
+		// DingTalk Config (钉钉配置)
+		s.dingtalkHandler.RegisterRoutes(admin)
 
 		// Gateway (WebSocket 统计)
 		s.gatewayHandler.RegisterRoutes(admin)

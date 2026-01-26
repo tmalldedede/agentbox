@@ -6,24 +6,35 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmalldedede/agentbox/internal/channel"
+	"github.com/tmalldedede/agentbox/internal/channel/dingtalk"
 	"github.com/tmalldedede/agentbox/internal/channel/feishu"
+	"github.com/tmalldedede/agentbox/internal/channel/wecom"
 )
 
 // ChannelHandler 通道处理器
 type ChannelHandler struct {
-	manager       *channel.Manager
-	feishuChannel *feishu.Channel
-	sessionStore  channel.SessionStore
-	messageStore  channel.MessageStore
+	manager         *channel.Manager
+	feishuChannel   *feishu.Channel
+	wecomChannel    *wecom.Channel
+	dingtalkChannel *dingtalk.Channel
+	sessionStore    channel.SessionStore
+	messageStore    channel.MessageStore
 }
 
 // NewChannelHandler 创建通道处理器
-func NewChannelHandler(manager *channel.Manager, feishuChannel *feishu.Channel) *ChannelHandler {
+func NewChannelHandler(
+	manager *channel.Manager,
+	feishuChannel *feishu.Channel,
+	wecomChannel *wecom.Channel,
+	dingtalkChannel *dingtalk.Channel,
+) *ChannelHandler {
 	return &ChannelHandler{
-		manager:       manager,
-		feishuChannel: feishuChannel,
-		sessionStore:  channel.NewGormSessionStore(),
-		messageStore:  channel.NewGormMessageStore(),
+		manager:         manager,
+		feishuChannel:   feishuChannel,
+		wecomChannel:    wecomChannel,
+		dingtalkChannel: dingtalkChannel,
+		sessionStore:    channel.NewGormSessionStore(),
+		messageStore:    channel.NewGormMessageStore(),
 	}
 }
 
@@ -55,6 +66,10 @@ func (h *ChannelHandler) RegisterWebhookRoutes(rg *gin.RouterGroup) {
 	{
 		// 飞书事件回调
 		webhooks.POST("/feishu", h.FeishuWebhook)
+		// 企业微信事件回调
+		webhooks.Any("/wecom", h.WecomWebhook)
+		// 钉钉事件回调
+		webhooks.POST("/dingtalk", h.DingtalkWebhook)
 	}
 }
 
@@ -118,6 +133,36 @@ func (h *ChannelHandler) FeishuWebhook(c *gin.Context) {
 	}
 
 	h.feishuChannel.HandleWebhook(c.Writer, c.Request)
+}
+
+// WecomWebhook 企业微信事件回调
+// @Summary 企业微信事件回调
+// @Tags Channel
+// @Accept json
+// @Produce json
+// @Router /api/v1/webhooks/wecom [post]
+func (h *ChannelHandler) WecomWebhook(c *gin.Context) {
+	if h.wecomChannel == nil {
+		Error(c, http.StatusServiceUnavailable, "wecom channel not configured")
+		return
+	}
+
+	h.wecomChannel.HandleWebhook(c.Writer, c.Request)
+}
+
+// DingtalkWebhook 钉钉事件回调
+// @Summary 钉钉事件回调
+// @Tags Channel
+// @Accept json
+// @Produce json
+// @Router /api/v1/webhooks/dingtalk [post]
+func (h *ChannelHandler) DingtalkWebhook(c *gin.Context) {
+	if h.dingtalkChannel == nil {
+		Error(c, http.StatusServiceUnavailable, "dingtalk channel not configured")
+		return
+	}
+
+	h.dingtalkChannel.HandleWebhook(c.Writer, c.Request)
 }
 
 // ListSessions 列出通道会话

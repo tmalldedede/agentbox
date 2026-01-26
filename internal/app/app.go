@@ -12,7 +12,9 @@ import (
 	"github.com/tmalldedede/agentbox/internal/auth"
 	"github.com/tmalldedede/agentbox/internal/batch"
 	"github.com/tmalldedede/agentbox/internal/channel"
+	"github.com/tmalldedede/agentbox/internal/channel/dingtalk"
 	"github.com/tmalldedede/agentbox/internal/channel/feishu"
+	"github.com/tmalldedede/agentbox/internal/channel/wecom"
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/container"
 	"github.com/tmalldedede/agentbox/internal/coordinate"
@@ -75,9 +77,13 @@ type App struct {
 	Settings *settings.Manager
 
 	// 多通道支持 (Phase 2)
-	Channel        *channel.Manager
-	ChannelSession *channel.SessionManager
-	FeishuChannel  *feishu.Channel
+	Channel             *channel.Manager
+	ChannelSession      *channel.SessionManager
+	ChannelSessionStore channel.SessionStore  // 会话持久化存储
+	ChannelMessageStore channel.MessageStore  // 消息持久化存储
+	FeishuChannel       *feishu.Channel       // 飞书通道
+	WecomChannel        *wecom.Channel        // 企业微信通道
+	DingtalkChannel     *dingtalk.Channel     // 钉钉通道
 
 	// 定时任务 (Phase 1)
 	Cron *cron.Manager
@@ -283,6 +289,8 @@ func (a *App) initialize() error {
 	// 18. 初始化 Channel Manager (Phase 2)
 	a.Channel = channel.NewManager()
 	a.ChannelSession = channel.NewSessionManager(5 * time.Minute) // 5 分钟会话超时
+	a.ChannelSessionStore = channel.NewGormSessionStore()         // 会话持久化
+	a.ChannelMessageStore = channel.NewGormMessageStore()         // 消息持久化
 
 	// 尝试加载飞书配置
 	feishuStore := feishu.NewStore()
@@ -295,6 +303,32 @@ func (a *App) initialize() error {
 		}
 	} else {
 		log.Info("feishu channel not configured")
+	}
+
+	// 尝试加载企业微信配置
+	wecomStore := wecom.NewStore()
+	if wecomCfg, err := wecomStore.GetEnabledConfig(); err == nil {
+		a.WecomChannel = wecom.New(wecomCfg)
+		if err := a.Channel.Register(a.WecomChannel); err != nil {
+			log.Warn("register wecom channel failed", "error", err)
+		} else {
+			log.Info("wecom channel registered")
+		}
+	} else {
+		log.Info("wecom channel not configured")
+	}
+
+	// 尝试加载钉钉配置
+	dingtalkStore := dingtalk.NewStore()
+	if dingtalkCfg, err := dingtalkStore.GetEnabledConfig(); err == nil {
+		a.DingtalkChannel = dingtalk.New(dingtalkCfg)
+		if err := a.Channel.Register(a.DingtalkChannel); err != nil {
+			log.Warn("register dingtalk channel failed", "error", err)
+		} else {
+			log.Info("dingtalk channel registered")
+		}
+	} else {
+		log.Info("dingtalk channel not configured")
 	}
 
 	// 添加消息处理器（将消息转发到 Task API）
@@ -445,9 +479,10 @@ func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) e
 		return nil
 	}
 
-	// 保存消息日志（仅飞书）
-	if msg.ChannelType == "feishu" {
-		a.saveFeishuMessageLog(msg, "")
+	// 获取 Agent 名称
+	agentName := ""
+	if ag, err := a.Agent.Get(agentID); err == nil {
+		agentName = ag.Name
 	}
 
 	// 判断是否群聊
@@ -456,22 +491,29 @@ func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) e
 	// 生成会话键（群聊按用户隔离，私聊按聊天隔离）
 	sessionKey := channel.GetSessionKey(msg.ChannelType, msg.ChannelID, msg.SenderID, isGroup)
 
-	// 查找现有会话
+	// 先查找持久化会话（数据库）
+	var dbSession *channel.ChannelSessionData
+	var err error
+	dbSession, err = a.ChannelSessionStore.GetByKey(msg.ChannelType, msg.ChannelID, msg.SenderID, isGroup)
+	if err != nil && err.Error() != "session not found" {
+		log.Warn("get session from db failed", "error", err)
+	}
+
+	// 同时检查内存会话（兼容）
 	existingSession := a.ChannelSession.GetSession(sessionKey)
 
 	var t *task.Task
-	var err error
 	var isNewSession bool
 
-	if existingSession != nil {
-		// 多轮对话：追加到现有 Task
-		log.Info("appending to existing session",
-			"session_key", sessionKey,
-			"task_id", existingSession.TaskID,
+	// 如果持久化会话存在且状态为 active，尝试追加
+	if dbSession != nil && dbSession.Status == "active" {
+		log.Info("appending to existing session (from DB)",
+			"session_id", dbSession.ID,
+			"task_id", dbSession.TaskID,
 		)
 
 		taskReq := &task.CreateTaskRequest{
-			TaskID: existingSession.TaskID, // 追加到现有 Task
+			TaskID: dbSession.TaskID, // 追加到现有 Task
 			Prompt: msg.Content,
 		}
 
@@ -479,18 +521,42 @@ func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) e
 		if err != nil {
 			// 追加失败，可能是 Task 已结束，创建新会话
 			log.Warn("append turn failed, creating new session",
+				"task_id", dbSession.TaskID,
+				"error", err,
+			)
+			// 标记旧会话为已完成
+			a.ChannelSessionStore.UpdateStatus(dbSession.ID, "completed")
+			dbSession = nil
+		} else {
+			// 更新会话活跃时间和消息计数
+			a.ChannelSessionStore.IncrementMessageCount(dbSession.ID)
+		}
+	} else if existingSession != nil {
+		// 兼容：使用内存会话
+		log.Info("appending to existing session (from memory)",
+			"session_key", sessionKey,
+			"task_id", existingSession.TaskID,
+		)
+
+		taskReq := &task.CreateTaskRequest{
+			TaskID: existingSession.TaskID,
+			Prompt: msg.Content,
+		}
+
+		t, err = a.Task.CreateTask(taskReq)
+		if err != nil {
+			log.Warn("append turn failed, creating new session",
 				"task_id", existingSession.TaskID,
 				"error", err,
 			)
 			a.ChannelSession.DeleteSession(sessionKey)
 			existingSession = nil
 		} else {
-			// 更新会话活跃时间
 			a.ChannelSession.TouchSession(sessionKey)
 		}
 	}
 
-	if existingSession == nil {
+	if dbSession == nil && existingSession == nil {
 		// 新会话：创建新 Task
 		isNewSession = true
 		taskReq := &task.CreateTaskRequest{
@@ -512,7 +578,26 @@ func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) e
 			return fmt.Errorf("create task: %w", err)
 		}
 
-		// 创建会话记录
+		// 创建持久化会话
+		newSession := &channel.ChannelSessionData{
+			ChannelType:  msg.ChannelType,
+			ChatID:       msg.ChannelID,
+			UserID:       msg.SenderID,
+			UserName:     msg.SenderName,
+			IsGroup:      isGroup,
+			TaskID:       t.ID,
+			AgentID:      agentID,
+			AgentName:    agentName,
+			Status:       "active",
+			MessageCount: 1,
+		}
+		if err := a.ChannelSessionStore.Create(newSession); err != nil {
+			log.Warn("create session in db failed", "error", err)
+		} else {
+			dbSession = newSession
+		}
+
+		// 同时创建内存会话（兼容）
 		a.ChannelSession.CreateSession(sessionKey, t.ID, agentID)
 	}
 
@@ -523,14 +608,15 @@ func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) e
 		"turn_count", t.TurnCount,
 	)
 
-	// 更新消息日志关联 Task ID
-	if msg.ChannelType == "feishu" {
-		feishuStore := feishu.NewStore()
-		feishuStore.UpdateMessageTaskID(msg.ID, t.ID)
+	// 保存入站消息
+	sessionID := ""
+	if dbSession != nil {
+		sessionID = dbSession.ID
 	}
+	a.saveChannelMessage(msg, sessionID, t.ID, "inbound")
 
 	// 异步等待 Task 完成并回复
-	go a.waitAndReplyChannel(msg.ChannelType, msg.ChannelID, msg.ID, t.ID)
+	go a.waitAndReplyChannel(msg.ChannelType, msg.ChannelID, msg.ID, t.ID, sessionID)
 
 	return nil
 }
@@ -540,6 +626,22 @@ func (a *App) getAgentForChannel(channelType, channelID string) string {
 	// 飞书：使用配置的 default_agent_id
 	if channelType == "feishu" && a.FeishuChannel != nil {
 		cfg := a.FeishuChannel.GetConfig()
+		if cfg != nil && cfg.DefaultAgentID != "" {
+			return cfg.DefaultAgentID
+		}
+	}
+
+	// 企业微信：使用配置的 default_agent_id
+	if channelType == "wecom" && a.WecomChannel != nil {
+		cfg := a.WecomChannel.GetConfig()
+		if cfg != nil && cfg.DefaultAgentID != "" {
+			return cfg.DefaultAgentID
+		}
+	}
+
+	// 钉钉：使用配置的 default_agent_id
+	if channelType == "dingtalk" && a.DingtalkChannel != nil {
+		cfg := a.DingtalkChannel.GetConfig()
 		if cfg != nil && cfg.DefaultAgentID != "" {
 			return cfg.DefaultAgentID
 		}
@@ -575,7 +677,7 @@ func (a *App) saveFeishuMessageLog(msg *channel.Message, taskID string) {
 
 // waitAndReplyChannel 等待 Task 当前轮次完成并回复通道
 // 注意：多轮对话模式下，task.completed 表示当前轮次完成，不删除会话
-func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string) {
+func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID, sessionID string) {
 	// 订阅任务事件
 	eventCh := a.Task.SubscribeEvents(taskID)
 	defer a.Task.UnsubscribeEvents(taskID, eventCh)
@@ -638,24 +740,33 @@ func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string
 		}
 	}
 
-	// 发送回复
+	// 发送回复并保存出站消息
 	if result != "" {
-		a.sendChannelReply(channelType, channelID, replyTo, result)
+		resp := a.sendChannelReply(channelType, channelID, replyTo, result)
+		// 保存出站消息
+		if resp != nil {
+			a.saveOutboundMessage(channelType, channelID, sessionID, taskID, resp.MessageID, result)
+		}
 	}
 
 	// 清理会话（仅在失败/取消/超时时）
-	if shouldDeleteSession && a.ChannelSession != nil {
-		a.ChannelSession.DeleteByTaskID(taskID)
+	if shouldDeleteSession {
+		if a.ChannelSession != nil {
+			a.ChannelSession.DeleteByTaskID(taskID)
+		}
+		if a.ChannelSessionStore != nil && sessionID != "" {
+			a.ChannelSessionStore.UpdateStatus(sessionID, "completed")
+		}
 	}
 }
 
 // sendChannelReply 发送通道回复
-func (a *App) sendChannelReply(channelType, channelID, replyTo, content string) {
+func (a *App) sendChannelReply(channelType, channelID, replyTo, content string) *channel.SendResponse {
 	if a.Channel == nil {
-		return
+		return nil
 	}
 
-	// 限制回复长度（飞书单条消息限制 4000 字符）
+	// 限制回复长度（飞书/企业微信/钉钉单条消息限制 4000 字符）
 	const maxLength = 3800
 	if len(content) > maxLength {
 		content = content[:maxLength] + "\n\n... (内容过长已截断)"
@@ -672,7 +783,7 @@ func (a *App) sendChannelReply(channelType, channelID, replyTo, content string) 
 			"chat_id", channelID,
 			"error", err,
 		)
-		return
+		return nil
 	}
 
 	log.Info("channel reply sent",
@@ -680,4 +791,56 @@ func (a *App) sendChannelReply(channelType, channelID, replyTo, content string) 
 		"chat_id", channelID,
 		"message_id", resp.MessageID,
 	)
+	return resp
+}
+
+// saveChannelMessage 保存通道消息（入站）
+func (a *App) saveChannelMessage(msg *channel.Message, sessionID, taskID, direction string) {
+	if a.ChannelMessageStore == nil {
+		return
+	}
+
+	msgData := &channel.ChannelMessageData{
+		ID:          msg.ID,
+		SessionID:   sessionID,
+		ChannelType: msg.ChannelType,
+		ChatID:      msg.ChannelID,
+		SenderID:    msg.SenderID,
+		SenderName:  msg.SenderName,
+		Content:     msg.Content,
+		Direction:   direction,
+		TaskID:      taskID,
+		Status:      "received",
+		Metadata:    msg.Metadata,
+		ReceivedAt:  msg.ReceivedAt,
+	}
+
+	if err := a.ChannelMessageStore.Save(msgData); err != nil {
+		log.Warn("save channel message failed", "error", err)
+	}
+}
+
+// saveOutboundMessage 保存出站消息
+func (a *App) saveOutboundMessage(channelType, chatID, sessionID, taskID, messageID, content string) {
+	if a.ChannelMessageStore == nil {
+		return
+	}
+
+	msgData := &channel.ChannelMessageData{
+		ID:          messageID,
+		SessionID:   sessionID,
+		ChannelType: channelType,
+		ChatID:      chatID,
+		SenderID:    "bot",
+		SenderName:  "AgentBox",
+		Content:     content,
+		Direction:   "outbound",
+		TaskID:      taskID,
+		Status:      "sent",
+		ReceivedAt:  time.Now(),
+	}
+
+	if err := a.ChannelMessageStore.Save(msgData); err != nil {
+		log.Warn("save outbound message failed", "error", err)
+	}
 }
