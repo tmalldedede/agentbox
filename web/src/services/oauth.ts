@@ -1,4 +1,4 @@
-import { api } from './api'
+import { request, API_BASE } from './api'
 
 export interface OAuthSyncStatus {
   claude_cli_available: boolean
@@ -15,30 +15,26 @@ export interface SyncResponse {
 
 export const oauthAPI = {
   // Get sync status
-  getSyncStatus: async (): Promise<OAuthSyncStatus> => {
-    const response = await api.get('/api/v1/oauth/sync-status')
-    return response.data
-  },
+  getSyncStatus: () =>
+    request<OAuthSyncStatus>(`${API_BASE}/oauth/sync-status`),
 
   // Sync from Claude Code CLI
-  syncFromClaudeCli: async (providerId: string): Promise<SyncResponse> => {
-    const response = await api.post('/api/v1/oauth/sync-from-claude-cli', {
-      provider_id: providerId,
-    })
-    return response.data
-  },
+  syncFromClaudeCli: (providerId: string) =>
+    request<SyncResponse>(`${API_BASE}/oauth/sync-from-claude-cli`, {
+      method: 'POST',
+      body: JSON.stringify({ provider_id: providerId }),
+    }),
 
   // Sync from Codex CLI
-  syncFromCodexCli: async (providerId: string): Promise<SyncResponse> => {
-    const response = await api.post('/api/v1/oauth/sync-from-codex-cli', {
-      provider_id: providerId,
-    })
-    return response.data
-  },
+  syncFromCodexCli: (providerId: string) =>
+    request<SyncResponse>(`${API_BASE}/oauth/sync-from-codex-cli`, {
+      method: 'POST',
+      body: JSON.stringify({ provider_id: providerId }),
+    }),
 
   // Sync to Claude Code CLI
-  syncToClaudeCli: async (providerId: string): Promise<SyncResponse> => {
-    const response = await api.post(`/api/v1/oauth/sync-to-claude-cli/${providerId}`)
-    return response.data
-  },
+  syncToClaudeCli: (providerId: string) =>
+    request<SyncResponse>(`${API_BASE}/oauth/sync-to-claude-cli/${providerId}`, {
+      method: 'POST',
+    }),
 }
