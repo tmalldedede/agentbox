@@ -75,8 +75,9 @@ type App struct {
 	Settings *settings.Manager
 
 	// 多通道支持 (Phase 2)
-	Channel       *channel.Manager
-	FeishuChannel *feishu.Channel
+	Channel        *channel.Manager
+	ChannelSession *channel.SessionManager
+	FeishuChannel  *feishu.Channel
 
 	// 定时任务 (Phase 1)
 	Cron *cron.Manager
@@ -281,6 +282,7 @@ func (a *App) initialize() error {
 
 	// 18. 初始化 Channel Manager (Phase 2)
 	a.Channel = channel.NewManager()
+	a.ChannelSession = channel.NewSessionManager(5 * time.Minute) // 5 分钟会话超时
 
 	// 尝试加载飞书配置
 	feishuStore := feishu.NewStore()
@@ -321,6 +323,11 @@ func (a *App) Start() {
 		}
 	}
 
+	// 启动 Channel Session Manager
+	if a.ChannelSession != nil {
+		a.ChannelSession.Start(context.Background())
+	}
+
 	log.Info("app started")
 }
 
@@ -329,6 +336,10 @@ func (a *App) Close() error {
 	log.Info("closing app...")
 
 	// 按初始化的逆序关闭
+	if a.ChannelSession != nil {
+		a.ChannelSession.Stop()
+	}
+
 	if a.Channel != nil {
 		a.Channel.Stop()
 	}
@@ -397,7 +408,7 @@ func (a *App) cronJobExecutor(ctx context.Context, job *cron.Job) error {
 	return nil
 }
 
-// channelMessageHandler 通道消息处理器
+// channelMessageHandler 通道消息处理器（支持多轮会话）
 func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) error {
 	log.Info("received channel message",
 		"channel", msg.ChannelType,
@@ -421,27 +432,78 @@ func (a *App) channelMessageHandler(ctx context.Context, msg *channel.Message) e
 		a.saveFeishuMessageLog(msg, "")
 	}
 
-	// 创建 Task
-	taskReq := &task.CreateTaskRequest{
-		AgentID: agentID,
-		Prompt:  msg.Content,
-		Metadata: map[string]string{
-			"channel_type": msg.ChannelType,
-			"channel_id":   msg.ChannelID,
-			"message_id":   msg.ID,
-			"sender_id":    msg.SenderID,
-		},
+	// 判断是否群聊
+	isGroup := msg.Metadata["chat_type"] == "group"
+
+	// 生成会话键（群聊按用户隔离，私聊按聊天隔离）
+	sessionKey := channel.GetSessionKey(msg.ChannelType, msg.ChannelID, msg.SenderID, isGroup)
+
+	// 查找现有会话
+	existingSession := a.ChannelSession.GetSession(sessionKey)
+
+	var t *task.Task
+	var err error
+	var isNewSession bool
+
+	if existingSession != nil {
+		// 多轮对话：追加到现有 Task
+		log.Info("appending to existing session",
+			"session_key", sessionKey,
+			"task_id", existingSession.TaskID,
+		)
+
+		taskReq := &task.CreateTaskRequest{
+			TaskID: existingSession.TaskID, // 追加到现有 Task
+			Prompt: msg.Content,
+		}
+
+		t, err = a.Task.CreateTask(taskReq)
+		if err != nil {
+			// 追加失败，可能是 Task 已结束，创建新会话
+			log.Warn("append turn failed, creating new session",
+				"task_id", existingSession.TaskID,
+				"error", err,
+			)
+			a.ChannelSession.DeleteSession(sessionKey)
+			existingSession = nil
+		} else {
+			// 更新会话活跃时间
+			a.ChannelSession.TouchSession(sessionKey)
+		}
 	}
 
-	t, err := a.Task.CreateTask(taskReq)
-	if err != nil {
-		log.Error("create task from channel message failed", "error", err)
-		// 发送错误提示到通道
-		a.sendChannelReply(msg.ChannelType, msg.ChannelID, msg.ID, "❌ 任务创建失败，请稍后重试")
-		return fmt.Errorf("create task: %w", err)
+	if existingSession == nil {
+		// 新会话：创建新 Task
+		isNewSession = true
+		taskReq := &task.CreateTaskRequest{
+			AgentID: agentID,
+			Prompt:  msg.Content,
+			Metadata: map[string]string{
+				"channel_type": msg.ChannelType,
+				"channel_id":   msg.ChannelID,
+				"message_id":   msg.ID,
+				"sender_id":    msg.SenderID,
+				"session_key":  sessionKey,
+			},
+		}
+
+		t, err = a.Task.CreateTask(taskReq)
+		if err != nil {
+			log.Error("create task from channel message failed", "error", err)
+			a.sendChannelReply(msg.ChannelType, msg.ChannelID, msg.ID, "❌ 任务创建失败，请稍后重试")
+			return fmt.Errorf("create task: %w", err)
+		}
+
+		// 创建会话记录
+		a.ChannelSession.CreateSession(sessionKey, t.ID, agentID)
 	}
 
-	log.Info("channel message task created", "message_id", msg.ID, "task_id", t.ID)
+	log.Info("channel message task created/appended",
+		"message_id", msg.ID,
+		"task_id", t.ID,
+		"is_new_session", isNewSession,
+		"turn_count", t.TurnCount,
+	)
 
 	// 更新消息日志关联 Task ID
 	if msg.ChannelType == "feishu" {
@@ -493,7 +555,8 @@ func (a *App) saveFeishuMessageLog(msg *channel.Message, taskID string) {
 	}
 }
 
-// waitAndReplyChannel 等待 Task 完成并回复通道
+// waitAndReplyChannel 等待 Task 当前轮次完成并回复通道
+// 注意：多轮对话模式下，task.completed 表示当前轮次完成，不删除会话
 func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string) {
 	// 订阅任务事件
 	eventCh := a.Task.SubscribeEvents(taskID)
@@ -504,6 +567,7 @@ func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string
 
 	var result string
 	var completed bool
+	var shouldDeleteSession bool
 
 	for !completed {
 		select {
@@ -516,7 +580,7 @@ func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string
 
 			switch event.Type {
 			case "task.completed":
-				// 获取任务结果
+				// 获取任务结果（当前轮次完成）
 				t, err := a.Task.GetTask(taskID)
 				if err != nil {
 					log.Error("get completed task failed", "task_id", taskID, "error", err)
@@ -527,6 +591,7 @@ func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string
 					result = "✅ 任务已完成"
 				}
 				completed = true
+				// 注意：不删除会话，允许继续多轮对话
 
 			case "task.failed":
 				// 获取错误信息
@@ -539,22 +604,30 @@ func (a *App) waitAndReplyChannel(channelType, channelID, replyTo, taskID string
 					result = "❌ 任务执行失败"
 				}
 				completed = true
+				shouldDeleteSession = true // 失败时删除会话
 
 			case "task.cancelled":
 				result = "⚠️ 任务已取消"
 				completed = true
+				shouldDeleteSession = true // 取消时删除会话
 			}
 
 		case <-timeout:
 			log.Warn("task timeout waiting for completion", "task_id", taskID)
 			result = "⏱️ 任务执行超时，请稍后查看结果"
 			completed = true
+			shouldDeleteSession = true // 超时时删除会话
 		}
 	}
 
 	// 发送回复
 	if result != "" {
 		a.sendChannelReply(channelType, channelID, replyTo, result)
+	}
+
+	// 清理会话（仅在失败/取消/超时时）
+	if shouldDeleteSession && a.ChannelSession != nil {
+		a.ChannelSession.DeleteByTaskID(taskID)
 	}
 }
 
