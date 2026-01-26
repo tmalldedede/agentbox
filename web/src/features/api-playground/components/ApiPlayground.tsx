@@ -243,7 +243,11 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
       eventSourceRef.current.close()
     }
 
-    const es = new EventSource(`/api/v1/admin/sessions/${sessionId}/logs/stream`)
+    const token = localStorage.getItem('agentbox_token')
+    const url = token
+      ? `/api/v1/admin/sessions/${sessionId}/logs/stream?token=${token}`
+      : `/api/v1/admin/sessions/${sessionId}/logs/stream`
+    const es = new EventSource(url)
     eventSourceRef.current = es
 
     es.addEventListener('connected', (event) => {
