@@ -16,7 +16,7 @@ export function useSystemHealth() {
         if (auth.accessToken) {
           headers['Authorization'] = `Bearer ${auth.accessToken}`
         }
-        const res = await fetch('/api/v1/admin/system/health', {
+        const res = await fetch('/api/v1/system/health', {
           signal: controller.signal,
           headers,
         })
@@ -30,7 +30,7 @@ export function useSystemHealth() {
     refetchInterval: 30000,
     retry: false,
     staleTime: 25000,
-    enabled: !!auth.accessToken && auth.isAdmin(), // Only fetch for admin users
+    enabled: !!auth.accessToken, // Enabled for all authenticated users
   })
 }
 

@@ -210,6 +210,9 @@ func (s *Server) setupRoutes() {
 
 		// Coordinate (跨会话协调) - Agent 可用
 		s.coordinateHandler.RegisterRoutes(authenticated)
+
+		// System Health (所有认证用户可访问)
+		authenticated.GET("/system/health", s.systemHandler.Health)
 	}
 
 	// ==================== Admin API（需要 admin 角色）====================
