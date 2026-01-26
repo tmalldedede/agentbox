@@ -74,6 +74,10 @@ type Manager struct {
 	// 事件广播
 	eventSubs   map[string][]chan *TaskEvent // taskID → subscriber channels
 	eventSubsMu sync.RWMutex
+
+	// Provider Fallback 执行器
+	fallbackExecutor *FallbackExecutor
+	providerMgr      ProviderKeyManager
 }
 
 // TaskEvent SSE 事件
@@ -144,6 +148,23 @@ func (m *Manager) SetFilePathResolver(fn FilePathFunc) {
 // SetWebhookNotifier 设置全局 Webhook 通知器
 func (m *Manager) SetWebhookNotifier(notifier WebhookNotifier) {
 	m.webhookNotifier = notifier
+}
+
+// SetProviderManager 设置 Provider 管理器（用于故障转移）
+func (m *Manager) SetProviderManager(mgr ProviderKeyManager) {
+	m.providerMgr = mgr
+	// 如果 fallback executor 还没有初始化，现在初始化
+	if m.fallbackExecutor == nil && m.agentMgr != nil && m.sessionMgr != nil {
+		m.fallbackExecutor = NewFallbackExecutor(m.agentMgr, mgr, m.sessionMgr)
+	}
+}
+
+// GetFallbackStats 获取 fallback 执行器统计信息
+func (m *Manager) GetFallbackStats() map[string]interface{} {
+	if m.fallbackExecutor == nil {
+		return nil
+	}
+	return m.fallbackExecutor.GetStats()
 }
 
 // Start 启动调度器
@@ -692,9 +713,89 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 		return fmt.Errorf("task has no agent_id, cannot create session")
 	}
 
+	// 获取 Agent 配置
+	ag, err := m.agentMgr.Get(task.AgentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent: %w", err)
+	}
+
+	// 如果启用了 Fallback 且有 FallbackExecutor，使用带故障转移的执行
+	if ag.FallbackEnabled && len(ag.FallbackProviderIDs) > 0 && m.fallbackExecutor != nil {
+		return m.doExecuteWithFallback(ctx, task, ag)
+	}
+
+	// 标准执行流程（无 Fallback）
+	return m.doExecuteStandard(ctx, task, ag)
+}
+
+// doExecuteWithFallback 使用 Fallback 执行器执行任务
+func (m *Manager) doExecuteWithFallback(ctx context.Context, task *Task, ag *agent.Agent) error {
+	log.Info("executing task with fallback enabled",
+		"task_id", task.ID,
+		"agent_id", ag.ID,
+		"primary_provider", ag.ProviderID,
+		"fallback_providers", ag.FallbackProviderIDs)
+
+	// 广播事件
+	m.broadcastEvent(task.ID, &TaskEvent{Type: "agent.thinking"})
+
+	// 使用 FallbackExecutor 执行
+	result, err := m.fallbackExecutor.ExecuteWithFallback(ctx, task, ag)
+	if err != nil {
+		return fmt.Errorf("execution failed: %w", err)
+	}
+
+	// 保存 session ID 和 thread ID
+	task.SessionID = result.Session.ID
+	if result.ThreadID != "" {
+		task.ThreadID = result.ThreadID
+		log.Debug("doExecuteWithFallback: thread_id saved", "task_id", task.ID, "thread_id", task.ThreadID)
+	}
+
+	// 挂载附件到容器工作区（在 session 创建后）
+	if len(task.Attachments) > 0 {
+		m.mountAttachments(ctx, result.Session, task.Attachments)
+	}
+
+	// 等待执行完成
+	timeout := task.Timeout
+	if timeout == 0 {
+		timeout = 1800
+	}
+	execResult, err := m.waitExecution(ctx, result.Session.ID, result.ExecResponse.ExecutionID, time.Duration(timeout)*time.Second)
+	if err != nil {
+		m.sessionMgr.Stop(ctx, task.SessionID)
+		return err
+	}
+
+	// 保存结果
+	if len(task.Turns) > 0 {
+		task.Turns[0].Result = execResult
+	}
+	task.Result = execResult
+
+	// 广播执行成功事件
+	m.broadcastEvent(task.ID, &TaskEvent{Type: "agent.message", Data: map[string]interface{}{
+		"text":          execResult.Text,
+		"provider":      result.ProviderID,
+		"used_fallback": result.UsedFallback,
+	}})
+
+	if result.UsedFallback {
+		log.Info("task completed using fallback provider",
+			"task_id", task.ID,
+			"provider", result.ProviderID,
+			"attempts", result.Attempts)
+	}
+
+	return nil
+}
+
+// doExecuteStandard 标准执行流程（无 Fallback）
+func (m *Manager) doExecuteStandard(ctx context.Context, task *Task, ag *agent.Agent) error {
 	// 从 Agent 配置获取 workspace
 	workspace := ""
-	if ag, err := m.agentMgr.Get(task.AgentID); err == nil && ag.Workspace != "" {
+	if ag.Workspace != "" {
 		workspace = ag.Workspace
 	} else {
 		workspace = fmt.Sprintf("agent-%s-%s", task.AgentID, task.ID)
@@ -707,12 +808,15 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 
 	sess, err := m.sessionMgr.Create(ctx, createReq)
 	if err != nil {
+		// 记录创建 session 失败（可能是 provider 问题）
+		m.recordProviderError(ag.ProviderID, err)
 		return fmt.Errorf("failed to create session: %w", err)
 	}
 	task.SessionID = sess.ID
 
 	// 启动 Session
 	if err := m.sessionMgr.Start(ctx, sess.ID); err != nil {
+		m.recordProviderError(ag.ProviderID, err)
 		return fmt.Errorf("failed to start session: %w", err)
 	}
 
@@ -736,21 +840,28 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 	})
 	if err != nil {
 		m.sessionMgr.Stop(ctx, task.SessionID)
+		// 记录执行失败（分类错误类型）
+		m.recordProviderError(ag.ProviderID, err)
 		return fmt.Errorf("failed to execute: %w", err)
 	}
 
 	// 保存 Thread ID（首轮执行后从 thread.started 事件获取，用于后续 resume）
 	if execResp.ThreadID != "" {
 		task.ThreadID = execResp.ThreadID
-		log.Debug("doExecute: thread_id saved", "task_id", task.ID, "thread_id", task.ThreadID)
+		log.Debug("doExecuteStandard: thread_id saved", "task_id", task.ID, "thread_id", task.ThreadID)
 	}
 
 	// 等待执行完成
 	result, err := m.waitExecution(ctx, sess.ID, execResp.ExecutionID, time.Duration(timeout)*time.Second)
 	if err != nil {
 		m.sessionMgr.Stop(ctx, task.SessionID)
+		// 记录执行失败
+		m.recordProviderError(ag.ProviderID, err)
 		return err
 	}
+
+	// 执行成功，记录成功
+	m.recordProviderSuccess(ag.ProviderID)
 
 	// 保存结果到首轮 Turn
 	if len(task.Turns) > 0 {
@@ -764,6 +875,36 @@ func (m *Manager) doExecute(ctx context.Context, task *Task) error {
 	}})
 
 	return nil
+}
+
+// recordProviderError 记录 provider 执行失败（用于故障转移决策）
+func (m *Manager) recordProviderError(providerID string, err error) {
+	if m.providerMgr == nil {
+		return
+	}
+
+	// 分类错误
+	fe := apperr.ClassifyError(err)
+	if fe == nil {
+		return
+	}
+
+	// 只有需要 cooldown 的错误才记录
+	if fe.ShouldCooldown() {
+		m.providerMgr.MarkProfileFailed(providerID, "", string(fe.Reason))
+		log.Info("provider error recorded",
+			"provider", providerID,
+			"reason", fe.Reason,
+			"retryable", fe.Retryable)
+	}
+}
+
+// recordProviderSuccess 记录 provider 执行成功
+func (m *Manager) recordProviderSuccess(providerID string) {
+	if m.providerMgr == nil {
+		return
+	}
+	m.providerMgr.MarkProfileSuccess(providerID, "")
 }
 
 // waitExecution 等待执行完成

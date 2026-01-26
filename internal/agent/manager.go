@@ -138,6 +138,67 @@ func (m *Manager) GetFullConfig(id string) (*AgentFullConfig, error) {
 	}, nil
 }
 
+// GetFullConfigForProvider resolves all references with a specific provider override.
+// This is used by fallback execution to try different providers for the same agent.
+func (m *Manager) GetFullConfigForProvider(agentID string, providerID string) (*AgentFullConfig, error) {
+	agent, err := m.Get(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve the specified Provider (not the agent's default)
+	prov, err := m.providerMgr.Get(providerID)
+	if err != nil {
+		return nil, ErrProviderNotFound
+	}
+
+	// Resolve Runtime (default if not specified)
+	var rt *runtime.AgentRuntime
+	if agent.RuntimeID != "" {
+		rt, err = m.runtimeMgr.Get(agent.RuntimeID)
+		if err != nil {
+			return nil, ErrRuntimeNotFound
+		}
+	} else {
+		rt = m.runtimeMgr.GetDefault()
+	}
+
+	// Resolve Skills
+	var skills []*skill.Skill
+	for _, sid := range agent.SkillIDs {
+		s, err := m.skillMgr.Get(sid)
+		if err != nil {
+			log.Warn("skill not found, skipping", "skill_id", sid, "agent_id", agentID)
+			continue
+		}
+		skills = append(skills, s)
+	}
+
+	// Resolve MCP Servers
+	var mcpServers []*mcp.Server
+	for _, mid := range agent.MCPServerIDs {
+		s, err := m.mcpMgr.Get(mid)
+		if err != nil {
+			log.Warn("MCP server not found, skipping", "mcp_id", mid, "agent_id", agentID)
+			continue
+		}
+		mcpServers = append(mcpServers, s)
+	}
+
+	return &AgentFullConfig{
+		Agent:      agent,
+		Provider:   prov,
+		Runtime:    rt,
+		Skills:     skills,
+		MCPServers: mcpServers,
+	}, nil
+}
+
+// GetProviderEnvVarsForProvider returns the provider's environment variables for a specific provider.
+func (m *Manager) GetProviderEnvVarsForProvider(providerID string) (map[string]string, error) {
+	return m.providerMgr.GetEnvVarsWithKey(providerID)
+}
+
 // Create creates a new agent
 func (m *Manager) Create(agent *Agent) error {
 	if err := agent.Validate(); err != nil {

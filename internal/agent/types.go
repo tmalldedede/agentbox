@@ -24,6 +24,10 @@ type Agent struct {
 	ProviderID string `json:"provider_id"` // → Provider (API service + key)
 	RuntimeID  string `json:"runtime_id"`  // → AgentRuntime (image + resources)
 
+	// Fallback configuration
+	FallbackProviderIDs []string `json:"fallback_provider_ids,omitempty"` // Backup providers to try on failure
+	FallbackEnabled     bool     `json:"fallback_enabled,omitempty"`      // Enable automatic provider fallback
+
 	// Model selection (from Provider's available models)
 	Model string `json:"model"`
 
