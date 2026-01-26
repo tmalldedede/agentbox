@@ -707,6 +707,16 @@ func (m *Manager) executeTask(task *Task) {
 		log.Error("failed to update task after first turn", "task_id", task.ID, "error", err)
 	}
 
+	// 广播 turn_completed 事件，通知前端本轮已完成
+	m.broadcastEvent(task.ID, &TaskEvent{
+		Type: "task.turn_completed",
+		Data: map[string]interface{}{
+			"task_id":    task.ID,
+			"turn_count": task.TurnCount,
+			"status":     task.Status,
+		},
+	})
+
 	// 启动 idle timer（等待后续轮次或超时自动完成）
 	m.resetIdleTimer(task.ID)
 
