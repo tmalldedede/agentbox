@@ -415,10 +415,33 @@ export interface CloneMCPServerRequest {
 
 // Skill Types
 export type SkillCategory = 'coding' | 'review' | 'docs' | 'security' | 'testing' | 'other'
+export type SkillOrigin = 'extra' | 'bundled' | 'managed' | 'workspace'
+export type SkillLoadLevel = 'metadata' | 'body' | 'full'
 
 export interface SkillFile {
   path: string
   content: string
+}
+
+export interface SkillRequirements {
+  bins?: string[]
+  env?: string[]
+  config?: string[]
+  pip?: string[]
+  npm?: string[]
+}
+
+export interface SkillInvocationPolicy {
+  user_invocable?: boolean
+  auto_invocable?: boolean
+  hook_invocable?: string[]
+}
+
+export interface SkillRuntimeConfig {
+  python?: string
+  node?: string
+  memory?: string
+  timeout?: string
 }
 
 export interface Skill {
@@ -434,10 +457,60 @@ export interface Skill {
   tags?: string[]
   author?: string
   version?: string
+  source?: SkillOrigin
+  source_path?: string
+  source_dir?: string
   is_built_in: boolean
   is_enabled: boolean
+  // 渐进式加载
+  load_level?: SkillLoadLevel
+  body_loaded?: boolean
+  // 依赖与运行时
+  requirements?: SkillRequirements
+  runtime?: SkillRuntimeConfig
+  invocation?: SkillInvocationPolicy
   created_at: string
   updated_at: string
+}
+
+// Skill 元数据（轻量级，用于列表）
+export interface SkillMetadata {
+  id: string
+  name: string
+  description?: string
+  command: string
+  category: SkillCategory
+  tags?: string[]
+  author?: string
+  version?: string
+  source: SkillOrigin
+  is_built_in: boolean
+  is_enabled: boolean
+  has_deps: boolean
+  updated_at: string
+}
+
+// 依赖检查结果
+export interface SkillCheckResult {
+  skill_id: string
+  satisfied: boolean
+  missing?: {
+    bins?: string[]
+    env?: string[]
+    config?: string[]
+    pip?: string[]
+    npm?: string[]
+  }
+  error?: string
+}
+
+// Skill 统计信息
+export interface SkillStats {
+  total: number
+  extra: number
+  bundled: number
+  managed: number
+  workspace: number
 }
 
 export interface CreateSkillRequest {
@@ -453,6 +526,10 @@ export interface CreateSkillRequest {
   tags?: string[]
   author?: string
   version?: string
+  source_dir?: string
+  requirements?: SkillRequirements
+  runtime?: SkillRuntimeConfig
+  invocation?: SkillInvocationPolicy
 }
 
 export interface UpdateSkillRequest {
@@ -468,6 +545,9 @@ export interface UpdateSkillRequest {
   author?: string
   version?: string
   is_enabled?: boolean
+  requirements?: SkillRequirements
+  runtime?: SkillRuntimeConfig
+  invocation?: SkillInvocationPolicy
 }
 
 export interface CloneSkillRequest {
@@ -1137,4 +1217,19 @@ export interface FeishuMessageLog {
   task_id?: string
   received_at: string
   created_at: string
+}
+
+// Chat Types (Chat 界面)
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  turnId?: string
+  timestamp: Date
+  status?: 'sending' | 'sent' | 'streaming' | 'error'
+}
+
+export interface MessageGroup {
+  role: 'user' | 'assistant' | 'system'
+  messages: ChatMessage[]
 }

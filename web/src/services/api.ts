@@ -29,10 +29,15 @@ import type {
   UpdateMCPServerRequest,
   CloneMCPServerRequest,
   Skill,
+  SkillMetadata,
+  SkillCheckResult,
+  SkillStats,
+  SkillLoadLevel,
   CreateSkillRequest,
   UpdateSkillRequest,
   CloneSkillRequest,
   SkillSource,
+  SkillSourceType,
   RemoteSkill,
   InstallSkillRequest,
   AddSourceRequest,
@@ -72,7 +77,7 @@ import type {
   NotifySettings,
 } from '../types'
 
-const API_BASE = '/api/v1'
+export const API_BASE = '/api/v1'
 const ADMIN_BASE = '/api/v1/admin'
 const TOKEN_KEY = 'agentbox_token'
 
@@ -87,7 +92,7 @@ function getAuthHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' }
 }
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
+export async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: getAuthHeaders(),
     ...options,
@@ -668,15 +673,38 @@ export const api = {
     request<MCPServerStats>(`${ADMIN_BASE}/mcp-servers/stats`),
 
   // Skills (管理接口)
-  listSkills: (options?: { category?: string; enabled?: boolean }) => {
+  listSkills: (options?: {
+    category?: string
+    enabled?: boolean
+    level?: SkillLoadLevel
+    source?: SkillSourceType
+  }) => {
     const params = new URLSearchParams()
     if (options?.category) params.set('category', options.category)
     if (options?.enabled) params.set('enabled', 'true')
+    if (options?.level) params.set('level', options.level)
+    if (options?.source) params.set('source', options.source)
     const query = params.toString()
     return request<Skill[]>(`${ADMIN_BASE}/skills${query ? `?${query}` : ''}`)
   },
 
-  getSkill: (id: string) => request<Skill>(`${ADMIN_BASE}/skills/${id}`),
+  // 快速列出元数据（用于列表页）
+  listSkillMetadata: (options?: {
+    category?: string
+    source?: SkillSourceType
+  }) => {
+    const params = new URLSearchParams()
+    params.set('level', 'metadata')
+    if (options?.category) params.set('category', options.category)
+    if (options?.source) params.set('source', options.source)
+    const query = params.toString()
+    return request<SkillMetadata[]>(`${ADMIN_BASE}/skills?${query}`)
+  },
+
+  getSkill: (id: string, level?: SkillLoadLevel) => {
+    const params = level ? `?level=${level}` : ''
+    return request<Skill>(`${ADMIN_BASE}/skills/${id}${params}`)
+  },
 
   createSkill: (req: CreateSkillRequest) =>
     request<Skill>(`${ADMIN_BASE}/skills`, {
@@ -700,6 +728,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+
+  // 检查依赖
+  checkSkillDeps: (id: string, containerId?: string) =>
+    request<SkillCheckResult>(`${ADMIN_BASE}/skills/${id}/check-deps`, {
+      method: 'POST',
+      body: JSON.stringify({ container_id: containerId }),
+    }),
+
+  // 获取统计信息
+  getSkillStats: () => request<SkillStats>(`${ADMIN_BASE}/skills/stats`),
 
   exportSkill: (id: string) => {
     const token = localStorage.getItem(TOKEN_KEY)
