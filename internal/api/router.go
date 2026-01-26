@@ -17,6 +17,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/engine"
 	"github.com/tmalldedede/agentbox/internal/history"
 	"github.com/tmalldedede/agentbox/internal/mcp"
+	"github.com/tmalldedede/agentbox/internal/oauth"
 	"github.com/tmalldedede/agentbox/internal/plugin"
 	"github.com/tmalldedede/agentbox/internal/provider"
 	"github.com/tmalldedede/agentbox/internal/runtime"
@@ -55,6 +56,7 @@ type Server struct {
 	feishuHandler     *FeishuHandler
 	coordinateHandler *CoordinateHandler
 	gatewayHandler    *GatewayHandler
+	oauthSyncHandler  *OAuthSyncAPI
 }
 
 // Deps 服务器依赖（从 App 容器注入）
@@ -81,6 +83,7 @@ type Deps struct {
 	Coordinate    *coordinate.Manager
 	FilesConfig   config.FilesConfig
 	FileStore     FileStore
+	OAuthSync     *oauth.SyncManager
 }
 
 // NewServer 创建服务器
@@ -114,6 +117,7 @@ func NewServer(deps *Deps) *Server {
 	feishuHandler := NewFeishuHandler()
 	coordinateHandler := NewCoordinateHandler(deps.Coordinate)
 	gatewayHandler := NewGatewayHandler(deps.Auth, deps.Task)
+	oauthSyncHandler := NewOAuthSyncAPI(deps.OAuthSync, deps.Provider)
 
 	s := &Server{
 		engine:            engine,
@@ -141,6 +145,7 @@ func NewServer(deps *Deps) *Server {
 		feishuHandler:     feishuHandler,
 		coordinateHandler: coordinateHandler,
 		gatewayHandler:    gatewayHandler,
+		oauthSyncHandler:  oauthSyncHandler,
 	}
 
 	s.setupRoutes()
@@ -193,6 +198,9 @@ func (s *Server) setupRoutes() {
 
 		// Webhooks (CRUD) - Webhook 管理
 		s.webhookHandler.RegisterRoutes(authenticated)
+
+		// OAuth Sync - OAuth 令牌同步
+		s.oauthSyncHandler.RegisterRoutes(authenticated)
 
 		// Engines (只读) - 底层引擎适配器列表
 		authenticated.GET("/engines", s.handler.ListAgents)

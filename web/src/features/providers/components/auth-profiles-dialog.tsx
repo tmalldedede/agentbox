@@ -35,6 +35,7 @@ import {
   useRemoveAuthProfile,
   useRotationStats,
 } from '@/hooks/useAuthProfiles'
+import { OAuthSyncSection } from './oauth-sync-section'
 import type { Provider, AuthProfile } from '@/types'
 
 type AuthProfilesDialogProps = {
@@ -89,17 +90,17 @@ export function AuthProfilesDialog({
 
   const getProfileStatus = useCallback((profile: AuthProfile) => {
     if (!profile.is_enabled) {
-      return { icon: AlertCircle, label: 'Disabled', variant: 'secondary' as const }
+      return { icon: AlertCircle, label: 'Disabled', variant: 'secondary' as const, className: '' }
     }
     if (profile.cooldown_until) {
       const cooldownEnd = new Date(profile.cooldown_until)
       const now = new Date()
       if (cooldownEnd > now) {
         const remaining = Math.ceil((cooldownEnd.getTime() - now.getTime()) / 1000)
-        return { icon: Clock, label: `${remaining}s`, variant: 'warning' as const }
+        return { icon: Clock, label: `${remaining}s`, variant: 'outline' as const, className: 'border-yellow-500 text-yellow-600' }
       }
     }
-    return { icon: Check, label: 'Active', variant: 'default' as const }
+    return { icon: Check, label: 'Active', variant: 'default' as const, className: '' }
   }, [])
 
   return (
@@ -146,6 +147,9 @@ export function AuthProfilesDialog({
             </div>
           )}
 
+          {/* OAuth Sync Section */}
+          <OAuthSyncSection provider={provider} />
+
           {/* Profiles Table */}
           <div className='border rounded-lg'>
             <Table>
@@ -183,7 +187,7 @@ export function AuthProfilesDialog({
                           {profile.key_masked}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={status.variant} className='gap-1'>
+                          <Badge variant={status.variant} className={`gap-1 ${status.className}`}>
                             <StatusIcon className='h-3 w-3' />
                             {status.label}
                           </Badge>

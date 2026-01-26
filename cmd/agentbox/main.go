@@ -65,6 +65,7 @@ import (
 	"github.com/tmalldedede/agentbox/internal/config"
 	"github.com/tmalldedede/agentbox/internal/database"
 	"github.com/tmalldedede/agentbox/internal/logger"
+	"github.com/tmalldedede/agentbox/internal/oauth"
 )
 
 const (
@@ -149,6 +150,9 @@ func main() {
 	// 启动后台服务（Task Manager 等）
 	application.Start()
 
+	// 初始化 OAuth 同步管理器
+	oauthSyncMgr := oauth.NewSyncManager()
+
 	// 创建 HTTP 服务器
 	server := api.NewServer(&api.Deps{
 		Auth:          application.Auth,
@@ -173,6 +177,7 @@ func main() {
 		Coordinate:    application.Coordinate,
 		FilesConfig:   cfg.Files,
 		FileStore:     fileStore,
+		OAuthSync:     oauthSyncMgr,
 	})
 
 	// 打印 API 路由信息
