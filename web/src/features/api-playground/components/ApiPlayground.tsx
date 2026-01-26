@@ -113,6 +113,21 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     const path = url.startsWith('http') ? new URL(url).pathname : url
     const startTime = Date.now()
 
+    // 添加认证 token
+    const token = localStorage.getItem('agentbox_token')
+    const headers: HeadersInit = {
+      ...(options?.headers || {}),
+    }
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    // 如果没有 FormData，添加 Content-Type
+    if (!options?.body || !(options.body instanceof FormData)) {
+      if (!headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json'
+      }
+    }
+
     // 记录请求体
     let requestBody: string | null = null
     if (options?.body) {
@@ -139,7 +154,10 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
     setApiCalls(prev => [...prev, entry])
 
     try {
-      const response = await fetch(url, options)
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      })
       const duration = Date.now() - startTime
 
       // 克隆 response 以读取 body（原始 response 仍可被调用者消费）
@@ -169,20 +187,40 @@ export default function ApiPlayground({ preselectedAgentId }: ApiPlaygroundProps
 
   // Fetch agents
   useEffect(() => {
-    fetch('/api/v1/agents')
-      .then(res => res.json())
-      .then(data => {
+    const fetchAgents = async () => {
+      try {
+        const token = localStorage.getItem('agentbox_token')
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+
+        const res = await fetch('/api/v1/agents', { headers })
+        const data = await res.json()
+
+        if (data.code !== 0) {
+          console.error('Failed to fetch agents:', data.message)
+          return
+        }
+
         const allAgents = (data.data || []) as Agent[]
         const publicAgents = allAgents.filter((a: Agent) => a.api_access === 'public' || a.api_access === 'api_key')
         const displayAgents = publicAgents.length > 0 ? publicAgents : allAgents
         setAgents(displayAgents)
+
         if (preselectedAgentId && allAgents.find(a => a.id === preselectedAgentId)) {
           setSelectedAgentId(preselectedAgentId)
         } else if (displayAgents.length > 0) {
           setSelectedAgentId(displayAgents[0].id)
         }
-      })
-      .catch(err => console.error('Failed to fetch agents:', err))
+      } catch (err) {
+        console.error('Failed to fetch agents:', err)
+      }
+    }
+
+    fetchAgents()
   }, [preselectedAgentId])
 
   // Auto-scroll container logs
