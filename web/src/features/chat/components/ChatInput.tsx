@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react'
-import { Send, Loader2, Paperclip, X, FileText, Image, File } from 'lucide-react'
+import { Send, Loader2, Paperclip, X, FileText, Image, File, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -15,6 +15,8 @@ interface ChatInputProps {
   uploading?: boolean
   placeholder?: string
   className?: string
+  onInterrupt?: () => void
+  canInterrupt?: boolean
 }
 
 // 文件图标
@@ -46,6 +48,8 @@ export function ChatInput({
   uploading,
   placeholder = 'Type a message... (Enter to send, Shift+Enter for newline)',
   className,
+  onInterrupt,
+  canInterrupt,
 }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -188,19 +192,31 @@ export function ChatInput({
             />
           </div>
 
-          {/* Send button */}
-          <Button
-            onClick={handleSend}
-            disabled={!message.trim() || disabled || loading || uploading || hasPendingUploads}
-            size='icon'
-            className='h-11 w-11 shrink-0'
-          >
-            {loading || uploading ? (
-              <Loader2 className='h-5 w-5 animate-spin' />
-            ) : (
-              <Send className='h-5 w-5' />
-            )}
-          </Button>
+          {/* Send / Interrupt button */}
+          {canInterrupt && loading && onInterrupt ? (
+            <Button
+              onClick={onInterrupt}
+              variant='outline'
+              size='icon'
+              className='h-11 w-11 shrink-0 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:border-red-700 transition-colors'
+              title='中断生成'
+            >
+              <Square className='h-5 w-5' />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!message.trim() || disabled || loading || uploading || hasPendingUploads}
+              size='icon'
+              className='h-11 w-11 shrink-0'
+            >
+              {loading || uploading ? (
+                <Loader2 className='h-5 w-5 animate-spin' />
+              ) : (
+                <Send className='h-5 w-5' />
+              )}
+            </Button>
+          )}
         </div>
 
         <p className='mx-auto mt-2 max-w-3xl text-center text-xs text-muted-foreground'>

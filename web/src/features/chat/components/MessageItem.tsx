@@ -1,6 +1,7 @@
 import { Bot, User, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/types'
+import { MarkdownContent } from './MarkdownContent'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -52,21 +53,35 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
       >
         <div
           className={cn(
-            'rounded-2xl px-4 py-2',
+            'rounded-2xl px-4 py-3',
             isUser
               ? 'rounded-tr-none bg-primary text-primary-foreground'
               : 'rounded-tl-none bg-muted',
             isError && 'border border-destructive bg-destructive/10',
-            isStreaming && 'animate-pulse'
+            isStreaming && !isUser && 'relative overflow-hidden'
           )}
         >
           {isError && (
-            <div className='mb-1 flex items-center gap-1 text-destructive'>
+            <div className='mb-2 flex items-center gap-1 text-destructive'>
               <AlertCircle className='h-3 w-3' />
               <span className='text-xs'>Error</span>
             </div>
           )}
-          <p className='whitespace-pre-wrap text-sm'>{message.content}</p>
+          {isStreaming && !isUser && (
+            <div className='absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer pointer-events-none' />
+          )}
+          {isUser ? (
+            <div className='text-sm whitespace-pre-wrap'>{message.content}</div>
+          ) : (
+            <MarkdownContent
+              content={message.content}
+              className={cn(
+                'text-sm',
+                isUser && 'prose-invert',
+                isError && 'text-destructive'
+              )}
+            />
+          )}
         </div>
         <span className='text-xs text-muted-foreground'>
           {formatTime(message.timestamp)}
