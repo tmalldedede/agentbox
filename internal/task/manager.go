@@ -403,14 +403,21 @@ func (m *Manager) appendTurn(req *CreateTaskRequest) (*Task, error) {
 		return nil, err
 	}
 
-	// 验证 task 状态：running 或 completed 的任务可以追加轮次
-	if task.Status != StatusRunning && task.Status != StatusCompleted {
+	// 验证 task 状态：running / completed 可追加；failed 允许尝试继续（若 session 仍存在）
+	if task.Status != StatusRunning && task.Status != StatusCompleted && task.Status != StatusFailed {
 		return nil, apperr.BadRequestf("task %s cannot append turn (status: %s)", task.ID, task.Status)
 	}
 
 	// 验证 session 存在
 	if task.SessionID == "" {
 		return nil, apperr.BadRequestf("task %s has no active session", task.ID)
+	}
+
+	// 如果是 failed 任务，允许恢复继续对话（重置错误信息与完成时间）
+	if task.Status == StatusFailed {
+		log.Warn("append turn on failed task, resuming", "task_id", task.ID, "session_id", task.SessionID)
+		task.ErrorMessage = ""
+		task.CompletedAt = nil
 	}
 
 	// 停止 idle timer（新的轮次进来了）
