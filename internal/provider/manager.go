@@ -567,11 +567,21 @@ func (m *Manager) fetchModelList(baseURL string, apiKey string, agents []string)
 			return m.fetchAnthropicModels(url, apiKey)
 		}
 		if a == AgentCodex {
-			return m.fetchOpenAIModels(baseURL, apiKey)
+			// Codex 使用 OpenAI 兼容 API，需要将 zhipu 的 Anthropic 端点转换为 OpenAI 兼容端点
+			codexBaseURL := baseURL
+			if strings.Contains(baseURL, "open.bigmodel.cn") && strings.Contains(baseURL, "/api/anthropic") {
+				// 将 /api/anthropic 转换为 /api/paas/v4 (OpenAI 兼容端点，用于 Codex)
+				codexBaseURL = strings.Replace(baseURL, "/api/anthropic", "/api/paas/v4", 1)
+			}
+			return m.fetchOpenAIModels(codexBaseURL, apiKey)
 		}
 	}
 
 	// Default: try OpenAI-compatible
+	// 如果是智谱AI的 Anthropic 端点，也需要转换
+	if strings.Contains(baseURL, "open.bigmodel.cn") && strings.Contains(baseURL, "/api/anthropic") {
+		baseURL = strings.Replace(baseURL, "/api/anthropic", "/api/paas/v4", 1)
+	}
 	return m.fetchOpenAIModels(baseURL, apiKey)
 }
 

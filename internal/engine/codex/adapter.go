@@ -81,8 +81,8 @@ func (a *Adapter) PrepareContainer(session *engine.SessionInfo) *container.Creat
 			CPULimit:    2.0,
 			MemoryLimit: 4 * 1024 * 1024 * 1024, // 4GB
 		},
-		NetworkMode: "bridge",      // Codex 需要网络访问 API
-		Privileged:  false,         // 由 Runtime 配置决定是否开启特权模式
+		NetworkMode: "bridge", // Codex 需要网络访问 API
+		Privileged:  false,    // 由 Runtime 配置决定是否开启特权模式
 		Labels: map[string]string{
 			"agentbox.managed":    "true",
 			"agentbox.agent":      AgentName,
@@ -142,12 +142,37 @@ func (a *Adapter) GenerateConfigTOML(cfg *engine.AgentConfig, apiKey string) str
 	sb.WriteString("\n")
 
 	// ===== Provider 配置 =====
-	if cfg.Model.Provider != "" && cfg.Model.BaseURL != "" {
-		providerName := strings.ToLower(cfg.Model.Provider)
+	// 即使 Provider 或 BaseURL 为空，也尝试从环境变量推断
+	provider := cfg.Model.Provider
+	baseURL := cfg.Model.BaseURL
+
+	// 如果 Provider 为空但 BaseURL 存在，尝试从 BaseURL 推断 Provider
+	if provider == "" && baseURL != "" {
+		// 简单的推断逻辑
+		if strings.Contains(baseURL, "open.bigmodel.cn") {
+			provider = "zhipu"
+		} else if strings.Contains(baseURL, "openai.com") || strings.Contains(baseURL, "api.openai.com") {
+			provider = "openai"
+		} else if strings.Contains(baseURL, "anthropic.com") || strings.Contains(baseURL, "api.anthropic.com") {
+			provider = "anthropic"
+		}
+	}
+
+	// Codex 使用 OpenAI 兼容 API，需要将 zhipu 的 Anthropic 端点转换为 OpenAI 兼容端点
+	// 检查 provider 是否为 zhipu，或者 BaseURL 包含智谱AI的特征
+	isZhipu := provider == "zhipu" || (strings.Contains(baseURL, "open.bigmodel.cn") && strings.Contains(baseURL, "/api/anthropic"))
+	if isZhipu && strings.Contains(baseURL, "/api/anthropic") {
+		// 将 /api/anthropic 转换为 /api/paas/v4 (OpenAI 兼容端点，用于 Codex)
+		// 注意：如果需要编码计划权限，可以使用 /api/coding/paas/v4
+		baseURL = strings.Replace(baseURL, "/api/anthropic", "/api/paas/v4", 1)
+	}
+
+	if provider != "" && baseURL != "" {
+		providerName := strings.ToLower(provider)
 
 		sb.WriteString(fmt.Sprintf("[model_providers.%s]\n", providerName))
-		sb.WriteString(fmt.Sprintf("name = \"%s\"\n", cfg.Model.Provider))
-		sb.WriteString(fmt.Sprintf("base_url = \"%s\"\n", cfg.Model.BaseURL))
+		sb.WriteString(fmt.Sprintf("name = \"%s\"\n", provider))
+		sb.WriteString(fmt.Sprintf("base_url = \"%s\"\n", baseURL))
 
 		// wire_api - API 协议类型 (chat/responses)
 		wireAPI := cfg.Model.WireAPI
@@ -196,10 +221,15 @@ func (a *Adapter) GetConfigFiles(cfg *engine.AgentConfig, apiKey string) map[str
 	files := make(map[string]string)
 
 	// ~/.codex/config.toml
+	// 即使 Provider 或 BaseURL 为空，也生成基础配置文件
+	// Codex 可以通过环境变量工作，但配置文件可以提供更好的兼容性
 	configTOML := a.GenerateConfigTOML(cfg, apiKey)
-	if configTOML != "" {
-		files["~/.codex/config.toml"] = configTOML
+	// 总是生成配置文件（至少包含基础配置）
+	if configTOML == "" {
+		// 如果 GenerateConfigTOML 返回空，至少生成基础配置
+		configTOML = "disable_response_storage = true\nsandbox_mode = \"danger-full-access\"\n"
 	}
+	files["~/.codex/config.toml"] = configTOML
 
 	// ~/.codex/auth.json
 	// 只有官方 OpenAI 需要 auth.json（requires_openai_auth = true）
@@ -319,7 +349,7 @@ func (a *Adapter) ValidateConfig(cfg *engine.AgentConfig) error {
 
 	// 验证沙箱模式
 	validSandboxModes := map[string]bool{
-		"":                                true,
+		"":                                 true,
 		engine.SandboxModeReadOnly:         true,
 		engine.SandboxModeWorkspaceWrite:   true,
 		engine.SandboxModeDangerFullAccess: true,
@@ -330,11 +360,11 @@ func (a *Adapter) ValidateConfig(cfg *engine.AgentConfig) error {
 
 	// 验证审批策略
 	validApprovalPolicies := map[string]bool{
-		"":                              true,
-		engine.ApprovalPolicyUntrusted:  true,
-		engine.ApprovalPolicyOnFailure:  true,
-		engine.ApprovalPolicyOnRequest:  true,
-		engine.ApprovalPolicyNever:      true,
+		"":                             true,
+		engine.ApprovalPolicyUntrusted: true,
+		engine.ApprovalPolicyOnFailure: true,
+		engine.ApprovalPolicyOnRequest: true,
+		engine.ApprovalPolicyNever:     true,
 	}
 	if !validApprovalPolicies[cfg.Permissions.ApprovalPolicy] {
 		return fmt.Errorf("invalid approval policy %q for Codex", cfg.Permissions.ApprovalPolicy)
@@ -397,12 +427,12 @@ func (a *Adapter) SupportedFeatures() []string {
 
 // CodexEvent Codex CLI --json 输出的事件结构
 type CodexEvent struct {
-	Type     string          `json:"type"`               // 事件类型: thread.started, turn.completed, item.completed, error
+	Type     string          `json:"type"`                // 事件类型: thread.started, turn.completed, item.completed, error
 	ThreadID string          `json:"thread_id,omitempty"` // Thread ID (thread.started)
-	Usage    *CodexUsage     `json:"usage,omitempty"`    // Token 使用统计 (turn.completed)
-	Item     json.RawMessage `json:"item,omitempty"`     // 事件内容 (item.completed)
-	Error    *CodexError     `json:"error,omitempty"`    // 错误信息 (error, turn.failed)
-	Message  string          `json:"message,omitempty"`  // 错误消息 (error)
+	Usage    *CodexUsage     `json:"usage,omitempty"`     // Token 使用统计 (turn.completed)
+	Item     json.RawMessage `json:"item,omitempty"`      // 事件内容 (item.completed)
+	Error    *CodexError     `json:"error,omitempty"`     // 错误信息 (error, turn.failed)
+	Message  string          `json:"message,omitempty"`   // 错误消息 (error)
 }
 
 // CodexUsage Token 使用统计
@@ -428,12 +458,14 @@ type CodexItem struct {
 // 解析 Codex CLI --json 输出的 JSONL 格式
 func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*engine.ExecResult, error) {
 	var (
-		message  string
-		threadID string
-		events   []engine.ExecEvent
-		usage    *engine.TokenUsage
-		exitCode int
-		execErr  string
+		message           string
+		threadID          string
+		events            []engine.ExecEvent
+		usage             *engine.TokenUsage
+		exitCode          int
+		execErr           string
+		responseCompleted bool
+		turnCompleted     bool
 	)
 
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -471,6 +503,8 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*engine.E
 			}
 
 		case "turn.completed":
+			// 标记 turn 已完成
+			turnCompleted = true
 			// 获取 token 使用统计
 			if event.Usage != nil {
 				usage = &engine.TokenUsage{
@@ -479,6 +513,10 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*engine.E
 					OutputTokens:      event.Usage.OutputTokens,
 				}
 			}
+
+		case "response.completed":
+			// 标记 response 已完成（Codex 的最终完成事件）
+			responseCompleted = true
 
 		case "turn.failed":
 			if event.Error != nil {
@@ -510,6 +548,17 @@ func (a *Adapter) ParseJSONLOutput(output string, includeEvents bool) (*engine.E
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan output: %w", err)
+	}
+
+	// 检查流是否正常完成
+	// 如果收到了 turn.completed 或 response.completed，说明流正常完成
+	// 如果没有收到完成事件，但也没有错误，可能是流提前关闭了
+	if !responseCompleted && !turnCompleted && execErr == "" && len(events) > 0 {
+		// 有事件但没有完成事件，可能是流提前关闭
+		// 如果已经有 message，可以认为部分成功
+		if message == "" {
+			execErr = "stream disconnected before completion: stream closed before response.completed"
+		}
 	}
 
 	// 如果没有解析到任何 JSON 事件，说明是纯文本输出（resume 模式）

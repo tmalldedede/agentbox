@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -145,17 +146,54 @@ func (m *Manager) Create(ctx context.Context, req *CreateRequest) (*Session, err
 	envVars := make(map[string]string)
 
 	// 新模型：从 Provider 获取环境变量（包含 API Key）
+	// 注意：环境变量（含 API Key）在 Session 创建时写入容器，之后修改 Provider 配置不会影响已有容器；
+	// 只有新创建的 Session（新任务）才会使用当前 Provider 的配置。多轮对话复用同一 Session，故会继续使用创建时的 key。
 	if fullConfig != nil && req.AgentID != "" && m.agentMgr != nil {
+		// 检查 Provider 是否已配置 API key
+		if fullConfig.Provider != nil && !fullConfig.Provider.IsConfigured {
+			return nil, fmt.Errorf("provider %s (%s) does not have API key configured. Please configure it in the Providers page", fullConfig.Provider.ID, fullConfig.Provider.Name)
+		}
+
 		provEnv, err := m.agentMgr.GetProviderEnvVars(req.AgentID)
-		if err == nil {
-			for k, v := range provEnv {
-				envVars[k] = v
+		if err != nil {
+			return nil, fmt.Errorf("failed to get provider environment variables: %w", err)
+		}
+
+		// 验证 API key 是否存在
+		hasAPIKey := false
+		for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"} {
+			if v, ok := provEnv[key]; ok && v != "" {
+				hasAPIKey = true
+				break
 			}
+		}
+		if !hasAPIKey && fullConfig.Provider != nil && fullConfig.Provider.RequiresAK {
+			return nil, fmt.Errorf("provider %s (%s) requires an API key but none was found. Please configure it in the Providers page", fullConfig.Provider.ID, fullConfig.Provider.Name)
+		}
+
+		for k, v := range provEnv {
+			envVars[k] = v
+		}
+		// 便于排查「容器内 API Key 与界面不一致」：Session 创建时注入的是当前 Provider 的配置；
+		// 若看到的是旧 key，说明该容器是此前创建的（多轮复用或历史任务），请用新任务验证新 key。
+		if fullConfig.Provider != nil {
+			log.Debug("session create: provider env injected",
+				"session_id", sessionID, "agent_id", req.AgentID,
+				"provider_id", fullConfig.Provider.ID, "env_keys", len(provEnv))
 		}
 		// Agent 的 base_url_override 覆盖 Provider 的 base_url
 		if fullConfig.Agent.BaseURLOverride != "" {
-			envVars["OPENAI_BASE_URL"] = fullConfig.Agent.BaseURLOverride
-			envVars["ANTHROPIC_BASE_URL"] = fullConfig.Agent.BaseURLOverride
+			overrideURL := fullConfig.Agent.BaseURLOverride
+			// 如果是 Codex adapter 且使用智谱AI，需要转换端点
+			if fullConfig.Agent.Adapter == "codex" && fullConfig.Provider != nil {
+				isZhipu := fullConfig.Provider.ID == "zhipu" || fullConfig.Provider.TemplateID == "zhipu" ||
+					(strings.Contains(overrideURL, "open.bigmodel.cn") && strings.Contains(overrideURL, "/api/anthropic"))
+				if isZhipu && strings.Contains(overrideURL, "/api/anthropic") {
+					overrideURL = strings.Replace(overrideURL, "/api/anthropic", "/api/paas/v4", 1)
+				}
+			}
+			envVars["OPENAI_BASE_URL"] = overrideURL
+			envVars["ANTHROPIC_BASE_URL"] = fullConfig.Agent.BaseURLOverride // ANTHROPIC_BASE_URL 保持原值
 		}
 		// Agent 自身的 env 覆盖
 		for k, v := range fullConfig.Agent.Env {
@@ -326,10 +364,27 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, 
 			if fullConfig.Provider != nil {
 				cfg.Model.BaseURL = fullConfig.Provider.BaseURL
 				cfg.Model.Provider = fullConfig.Provider.ID
+				// Codex adapter 需要 OpenAI 兼容端点，自动转换 zhipu 的 Anthropic 端点
+				if fullConfig.Agent.Adapter == "codex" {
+					isZhipu := fullConfig.Provider.ID == "zhipu" || fullConfig.Provider.TemplateID == "zhipu" ||
+						(strings.Contains(cfg.Model.BaseURL, "open.bigmodel.cn") && strings.Contains(cfg.Model.BaseURL, "/api/anthropic"))
+					if isZhipu && strings.Contains(cfg.Model.BaseURL, "/api/anthropic") {
+						// 使用通用端点 /api/paas/v4
+						cfg.Model.BaseURL = strings.Replace(cfg.Model.BaseURL, "/api/anthropic", "/api/paas/v4", 1)
+					}
+				}
 			}
 			// Agent 层覆盖 base_url（同一服务商不同 adapter 可能 URL 不同）
 			if fullConfig.Agent.BaseURLOverride != "" {
 				cfg.Model.BaseURL = fullConfig.Agent.BaseURLOverride
+				// 如果 BaseURLOverride 是 zhipu 的 Anthropic 端点，也需要转换为 Codex 兼容端点
+				if fullConfig.Agent.Adapter == "codex" && fullConfig.Provider != nil {
+					isZhipu := fullConfig.Provider.ID == "zhipu" || fullConfig.Provider.TemplateID == "zhipu" ||
+						(strings.Contains(cfg.Model.BaseURL, "open.bigmodel.cn") && strings.Contains(cfg.Model.BaseURL, "/api/anthropic"))
+					if isZhipu && strings.Contains(cfg.Model.BaseURL, "/api/anthropic") {
+						cfg.Model.BaseURL = strings.Replace(cfg.Model.BaseURL, "/api/anthropic", "/api/paas/v4", 1)
+					}
+				}
 			}
 		}
 	}
@@ -385,15 +440,16 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, 
 	}
 
 	// 通过 exec 命令写入每个配置文件
-	for path, content := range configFiles {
-		log.Debug("writing config file", "path", path, "content_len", len(content))
+	for filePath, content := range configFiles {
+		log.Debug("writing config file", "path", filePath, "content_len", len(content))
 
-		expandedPath := path
-		if strings.HasPrefix(path, "~/") {
-			expandedPath = "$HOME" + path[1:]
+		expandedPath := filePath
+		if strings.HasPrefix(filePath, "~/") {
+			expandedPath = "$HOME" + filePath[1:]
 		}
 
-		dir := filepath.Dir(expandedPath)
+		// Use POSIX-style path handling for container paths (Windows filepath would break $HOME/.codex -> $HOME\.codex).
+		dir := pathpkg.Dir(expandedPath)
 
 		escapedContent := strings.ReplaceAll(content, "'", "'\"'\"'")
 		writeCmd := []string{
@@ -403,10 +459,10 @@ func (m *Manager) writeConfigFiles(ctx context.Context, adapter engine.Adapter, 
 		log.Debug("exec write command", "dir", dir, "path", expandedPath)
 		result, err := m.containerMgr.Exec(ctx, containerID, writeCmd)
 		if err != nil {
-			log.Error("failed to write config file", "path", path, "error", err)
-			return fmt.Errorf("failed to write file %s: %w", path, err)
+			log.Error("failed to write config file", "path", filePath, "error", err)
+			return fmt.Errorf("failed to write file %s: %w", filePath, err)
 		}
-		log.Debug("config file written", "path", path, "exit_code", result.ExitCode)
+		log.Debug("config file written", "path", filePath, "exit_code", result.ExitCode)
 	}
 
 	return nil
@@ -1223,6 +1279,8 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 
 	var outputBuilder strings.Builder
 	var lastMessage string
+	var responseCompleted bool
+	var turnCompleted bool
 	scanner := bufio.NewScanner(stream.Reader)
 	// 增大缓冲区以处理长行
 	buf := make([]byte, 64*1024)
@@ -1244,9 +1302,13 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 		outputBuilder.WriteString(line)
 		outputBuilder.WriteString("\n")
 
+		// 记录原始行（用于调试）
+		log.Debug("stream line received", "execution_id", execution.ID, "line_preview", truncateStr(line, 200))
+
 		// 找到 JSON 对象的开始位置 (Codex 输出可能有长度前缀)
 		jsonStart := strings.Index(line, "{")
 		if jsonStart < 0 {
+			log.Debug("line has no JSON, skipping", "execution_id", execution.ID, "line", truncateStr(line, 100))
 			continue
 		}
 		jsonLine := line[jsonStart:]
@@ -1254,6 +1316,7 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 		// 解析 Codex 事件
 		var rawEvent map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(jsonLine), &rawEvent); err != nil {
+			log.Debug("failed to parse JSON line", "execution_id", execution.ID, "error", err, "line", truncateStr(jsonLine, 200))
 			continue
 		}
 
@@ -1261,6 +1324,18 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 		var eventType string
 		if typeData, ok := rawEvent["type"]; ok {
 			json.Unmarshal(typeData, &eventType)
+			log.Debug("parsed event type", "execution_id", execution.ID, "event_type", eventType)
+		} else {
+			log.Debug("event has no type field", "execution_id", execution.ID, "raw_event", truncateStr(jsonLine, 200))
+			continue
+		}
+
+		// 跟踪完成事件
+		if eventType == "response.completed" {
+			responseCompleted = true
+		}
+		if eventType == "turn.completed" {
+			turnCompleted = true
 		}
 
 		// 构建流式事件
@@ -1278,12 +1353,26 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 					Text string `json:"text"`
 				}
 				if err := json.Unmarshal(itemData, &item); err == nil {
+					log.Debug("parsed item.completed", "execution_id", execution.ID, "item_type", item.Type, "has_text", item.Text != "", "text_len", len(item.Text))
 					if item.Type == "agent_message" && item.Text != "" {
 						streamEvent.Text = item.Text
-						lastMessage = item.Text
+						// 累积消息（Codex 可能分多次发送）
+						if lastMessage != "" {
+							lastMessage += "\n" + item.Text
+						} else {
+							lastMessage = item.Text
+						}
+						log.Info("extracted agent message", "execution_id", execution.ID, "message_len", len(lastMessage))
 					}
+				} else {
+					log.Debug("failed to parse item data", "execution_id", execution.ID, "error", err)
 				}
+			} else {
+				log.Debug("item.completed event has no item field", "execution_id", execution.ID)
 			}
+		} else {
+			// 记录其他事件类型（用于调试）
+			log.Debug("received event", "execution_id", execution.ID, "event_type", eventType)
 		}
 
 		// 处理错误
@@ -1303,18 +1392,93 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 			}
 		}
 
-		eventCh <- streamEvent
+		// 发送事件到通道
+		select {
+		case eventCh <- streamEvent:
+			// 事件已发送
+		case <-ctx.Done():
+			// 上下文已取消，停止发送
+			return
+		default:
+			// 通道满了，记录警告但继续处理
+			log.Warn("event channel full, dropping event", "execution_id", execution.ID, "event_type", eventType)
+		}
+	}
+
+	// 检查流是否正常完成
+	scannerErr := scanner.Err()
+
+	// 检查容器 exec 的退出码（如果可能）
+	var exitCode int = -1
+	if stream.ExecID != "" {
+		// 尝试获取 exec 的退出码
+		// 使用类型断言访问 DockerManager 的 InspectExec 方法
+		type InspectExecer interface {
+			InspectExec(ctx context.Context, execID string) (int, error)
+		}
+		if inspectable, ok := m.containerMgr.(InspectExecer); ok {
+			if code, err := inspectable.InspectExec(context.Background(), stream.ExecID); err == nil {
+				exitCode = code
+				log.Debug("exec exit code", "exec_id", stream.ExecID, "exit_code", exitCode)
+			} else {
+				log.Debug("failed to inspect exec", "exec_id", stream.ExecID, "error", err)
+			}
+		}
+	}
+
+	// 记录诊断信息
+	log.Info("stream processing completed",
+		"execution_id", execution.ID,
+		"scanner_err", scannerErr,
+		"response_completed", responseCompleted,
+		"turn_completed", turnCompleted,
+		"has_message", lastMessage != "",
+		"message_len", len(lastMessage),
+		"exit_code", exitCode,
+		"output_len", outputBuilder.Len(),
+	)
+
+	if scannerErr != nil {
+		execution.Status = ExecutionFailed
+		execution.Error = fmt.Sprintf("stream scanner error: %v (exit_code: %d)", scannerErr, exitCode)
+		execution.ExitCode = exitCode
+	} else if !responseCompleted && !turnCompleted {
+		// 流关闭了但没有收到完成事件
+		// 如果已经有消息，可以认为部分成功，否则标记为失败
+		if lastMessage == "" {
+			// 检查是否有任何输出（即使不是有效的 JSON）
+			rawOutput := outputBuilder.String()
+			if len(rawOutput) > 0 {
+				// 有输出但没有解析到消息，可能是格式问题
+				execution.Status = ExecutionFailed
+				// 提取前500字符用于错误消息，完整输出保存在 Output 字段
+				outputPreview := rawOutput
+				if len(outputPreview) > 500 {
+					outputPreview = outputPreview[:500] + "..."
+				}
+				execution.Error = fmt.Sprintf("stream disconnected before completion: stream closed before response.completed (exit_code: %d, output_len: %d). This may indicate: 1) Container process was killed (OOM/timeout), 2) Network connection issue, 3) Codex CLI crashed, 4) API authentication failed. Raw output preview: %s. Check container logs and execution.Output for details.", exitCode, len(rawOutput), outputPreview)
+				execution.Output = rawOutput // 保存原始输出用于调试
+			} else {
+				// 完全没有输出，可能是进程根本没有启动
+				execution.Status = ExecutionFailed
+				execution.Error = fmt.Sprintf("stream disconnected before completion: no output received (exit_code: %d). Container process may have failed to start or was immediately terminated.", exitCode)
+			}
+		} else {
+			// 有消息但没有完成事件，可能是流提前关闭但已有结果
+			execution.Status = ExecutionSuccess
+			log.Info("stream completed with message but no completion event", "execution_id", execution.ID, "message_len", len(lastMessage))
+		}
+		execution.ExitCode = exitCode
+	} else {
+		// 正常完成
+		execution.Status = ExecutionSuccess
+		execution.ExitCode = exitCode
 	}
 
 	// 更新执行记录
 	now := time.Now()
 	execution.EndedAt = &now
 	execution.Output = lastMessage
-	execution.Status = ExecutionSuccess
-	if err := scanner.Err(); err != nil {
-		execution.Status = ExecutionFailed
-		execution.Error = err.Error()
-	}
 	_ = m.store.UpdateExecution(execution)
 
 	// 发送完成事件
@@ -1322,6 +1486,7 @@ func (m *Manager) processExecStream(ctx context.Context, stream *container.ExecS
 		Type:        "execution.completed",
 		ExecutionID: execution.ID,
 		Text:        lastMessage,
+		Error:       execution.Error,
 	}
 }
 

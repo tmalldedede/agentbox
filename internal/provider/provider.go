@@ -2,7 +2,10 @@
 // Provider represents a pre-configured API endpoint (official, compatible, or aggregator).
 package provider
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Provider represents an API provider configuration
 type Provider struct {
@@ -133,8 +136,21 @@ func (p *Provider) GetEnvVars(apiKey string) map[string]string {
 		}
 		// For Codex/OpenAI compatible providers
 		if p.SupportsAgent(AgentCodex) {
-			env["OPENAI_BASE_URL"] = p.BaseURL
+			codexBaseURL := p.BaseURL
+			// Codex 使用 OpenAI 兼容 API，需要将 zhipu 的 Anthropic 端点转换为 OpenAI 兼容端点
+			// zhipu 的 BaseURL 是 /api/anthropic，但 Codex 需要 OpenAI 兼容端点
+			// 优先使用 /api/paas/v4（通用端点），如果需要编码计划权限可使用 /api/coding/paas/v4
+			// 检查 ID 或 TemplateID 是否为 zhipu，或者 BaseURL 包含智谱AI的特征
+			isZhipu := p.ID == "zhipu" || p.TemplateID == "zhipu" || 
+				(strings.Contains(codexBaseURL, "open.bigmodel.cn") && strings.Contains(codexBaseURL, "/api/anthropic"))
+			if isZhipu && strings.Contains(codexBaseURL, "/api/anthropic") {
+				// 使用通用端点 /api/paas/v4（如果编码计划不可用，可以尝试 /api/coding/paas/v4）
+				codexBaseURL = strings.Replace(codexBaseURL, "/api/anthropic", "/api/paas/v4", 1)
+			}
+			env["OPENAI_BASE_URL"] = codexBaseURL
 		}
+		// 注意：如果 Provider 同时支持多个 agent，会同时设置多个 BASE_URL
+		// 但实际使用的 agent 由 Session 的 adapter 决定，只会创建一个容器
 	}
 
 	// Ensure OPENAI_API_KEY is set for Codex-compatible providers
