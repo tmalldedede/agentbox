@@ -179,6 +179,7 @@ func (l *Loader) loadReferences(sourceDir string) ([]SkillFile, error) {
 		if err != nil {
 			relPath = filepath.Base(path)
 		}
+		relPath = filepath.ToSlash(relPath)
 
 		files = append(files, SkillFile{
 			Path:    relPath,
