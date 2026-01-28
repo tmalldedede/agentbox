@@ -19,6 +19,8 @@ jobs:
           cache: true
       - name: Build
         run: go build -v ./...
+      - name: Install SQLite dev library
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Test
         env:
           CGO_ENABLED: 1

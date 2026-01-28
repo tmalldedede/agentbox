@@ -170,6 +170,8 @@ func TestSkillInjection_E2E(t *testing.T) {
 	// === 测试点 4: 创建 Session 并验证 Skill 注入 ===
 	var containerID string
 	t.Run("SessionCreationInjectsSkills", func(t *testing.T) {
+		skipIfImageMissing(t, ctx, dockerMgr, rtMgr.GetDefault().Image)
+
 		// 创建 Session
 		createReq := &session.CreateRequest{
 			AgentID:   "test-skill-injection-agent",
@@ -254,6 +256,8 @@ func TestSkillInjection_E2E(t *testing.T) {
 
 	// === 测试点 5: 禁用的 Skill 不应被注入 ===
 	t.Run("DisabledSkillNotInjected", func(t *testing.T) {
+		skipIfImageMissing(t, ctx, dockerMgr, rtMgr.GetDefault().Image)
+
 		// 创建禁用的 Skill
 		disabledSkillReq := &skill.CreateSkillRequest{
 			ID:      "disabled-skill",
@@ -624,4 +628,21 @@ func min(a, b int) int {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func skipIfImageMissing(t *testing.T, ctx context.Context, dockerMgr container.Manager, image string) {
+	t.Helper()
+
+	images, err := dockerMgr.ListImages(ctx)
+	if err != nil {
+		t.Skipf("failed to list images: %v", err)
+	}
+	for _, img := range images {
+		for _, tag := range img.Tags {
+			if tag == image {
+				return
+			}
+		}
+	}
+	t.Skipf("runtime image not available: %s", image)
 }
