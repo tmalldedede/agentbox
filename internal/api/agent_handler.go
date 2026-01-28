@@ -66,6 +66,32 @@ type CreateAgentReq struct {
 	ConfigOverrides    map[string]string      `json:"config_overrides"`
 }
 
+// UpdateAgentReq represents a request to update an agent (ID comes from path)
+type UpdateAgentReq struct {
+	Name               string                 `json:"name" binding:"required"`
+	Description        string                 `json:"description"`
+	Icon               string                 `json:"icon"`
+	Adapter            string                 `json:"adapter" binding:"required"`
+	ProviderID         string                 `json:"provider_id" binding:"required"`
+	RuntimeID          string                 `json:"runtime_id"`
+	Model              string                 `json:"model"`
+	BaseURLOverride    string                 `json:"base_url_override"`
+	ModelConfig        agent.ModelConfig      `json:"model_config"`
+	SkillIDs           []string               `json:"skill_ids"`
+	MCPServerIDs       []string               `json:"mcp_server_ids"`
+	SystemPrompt       string                 `json:"system_prompt"`
+	AppendSystemPrompt string                 `json:"append_system_prompt"`
+	Permissions        agent.PermissionConfig `json:"permissions"`
+	Env                map[string]string      `json:"env"`
+	APIAccess          string                 `json:"api_access"`
+	RateLimit          int                    `json:"rate_limit"`
+	WebhookURL         string                 `json:"webhook_url"`
+	OutputFormat       string                 `json:"output_format"`
+	Status             string                 `json:"status"`
+	Features           agent.FeatureConfig    `json:"features"`
+	ConfigOverrides    map[string]string      `json:"config_overrides"`
+}
+
 // ListPublic 公开 API - 列出可用 Agent（只返回 active）
 // GET /api/v1/agents
 func (h *AgentHandler) ListPublic(c *gin.Context) {
@@ -132,7 +158,7 @@ func (h *AgentHandler) Get(c *gin.Context) {
 // @Tags Agents
 // @Accept json
 // @Produce json
-// @Param agent body CreateAgentReq true "Agent configuration"
+// @Param agent body UpdateAgentReq true "Agent configuration"
 // @Success 201 {object} Response{data=agent.Agent}
 // @Failure 400 {object} Response
 // @Router /agents [post]
@@ -191,7 +217,7 @@ func (h *AgentHandler) Create(c *gin.Context) {
 func (h *AgentHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 
-	var req CreateAgentReq
+	var req UpdateAgentReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		BadRequest(c, err.Error())
 		return
@@ -218,6 +244,7 @@ func (h *AgentHandler) Update(c *gin.Context) {
 		RateLimit:          req.RateLimit,
 		WebhookURL:         req.WebhookURL,
 		OutputFormat:       req.OutputFormat,
+		Status:             req.Status,
 		Features:           req.Features,
 		ConfigOverrides:    req.ConfigOverrides,
 	}
