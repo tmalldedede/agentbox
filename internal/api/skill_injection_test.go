@@ -59,6 +59,7 @@ func TestSkillInjection_E2E(t *testing.T) {
 	// Provider Manager
 	providerDir := filepath.Join(tmpDir, "providers")
 	provMgr := provider.NewManager(providerDir, "test-encryption-key-32bytes!!")
+	require.NoError(t, provMgr.ConfigureKey("openai", "test-key"), "configure openai key for tests")
 
 	// Runtime Manager
 	runtimeDir := filepath.Join(tmpDir, "runtimes")
