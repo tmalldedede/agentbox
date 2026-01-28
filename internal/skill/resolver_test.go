@@ -214,6 +214,7 @@ func TestCheckResult(t *testing.T) {
 func TestResolver_checkEnvLocal(t *testing.T) {
 	// 测试本地环境变量检查逻辑
 	// 使用真实的 os.LookupEnv，PATH 和 HOME 通常存在
+	t.Setenv("HOME", "test-home")
 	resolver := &Resolver{}
 
 	// 只有 NONEXISTENT_VAR_12345 应该缺失

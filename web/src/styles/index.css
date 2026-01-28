@@ -214,6 +214,35 @@
     background-position: right 12px center;
     padding-right: 36px;
   }
+
+  /* Streaming animation */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+
+  /* Custom scrollbar styles for chat */
+  [data-slot='scroll-area-scrollbar'] {
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  [data-slot='scroll-area']:hover [data-slot='scroll-area-scrollbar'],
+  [data-slot='scroll-area'][data-state='visible'] [data-slot='scroll-area-scrollbar'] {
+    opacity: 1;
+  }
+
+  [data-slot='scroll-area-thumb'] {
+    min-height: 20px;
+  }
 }
 
 /* CSS Variables for old components */

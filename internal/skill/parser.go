@@ -221,6 +221,7 @@ func (p *Parser) scanReferences(refsDir string, baseDir string) ([]SkillFile, er
 		if err != nil {
 			relPath = filepath.Base(path)
 		}
+		relPath = filepath.ToSlash(relPath)
 
 		files = append(files, SkillFile{
 			Path:    relPath,

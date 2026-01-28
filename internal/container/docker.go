@@ -200,6 +200,15 @@ func (m *DockerManager) ExecStream(ctx context.Context, containerID string, cmd 
 	}, nil
 }
 
+// InspectExec 检查 exec 的退出码
+func (m *DockerManager) InspectExec(ctx context.Context, execID string) (int, error) {
+	inspectResp, err := m.client.ContainerExecInspect(ctx, execID)
+	if err != nil {
+		return -1, fmt.Errorf("failed to inspect exec: %w", err)
+	}
+	return inspectResp.ExitCode, nil
+}
+
 // Logs 获取容器日志
 func (m *DockerManager) Logs(ctx context.Context, containerID string) (io.ReadCloser, error) {
 	options := container.LogsOptions{

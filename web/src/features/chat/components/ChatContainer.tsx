@@ -20,6 +20,7 @@ export function ChatContainer() {
     setAgent,
     sendMessage,
     newChat,
+    interrupt,
     addFiles,
     removeAttachment,
     isCreating,
@@ -35,9 +36,9 @@ export function ChatContainer() {
   }
 
   return (
-    <div className='flex h-full flex-col'>
-      {/* Header */}
-      <div className='flex items-center justify-between border-b px-4 py-3'>
+    <div className='flex h-full flex-col overflow-hidden'>
+      {/* Header - Fixed */}
+      <div className='flex shrink-0 items-center justify-between border-b px-4 py-3'>
         <div className='flex items-center gap-4'>
           <AgentSelector
             agents={agents}
@@ -62,35 +63,41 @@ export function ChatContainer() {
         </Button>
       </div>
 
-      {/* Docker warning */}
+      {/* Docker warning - Fixed */}
       {!dockerAvailable && (
-        <div className='border-b bg-yellow-50 px-4 py-2 text-center text-sm text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'>
+        <div className='shrink-0 border-b bg-yellow-50 px-4 py-2 text-center text-sm text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'>
           Docker is not available. Please start Docker to run agents.
         </div>
       )}
 
-      {/* Messages */}
-      <MessageList
-        messages={messages}
-        isThinking={isThinking}
-        streamingText={streamingText}
-      />
+      {/* Messages - Scrollable */}
+      <div className='flex-1 min-h-0 overflow-hidden'>
+        <MessageList
+          messages={messages}
+          isThinking={isThinking}
+          streamingText={streamingText}
+        />
+      </div>
 
-      {/* Input */}
-      <ChatInput
-        onSend={handleSend}
-        onAddFiles={addFiles}
-        onRemoveAttachment={removeAttachment}
-        attachments={attachments}
-        disabled={!canSend}
-        loading={isLoading || isThinking}
-        uploading={isUploading}
-        placeholder={
-          !agentId
-            ? 'Select an agent to start chatting'
-            : 'Type a message...'
-        }
-      />
+      {/* Input - Fixed */}
+      <div className='shrink-0 border-t'>
+        <ChatInput
+          onSend={handleSend}
+          onAddFiles={addFiles}
+          onRemoveAttachment={removeAttachment}
+          attachments={attachments}
+          disabled={!canSend}
+          loading={isLoading || isThinking}
+          uploading={isUploading}
+          onInterrupt={interrupt}
+          canInterrupt={!!taskId && (isThinking || isLoading)}
+          placeholder={
+            !agentId
+              ? 'Select an agent to start chatting'
+              : 'Type a message...'
+          }
+        />
+      </div>
     </div>
   )
 }

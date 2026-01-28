@@ -37,7 +37,7 @@ export function MessageList({
 
   if (displayMessages.length === 0 && !isThinking) {
     return (
-      <div className='flex flex-1 items-center justify-center'>
+      <div className='flex h-full items-center justify-center p-4'>
         <div className='text-center'>
           <p className='text-lg font-medium text-muted-foreground'>
             Start a conversation
@@ -51,7 +51,7 @@ export function MessageList({
   }
 
   return (
-    <ScrollArea ref={scrollRef} className='flex-1 p-4'>
+    <ScrollArea ref={scrollRef} className='h-full p-4'>
       <div className='mx-auto max-w-3xl space-y-4'>
         {displayMessages.map((message) => (
           <MessageItem

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/chat-store'
 import { useAgents } from '@/hooks/useAgents'
-import { useCreateTask, useAppendTurn } from '@/hooks/useTasks'
+import { useCreateTask, useAppendTurn, useCancelTask } from '@/hooks/useTasks'
 import { api } from '@/services/api'
 import type { TaskEvent } from '@/types'
 
@@ -31,43 +31,36 @@ export function useChat() {
   const { data: agents = [] } = useAgents()
   const createTask = useCreateTask()
   const appendTurn = useAppendTurn()
+  const cancelTask = useCancelTask()
   const eventSourceRef = useRef<EventSource | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const outputFetchInFlightRef = useRef(false)
+  const lastOutputKeyRef = useRef<string | null>(null)
 
-  // Connect to SSE when taskId changes
-  useEffect(() => {
-    if (!taskId) {
-      eventSourceRef.current?.close()
-      setConnected(false)
-      return
-    }
+  const finalizeFromOutput = useCallback(async (turnKey?: string) => {
+    const currentTaskId = useChatStore.getState().taskId
+    if (!currentTaskId) return
+    if (outputFetchInFlightRef.current) return
+    if (turnKey && lastOutputKeyRef.current === turnKey) return
 
-    const es = api.streamTaskEvents(taskId)
-    eventSourceRef.current = es
-
-    es.onopen = () => {
-      setConnected(true)
-    }
-
-    es.onmessage = (e) => {
-      try {
-        const event: TaskEvent = JSON.parse(e.data)
-        handleEvent(event)
-      } catch {
-        // ignore parse errors
+    outputFetchInFlightRef.current = true
+    try {
+      const output = await api.getTaskOutput(currentTaskId)
+      const text = typeof output === 'string' ? output : (output as { text?: string })?.text
+      if (text) {
+        addMessage({
+          role: 'assistant',
+          content: text,
+          status: 'sent',
+        })
       }
+      if (turnKey) {
+        lastOutputKeyRef.current = turnKey
+      }
+    } finally {
+      outputFetchInFlightRef.current = false
     }
-
-    es.onerror = () => {
-      setConnected(false)
-      es.close()
-    }
-
-    return () => {
-      es.close()
-      setConnected(false)
-    }
-  }, [taskId, setConnected])
+  }, [addMessage])
 
   // Handle SSE events
   const handleEvent = useCallback(
@@ -102,23 +95,38 @@ export function useChat() {
               status: 'sent',
             })
             clearStreamingText()
+          } else {
+            const data = event.data as { turn_count?: number; turnCount?: number } | undefined
+            const turnCount = data?.turn_count ?? data?.turnCount
+            const currentTaskId = useChatStore.getState().taskId
+            const turnKey = currentTaskId && turnCount ? `${currentTaskId}:${turnCount}` : undefined
+            void finalizeFromOutput(turnKey)
           }
           setThinking(false)
           break
         }
 
-        case 'task.failed': {
+        case 'task.failed':
+        case 'task.cancelled': {
           const data = event.data as { error?: string }
-          // Finalize with error
+          const isCancelled = event.type === 'task.cancelled'
           const currentStreamingText = useChatStore.getState().streamingText
-          if (currentStreamingText) {
+          if (currentStreamingText.trim()) {
             addMessage({
               role: 'assistant',
               content: currentStreamingText,
-              status: 'error',
+              status: isCancelled ? 'sent' : 'error',
             })
             clearStreamingText()
-          } else {
+          }
+          if (isCancelled) {
+            // 添加中断提示消息
+            addMessage({
+              role: 'assistant',
+              content: '**任务已中断**\n\n用户取消了本次任务。',
+              status: 'sent',
+            })
+          } else if (!currentStreamingText.trim()) {
             addMessage({
               role: 'assistant',
               content: data?.error || 'Task failed',
@@ -132,6 +140,100 @@ export function useChat() {
     },
     [addMessage, appendStreamingText, clearStreamingText, setThinking]
   )
+
+  // Connect to SSE when taskId changes
+  useEffect(() => {
+    if (!taskId) {
+      eventSourceRef.current?.close()
+      setConnected(false)
+      return
+    }
+
+    const es = api.streamTaskEvents(taskId)
+    eventSourceRef.current = es
+
+    es.onopen = () => {
+      setConnected(true)
+    }
+
+    // 监听特定的事件类型
+    es.addEventListener('task.started', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'task.started', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener('task.turn_started', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'task.turn_started', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener('agent.thinking', () => {
+      handleEvent({ type: 'agent.thinking' } as TaskEvent)
+    })
+
+    es.addEventListener('agent.message', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'agent.message', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener('task.completed', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'task.completed', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener('task.turn_completed', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'task.turn_completed', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener('task.failed', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'task.failed', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener('task.cancelled', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        handleEvent({ type: 'task.cancelled', data } as TaskEvent)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      es.close()
+    }
+
+    return () => {
+      es.close()
+      setConnected(false)
+    }
+  }, [taskId, setConnected, handleEvent])
 
   // Upload a single file
   const uploadFile = useCallback(
@@ -252,8 +354,37 @@ export function useChat() {
   // Start new chat
   const newChat = useCallback(() => {
     eventSourceRef.current?.close()
+    setConnected(false)
     clearChat()
-  }, [clearChat])
+  }, [clearChat, setConnected])
+
+  // 中断当前任务（停止生成）
+  const interrupt = useCallback(() => {
+    if (!taskId) return
+    const currentTaskId = taskId
+    eventSourceRef.current?.close()
+    setConnected(false)
+    cancelTask.mutate(currentTaskId)
+    const currentStreamingText = useChatStore.getState().streamingText
+    if (currentStreamingText.trim()) {
+      // 如果有部分内容，先保存已生成的内容
+      addMessage({
+        role: 'assistant',
+        content: currentStreamingText,
+        status: 'sent',
+      })
+      clearStreamingText()
+    }
+    // 添加中断提示消息
+    addMessage({
+      role: 'assistant',
+      content: '**任务已中断**\n\n用户取消了本次任务。',
+      status: 'sent',
+    })
+    // 清除 taskId，让下次发送消息时创建新任务
+    setTaskId(null)
+    setThinking(false)
+  }, [taskId, cancelTask, addMessage, clearStreamingText, setThinking, setTaskId, setConnected])
 
   return {
     // State
@@ -270,6 +401,7 @@ export function useChat() {
     setAgent,
     sendMessage,
     newChat,
+    interrupt,
     clearChat,
     addFiles,
     removeAttachment,
