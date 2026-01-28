@@ -134,7 +134,7 @@ func (a *Analyzer) analyzeFile(filePath string) AnalysisResult {
 	} else {
 		result.Status = task.Status
 		result.Error = task.Error
-		a.progress.Fail(filePath, fmt.Errorf(task.Error))
+		a.progress.Fail(filePath, fmt.Errorf("%s", task.Error))
 	}
 
 	return result
